@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-3-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-4-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -27,9 +27,10 @@
 
 | 名字 | 一句话 |
 |---|---|
-| 🎬 [**douyin-transcribe（抖音转录）**](#-douyin-transcribe抖音转录) | 抖音视频 → 下载 → 转录 → Markdown，无需 cookie/登录，中文准确率超过 Whisper |
-| 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量下载 |
+| 🎬 [**douyin-transcribe（抖音转录）**](#-douyin-transcribe抖音转录) | 抖音视频 → 下载 → 转录 → Markdown，无需 cookie/登录 |
+| 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量 |
 | 📺 [**bilibili-transcribe（B 站转录）**](#-bilibili-transcribeb-站转录) | B 站视频 → 下载 → 转录 → Markdown，无需登录 |
+| 📰 [**wechat-article-ingest（公众号处理）**](#-wechat-article-ingest公众号处理) | 公众号 PDF → Markdown + A层观点提取 + B层问题链 |
 
 ---
 
@@ -40,8 +41,6 @@
 ```
 帮我安装这个 skill：https://github.com/chubbyxiaopangdun/chubbyskills/tree/main/<skill-name>
 ```
-
-把 `<skill-name>` 换成你想装的那个，比如 `douyin-transcribe`、`podcast-transcribe`、`bilibili-transcribe`。Agent 会自己 clone 到对应目录，不用你操心路径。
 
 ---
 
@@ -68,26 +67,11 @@
 
 **它能做什么**
 
-- 🔗 支持抖音短链接（`v.douyin.com/xxx`）和完整链接
+- 🔗 支持抖音短链接和完整链接
 - ⚡ 极速转录：11 分钟视频仅需 22 秒
 - 📝 自动生成带 frontmatter 的 Markdown 文件
 - 🎯 中文准确率超过 Whisper，简体输出
 - 🔒 无需登录、无需 cookie、无需 API Key
-
-**怎么触发**
-
-```
-把这个抖音视频转成文字：https://v.douyin.com/xxxxx
-帮我转录这个抖音
-```
-
-**性能数据**
-
-| 视频时长 | 模型加载 | 转录耗时 | 总耗时 |
-|------|------|------|------|
-| 10 min | ~30s | ~25s | ~1 min |
-| 30 min | ~30s | ~75s | ~2 min |
-| 1h 22min | ~40s | ~180s | ~4 min |
 
 → [SKILL.md](./douyin-transcribe/SKILL.md) · [脚本](./douyin-transcribe/scripts/)
 
@@ -109,22 +93,6 @@
 - 📡 RSS 批量下载，一次处理整季播客
 - 📝 自动生成带时间戳的 Markdown 文件
 - ⏱️ 支持断点续传，已转录的自动跳过
-- 📁 按集数自动命名，方便整理
-
-**怎么触发**
-
-```
-帮我转录这个播客：https://www.xiaoyuzhoufm.com/episode/xxxxx
-批量转录这个播客：http://www.ximalaya.com/album/xxxxx.xml
-```
-
-**性能数据**
-
-| 模型 | 速度 (CPU) | 中文准确率 |
-|------|------|------|
-| faster-whisper tiny | ~149s/1h | 一般 |
-| faster-whisper small | ~10min/h | 良好 (~85-90%) |
-| faster-whisper large-v3 | ~30-60min/h | 最佳 |
 
 → [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
 
@@ -145,33 +113,64 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 - 📺 支持 B 站 BV 号和完整链接
 - ⚡ 极速转录：7 分钟视频仅需 15 秒
 - 📝 自动生成带 frontmatter 的 Markdown 文件
-- 🎯 中文准确率高，简体输出
 - 🔒 无需登录、无需 cookie
+
+→ [SKILL.md](./bilibili-transcribe/SKILL.md) · [脚本](./bilibili-transcribe/scripts/)
+
+</td></tr>
+</table>
+
+<table>
+<tr><td>
+
+### 📰 wechat-article-ingest（公众号处理）
+
+> *"公众号文章存了一堆 PDF，终于可以结构化了。"*
+
+微信公众号文章 PDF → Markdown 提取 → A层观点提取 + B层问题链生成。支持批量处理、长文档子主题拆分。
+
+**为什么需要这个**
+
+微信公众号文章没有稳定的网页抓取方式（反爬、需要登录），但可以通过「笔记同步助手」等工具导出 PDF。这个 skill 解决：
+
+- PDF → Markdown 结构化提取
+- 观点提取（A层）：核心观点矩阵 + Takeaway
+- 问题链生成（B层）：L1→L2→L3 递进式提问
+- 长文档自动拆子主题
+
+**它能做什么**
+
+- 📄 PDF → Markdown，保留标题/列表/表格结构
+- 🔴 A层观点提取：支柱观点 + 支撑观点 + 延伸观点
+- 🟡 B层问题链：安全区→边缘区→核心区递进提问
+- 📁 长文档自动拆子主题，并行处理
+- 📦 批量处理，一次处理多篇文章
 
 **怎么触发**
 
 ```
-把这个 B 站视频转成文字：https://www.bilibili.com/video/BV1rrQGBeEen/
-帮我转录这个 bilibili
+帮我处理这篇文章：path/to/article.pdf
+提取观点 + 问题链
+处理素材库里最近的公众号文章
 ```
 
-**技术要点**
+**A+B 双轨处理**
 
-- yt-dlp 原生支持 B 站，需要加 User-Agent 和 Referer 绕过反爬
-- SenseVoice-Small 转录效果优于 Whisper
-- 自动提取视频标题作为文件名
+| 层级 | 输出 | 内容 |
+|------|------|------|
+| A层 | 观点提取.md | 核心观点矩阵（P1-P6, S1-S8, E1-E4）+ Takeaway |
+| B层 | 问题链.md | 3-5 条问题链，每条 L1→L2→L3 递进 |
 
-**性能数据**
+**适合**
 
-| 视频时长 | 转录耗时 |
-|------|------|
-| 5 min | ~10s |
-| 10 min | ~20s |
-| 30 min | ~60s |
+- 内容创作者需要提取文章核心观点
+- 知识管理需要结构化沉淀
+- 学习笔记整理
+- 播客/长视频文字稿深度处理
 
 **🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
-→ [SKILL.md](./bilibili-transcribe/SKILL.md) · [脚本](./bilibili-transcribe/scripts/)
+→ [SKILL.md](./wechat-article-ingest/SKILL.md) · [脚本](./wechat-article-ingest/scripts/)
 
 </td></tr>
 </table>
@@ -183,31 +182,21 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 ### douyin-transcribe / bilibili-transcribe
 
 ```bash
-# Python 3.9+
-python -m venv .venv
-source .venv/bin/activate
-
-# 依赖
 pip install funasr modelscope torch torchaudio
-
-# 系统依赖
-# macOS: brew install ffmpeg yt-dlp
-# Ubuntu: sudo apt install ffmpeg && pip install yt-dlp
+brew install ffmpeg yt-dlp  # macOS
 ```
 
 ### podcast-transcribe
 
 ```bash
-# Python 3.9+
-python -m venv .venv
-source .venv/bin/activate
-
-# 依赖
 pip install faster-whisper
+brew install ffmpeg  # macOS
+```
 
-# 系统依赖
-# macOS: brew install ffmpeg
-# Ubuntu: sudo apt install ffmpeg
+### wechat-article-ingest
+
+```bash
+pip install markitdown pymupdf
 ```
 
 ---
