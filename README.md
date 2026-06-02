@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-8-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-9-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -54,6 +54,12 @@
 | 名字 | 平台 | 一句话 |
 |---|---|---|
 | 📰 [**wechat-article-ingest**](#-wechat-article-ingest公众号处理) | 微信公众号 | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
+
+### 知识库管理
+
+| 名字 | 一句话 |
+|---|---|
+| 🧠 [**knowledge-base-management**](#-knowledge-base-management知识库管理) | 知识库全生命周期管理：三层架构、素材入库、健康检查、三件套集成 |
 
 ---
 
@@ -167,6 +173,24 @@ YouTube 视频 → yt-dlp 下载 → SenseVoice-Small 转录 → 英文自动翻
 
 ---
 
+### 🧠 knowledge-base-management（知识库管理）
+
+> *"知识库从素材入库到健康检查，一套流程全搞定。"*
+
+Obsidian 知识库全生命周期管理：三层架构（素材库/Wiki/产出）、素材 ABC 分级入库、健康检查与清理、GBrain/GraphRAG/LLM Wiki 三件套集成、目录整理与归档。
+
+**核心能力**：
+- 📥 素材入库：ABC 分级 + 公众号/群聊自动同步
+- 🔍 健康检查：断链修复、frontmatter 补全、去重归档
+- 🛠️ 工具集成：GBrain 搜索 + GraphRAG 发现 + LLM Wiki 写作
+- 📂 目录整理：全库审计、批量归档、文件命名规范
+
+**致谢**：[Obsidian](https://obsidian.md/) · [GBrain](https://github.com/) · [GraphRAG](https://github.com/microsoft/graphrag)
+
+→ [SKILL.md](./knowledge-base-management/SKILL.md)
+
+---
+
 ## 🔧 环境要求
 
 ### 视频转录（抖音/B站/TikTok/微博/知乎/YouTube）
@@ -187,6 +211,19 @@ brew install ffmpeg  # macOS
 
 ```bash
 pip install beautifulsoup4 markitdown pymupdf
+```
+
+### 知识库管理
+
+```bash
+# GBrain（知识库搜索）
+pip install gbrain
+
+# GraphRAG（知识图谱发现）
+# 独立项目，见 SKILL.md
+
+# LLM Wiki
+# 集成到 Obsidian vault
 ```
 
 ---
@@ -212,6 +249,13 @@ pip install beautifulsoup4 markitdown pymupdf
 
 - [microsoft/markitdown](https://github.com/microsoft/markitdown) — 文档转 Markdown 工具
 - [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — PDF 处理库
+
+### 知识库管理
+
+- [Obsidian](https://obsidian.md/) — 知识库载体
+- [GBrain](https://github.com/) — 知识库搜索工具
+- [GraphRAG](https://github.com/microsoft/graphrag) — 知识图谱发现
+- [Karpathy LLM Wiki](https://github.com/karpathy/llm-wiki) — LLM Wiki 写作模式
 
 ### AI Agent & 翻译
 
