@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-2-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-3-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -29,6 +29,7 @@
 |---|---|
 | 🎬 [**douyin-transcribe（抖音转录）**](#-douyin-transcribe抖音转录) | 抖音视频 → 下载 → 转录 → Markdown，无需 cookie/登录，中文准确率超过 Whisper |
 | 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量下载 |
+| 📺 [**bilibili-transcribe（B 站转录）**](#-bilibili-transcribeb-站转录) | B 站视频 → 下载 → 转录 → Markdown，无需登录 |
 
 ---
 
@@ -40,7 +41,7 @@
 帮我安装这个 skill：https://github.com/chubbyxiaopangdun/chubbyskills/tree/main/<skill-name>
 ```
 
-把 `<skill-name>` 换成你想装的那个，比如 `douyin-transcribe`、`podcast-transcribe`。Agent 会自己 clone 到对应目录，不用你操心路径。
+把 `<skill-name>` 换成你想装的那个，比如 `douyin-transcribe`、`podcast-transcribe`、`bilibili-transcribe`。Agent 会自己 clone 到对应目录，不用你操心路径。
 
 ---
 
@@ -117,13 +118,6 @@
 批量转录这个播客：http://www.ximalaya.com/album/xxxxx.xml
 ```
 
-**适合**
-
-- 内容创作者需要把播客转成文字稿
-- 知识管理需要把音频内容沉淀到笔记系统
-- 学习笔记整理
-- 播客内容检索
-
 **性能数据**
 
 | 模型 | 速度 (CPU) | 中文准确率 |
@@ -132,9 +126,52 @@
 | faster-whisper small | ~10min/h | 良好 (~85-90%) |
 | faster-whisper large-v3 | ~30-60min/h | 最佳 |
 
+→ [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
+
+</td></tr>
+</table>
+
+<table>
+<tr><td>
+
+### 📺 bilibili-transcribe（B 站转录）
+
+> *"B 站那么多干货视频，终于可以转成文字慢慢看了。"*
+
+B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。支持 BV 号和完整链接，无需登录。
+
+**它能做什么**
+
+- 📺 支持 B 站 BV 号和完整链接
+- ⚡ 极速转录：7 分钟视频仅需 15 秒
+- 📝 自动生成带 frontmatter 的 Markdown 文件
+- 🎯 中文准确率高，简体输出
+- 🔒 无需登录、无需 cookie
+
+**怎么触发**
+
+```
+把这个 B 站视频转成文字：https://www.bilibili.com/video/BV1rrQGBeEen/
+帮我转录这个 bilibili
+```
+
+**技术要点**
+
+- yt-dlp 原生支持 B 站，需要加 User-Agent 和 Referer 绕过反爬
+- SenseVoice-Small 转录效果优于 Whisper
+- 自动提取视频标题作为文件名
+
+**性能数据**
+
+| 视频时长 | 转录耗时 |
+|------|------|
+| 5 min | ~10s |
+| 10 min | ~20s |
+| 30 min | ~60s |
+
 **🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
-→ [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
+→ [SKILL.md](./bilibili-transcribe/SKILL.md) · [脚本](./bilibili-transcribe/scripts/)
 
 </td></tr>
 </table>
@@ -143,7 +180,7 @@
 
 ## 🔧 环境要求
 
-### douyin-transcribe
+### douyin-transcribe / bilibili-transcribe
 
 ```bash
 # Python 3.9+
@@ -154,8 +191,8 @@ source .venv/bin/activate
 pip install funasr modelscope torch torchaudio
 
 # 系统依赖
-# macOS: brew install ffmpeg
-# Ubuntu: sudo apt install ffmpeg
+# macOS: brew install ffmpeg yt-dlp
+# Ubuntu: sudo apt install ffmpeg && pip install yt-dlp
 ```
 
 ### podcast-transcribe

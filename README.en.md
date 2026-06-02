@@ -7,7 +7,7 @@
 #### AI Skills I use daily, all open-sourced
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-2-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-3-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -29,6 +29,7 @@ Each Skill here is a structured instruction set that Agents can load directly, f
 |---|---|
 | 🎬 [**douyin-transcribe**](#-douyin-transcribe) | Douyin video → download → transcribe → Markdown, no cookie/login needed, Chinese accuracy exceeds Whisper |
 | 🎙️ [**podcast-transcribe**](#-podcast-transcribe) | Podcast/Xiaoyuzhou → download → transcribe → Markdown, supports RSS batch download |
+| 📺 [**bilibili-transcribe**](#-bilibili-transcribe) | Bilibili video → download → transcribe → Markdown, no login needed |
 
 ---
 
@@ -40,7 +41,7 @@ In any Agent that supports Skills (Claude Code, Codex, OpenClaw, Hermes, etc.), 
 Install this skill: https://github.com/chubbyxiaopangdun/chubbyskills/tree/main/<skill-name>
 ```
 
-Replace `<skill-name>` with the one you want, like `douyin-transcribe` or `podcast-transcribe`. The Agent will clone it to the right directory automatically.
+Replace `<skill-name>` with the one you want, like `douyin-transcribe`, `podcast-transcribe`, or `bilibili-transcribe`. The Agent will clone it to the right directory automatically.
 
 ---
 
@@ -95,13 +96,6 @@ Podcast audio → download → faster-whisper transcribe → save as Markdown. S
 - ⏱️ Resume support, skips already transcribed episodes
 - 📁 Auto-naming by episode number
 
-**Triggers**
-
-```
-Transcribe this podcast: https://www.xiaoyuzhoufm.com/episode/xxxxx
-Batch transcribe: http://www.ximalaya.com/album/xxxxx.xml
-```
-
 **Performance**
 
 | Model | Speed (CPU) | Chinese Accuracy |
@@ -110,9 +104,46 @@ Batch transcribe: http://www.ximalaya.com/album/xxxxx.xml
 | faster-whisper small | ~10min/h | Good (~85-90%) |
 | faster-whisper large-v3 | ~30-60min/h | Best |
 
+→ [SKILL.md](./podcast-transcribe/SKILL.md) · [Scripts](./podcast-transcribe/scripts/)
+
+</td></tr>
+</table>
+
+<table>
+<tr><td>
+
+### 📺 bilibili-transcribe
+
+> *"So many great videos on Bilibili, now I can read them as text."*
+
+Bilibili video → yt-dlp download audio → SenseVoice-Small transcribe → save as Markdown. Supports BV IDs and full links. No login needed.
+
+**What it does**
+
+- 📺 Supports Bilibili BV IDs and full links
+- ⚡ Fast transcription: 7-minute video in just 15 seconds
+- 📝 Auto-generates Markdown with frontmatter
+- 🎯 High Chinese accuracy, simplified Chinese output
+- 🔒 No login, no cookies needed
+
+**Triggers**
+
+```
+Transcribe this Bilibili video: https://www.bilibili.com/video/BV1rrQGBeEen/
+Help me transcribe this bilibili
+```
+
+**Performance**
+
+| Video Duration | Transcription Time |
+|------|------|
+| 5 min | ~10s |
+| 10 min | ~20s |
+| 30 min | ~60s |
+
 **🌐 Cross-platform**: Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
-→ [SKILL.md](./podcast-transcribe/SKILL.md) · [Scripts](./podcast-transcribe/scripts/)
+→ [SKILL.md](./bilibili-transcribe/SKILL.md) · [Scripts](./bilibili-transcribe/scripts/)
 
 </td></tr>
 </table>
@@ -121,7 +152,7 @@ Batch transcribe: http://www.ximalaya.com/album/xxxxx.xml
 
 ## 🔧 Requirements
 
-### douyin-transcribe
+### douyin-transcribe / bilibili-transcribe
 
 ```bash
 # Python 3.9+
@@ -132,8 +163,8 @@ source .venv/bin/activate
 pip install funasr modelscope torch torchaudio
 
 # System dependencies
-# macOS: brew install ffmpeg
-# Ubuntu: sudo apt install ffmpeg
+# macOS: brew install ffmpeg yt-dlp
+# Ubuntu: sudo apt install ffmpeg && pip install yt-dlp
 ```
 
 ### podcast-transcribe
