@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-5-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-8-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -32,13 +32,28 @@
 
 ## 📋 目录
 
-| 名字 | 一句话 |
-|---|---|
-| 🎬 [**douyin-transcribe（抖音转录）**](#-douyin-transcribe抖音转录) | 抖音视频 → 下载 → 转录 → Markdown，无需 cookie/登录 |
-| 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量 |
-| 📺 [**bilibili-transcribe（B 站转录）**](#-bilibili-transcribeb-站转录) | B 站视频 → 下载 → 转录 → Markdown，无需登录 |
-| 📰 [**wechat-article-ingest（公众号处理）**](#-wechat-article-ingest公众号处理) | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
-| 🌍 [**youtube-transcribe（YouTube 转录+翻译）**](#-youtube-trans录youtube-转录翻译) | YouTube → 下载 → 转录 → 英文翻译 → 中英对照 Markdown |
+### 视频转录
+
+| 名字 | 平台 | 一句话 |
+|---|---|---|
+| 🎬 [**douyin-transcribe**](#-douyin-transcribe抖音转录) | 抖音 | 抖音视频 → 转录 → Markdown |
+| 📺 [**bilibili-transcribe**](#-bilibili-transcribeb-站转录) | B站 | B站视频 → 转录 → Markdown |
+| 🎵 [**tiktok-transcribe**](#-tiktok-transcribetiktok-转录) | TikTok | TikTok 视频 → 转录 → Markdown |
+| 📱 [**weibo-transcribe**](#-weibo-transcribe微博视频转录) | 微博 | 微博视频 → 转录 → Markdown |
+| 💡 [**zhihu-transcribe**](#-zhihu-transcribe知乎视频转录) | 知乎 | 知乎视频 → 转录 → Markdown |
+| 🌍 [**youtube-transcribe**](#-youtube-transcribeyoutube-转录翻译) | YouTube | YouTube → 转录 → 英文翻译 → 中英对照 |
+
+### 播客转录
+
+| 名字 | 平台 | 一句话 |
+|---|---|---|
+| 🎙️ [**podcast-transcribe**](#-podcast-transcribe播客转录) | 小宇宙/喜马拉雅 | 播客 → 下载 → 转录 → Markdown |
+
+### 内容处理
+
+| 名字 | 平台 | 一句话 |
+|---|---|---|
+| 📰 [**wechat-article-ingest**](#-wechat-article-ingest公众号处理) | 微信公众号 | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
 
 ---
 
@@ -56,101 +71,65 @@
 
 <a id="-skills"></a>
 
-<table>
-<tr><td>
-
 ### 🎬 douyin-transcribe（抖音转录）
 
 > *"想把抖音视频转成文字，以前得折腾半天 cookie 和 yt-dlp，现在一句话搞定。"*
 
-抖音视频 → 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。支持短链接和完整链接，无需 cookie、无需登录、无需 yt-dlp。
+抖音视频 → 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。
 
-**为什么用 SenseVoice 而不是 Whisper**
-
-| | faster-whisper | SenseVoice-Small |
-|------|------|------|
-| 中文准确率 | 一般 | **超过 Whisper** |
-| 速度 (CPU) | tiny: 149s/1h, small: 10-15min | **RTF ~0.04, 1h 音频约 2-3 分钟** |
-| VAD | 需额外配置 | **内置 fsmn-vad** |
-
-**致谢**
-
-- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案的灵感来源
-- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
-- [FunASR](https://github.com/modelscope/FunASR) — 语音识别框架
+**致谢**：[vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) · [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
 
 → [SKILL.md](./douyin-transcribe/SKILL.md) · [脚本](./douyin-transcribe/scripts/)
 
-</td></tr>
-</table>
-
-<table>
-<tr><td>
-
-### 🎙️ podcast-transcribe（播客转录）
-
-> *"播客听不完？让它变成文字，想看就看。"*
-
-播客音频 → 下载 → faster-whisper 转录 → 存为 Markdown。支持小宇宙、喜马拉雅等平台，支持 RSS 批量下载。
-
-**致谢**
-
-- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现
-- [OpenAI Whisper](https://github.com/openai/whisper) — 原始语音识别模型
-
-→ [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
-
-</td></tr>
-</table>
-
-<table>
-<tr><td>
+---
 
 ### 📺 bilibili-transcribe（B 站转录）
 
 > *"B 站那么多干货视频，终于可以转成文字慢慢看了。"*
 
-B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。支持 BV 号和完整链接，无需登录。
+B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。
 
-**致谢**
-
-- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具
-- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
+**致谢**：[yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) · [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
 
 → [SKILL.md](./bilibili-transcribe/SKILL.md) · [脚本](./bilibili-transcribe/scripts/)
 
-</td></tr>
-</table>
+---
 
-<table>
-<tr><td>
+### 🎵 tiktok-transcribe（TikTok 转录）
 
-### 📰 wechat-article-ingest（公众号处理）
+> *"TikTok 上的好内容，也能存下来慢慢看了。"*
 
-> *"公众号文章直接变成结构化知识。"*
+TikTok 视频 → 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。支持 vm.tiktok.com 短链接。
 
-微信公众号文章 → Markdown 提取 → A层观点提取 + B层问题链生成。支持直接链接抓取，无需登录。
+**致谢**：[yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) · [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
 
-**A+B 双轨处理**
+→ [SKILL.md](./tiktok-transcribe/SKILL.md) · [脚本](./tiktok-transcribe/scripts/)
 
-| 层级 | 输出 | 内容 |
-|------|------|------|
-| A层 | 观点提取.md | 核心观点矩阵（P1-P6, S1-S8, E1-E4）+ Takeaway |
-| B层 | 问题链.md | 3-5 条问题链，每条 L1→L2→L3 递进 |
+---
 
-**致谢**
+### 📱 weibo-transcribe（微博视频转录）
 
-- [microsoft/markitdown](https://github.com/microsoft/markitdown) — 文档转 Markdown 工具
-- [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — PDF 处理库
-- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论
+> *"微博上的视频内容，终于能转成文字了。"*
 
-→ [SKILL.md](./wechat-article-ingest/SKILL.md) · [脚本](./wechat-article-ingest/scripts/)
+微博视频 → 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。支持 weibo.com 和 m.weibo.cn。
 
-</td></tr>
-</table>
+**致谢**：[yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) · [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
 
-<table>
-<tr><td>
+→ [SKILL.md](./weibo-transcribe/SKILL.md) · [脚本](./weibo-transcribe/scripts/)
+
+---
+
+### 💡 zhihu-transcribe（知乎视频转录）
+
+> *"知乎上的视频回答，也能转成文字收藏了。"*
+
+知乎视频 → 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。
+
+**致谢**：[yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) · [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
+
+→ [SKILL.md](./zhihu-transcribe/SKILL.md) · [脚本](./zhihu-transcribe/scripts/)
+
+---
 
 ### 🌍 youtube-transcribe（YouTube 转录+翻译）
 
@@ -158,77 +137,53 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 
 YouTube 视频 → yt-dlp 下载 → SenseVoice-Small 转录 → 英文自动翻译成中文 → 输出中英对照 Markdown。
 
-**它能做什么**
-
-- 📺 支持所有 YouTube 视频
-- 🎙️ SenseVoice-Small 转录，中英文都支持
-- 🌐 英文内容自动翻译成高质量中文
-- 📝 输出中英对照 Markdown，方便学习
-- 🔒 无需登录、无需 cookie
-
-**怎么触发**
-
-```
-把这个 YouTube 视频转成文字：https://www.youtube.com/watch?v=xxxxx
-帮我转录这个 YouTube
-YouTube 翻译
-```
-
-**输出效果**
-
-```markdown
-# 视频标题
-
-## 中文翻译
-这是一个3。它写得潦草，分辨率极低...
-
----
-
-## English Original
-This is a three. It is sloppily written...
-```
-
-**性能数据**
-
-| 视频时长 | 下载 | 转录 | 翻译 | 总耗时 |
-|------|------|------|------|------|
-| 5 min | ~10s | ~5s | ~10s | ~30s |
-| 10 min | ~15s | ~10s | ~20s | ~50s |
-| 30 min | ~30s | ~30s | ~60s | ~2min |
-
-**致谢**
-
-- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 视频下载工具
-- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
-- [DeepSeek](https://platform.deepseek.com/) — 翻译用 LLM
-
-**🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
+**致谢**：[yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) · [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) · [DeepSeek](https://platform.deepseek.com/)
 
 → [SKILL.md](./youtube-transcribe/SKILL.md) · [脚本](./youtube-transcribe/scripts/)
 
-</td></tr>
-</table>
+---
+
+### 🎙️ podcast-transcribe（播客转录）
+
+> *"播客听不完？让它变成文字，想看就看。"*
+
+播客音频 → 下载 → faster-whisper 转录 → 存为 Markdown。支持小宇宙、喜马拉雅，支持 RSS 批量下载。
+
+**致谢**：[SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [OpenAI Whisper](https://github.com/openai/whisper)
+
+→ [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
+
+---
+
+### 📰 wechat-article-ingest（公众号处理）
+
+> *"公众号文章直接变成结构化知识。"*
+
+微信公众号文章 → Markdown 提取 → A层观点提取 + B层问题链生成。支持直接链接抓取。
+
+**致谢**：[microsoft/markitdown](https://github.com/microsoft/markitdown) · [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) · [dontbesilent](https://github.com/dontbesilent)
+
+→ [SKILL.md](./wechat-article-ingest/SKILL.md) · [脚本](./wechat-article-ingest/scripts/)
 
 ---
 
 ## 🔧 环境要求
 
-### douyin-transcribe / bilibili-transcribe / youtube-transcribe
+### 视频转录（抖音/B站/TikTok/微博/知乎/YouTube）
 
 ```bash
 pip install funasr modelscope torch torchaudio
 brew install ffmpeg yt-dlp  # macOS
 
 # YouTube 翻译功能（可选）
-export DEEPSEEK_API_KEY="your...
-### podcast-transcribe
+export DEEPSEEK_API_KEY=*** 播客转录
 
 ```bash
 pip install faster-whisper
 brew install ffmpeg  # macOS
 ```
 
-### wechat-article-ingest
+### 公众号处理
 
 ```bash
 pip install beautifulsoup4 markitdown pymupdf
@@ -237,8 +192,6 @@ pip install beautifulsoup4 markitdown pymupdf
 ---
 
 ## 🙏 致谢
-
-这个仓库的诞生离不开以下开源项目和创作者：
 
 ### 仓库结构灵感
 
@@ -252,7 +205,7 @@ pip install beautifulsoup4 markitdown pymupdf
 
 ### 视频下载
 
-- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具，支持上千个平台
 - [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案灵感
 
 ### 文档处理
@@ -273,7 +226,7 @@ pip install beautifulsoup4 markitdown pymupdf
 
 ## 🌟 关于
 
-这些 skill 都是我自己每天在用的，开源出来如果对你有帮助，给个 ⭐ 就行。有问题或建议，欢迎在 Issues / Discussions 里说一声。
+这些 skill 都是我自己每天在用的，开源出来如果对你有帮助，给个 ⭐ 就行。
 
 - 🐦 [X/Twitter](https://x.com/Chubbyguan)
 - 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
