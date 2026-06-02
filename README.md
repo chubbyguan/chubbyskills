@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-1-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-2-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -28,6 +28,7 @@
 | 名字 | 一句话 |
 |---|---|
 | 🎬 [**douyin-transcribe（抖音转录）**](#-douyin-transcribe抖音转录) | 抖音视频 → 下载 → 转录 → Markdown，无需 cookie/登录，中文准确率超过 Whisper |
+| 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量下载 |
 
 ---
 
@@ -36,10 +37,10 @@
 在 Claude Code、Codex、OpenClaw、Hermes 等支持 Skill 的 Agent 里，直接说：
 
 ```
-帮我安装这个 skill：https://github.com/chubbyxiaopangdun/chubbyskills/tree/main/douyin-transcribe
+帮我安装这个 skill：https://github.com/chubbyxiaopangdun/chubbyskills/tree/main/<skill-name>
 ```
 
-Agent 会自己 clone 到对应目录，不用你操心路径。
+把 `<skill-name>` 换成你想装的那个，比如 `douyin-transcribe`、`podcast-transcribe`。Agent 会自己 clone 到对应目录，不用你操心路径。
 
 ---
 
@@ -79,18 +80,6 @@ Agent 会自己 clone 到对应目录，不用你操心路径。
 帮我转录这个抖音
 ```
 
-**适合**
-
-- 内容创作者需要把抖音视频转成文字稿
-- 知识管理需要把视频内容沉淀到笔记系统
-- 播客/访谈转录
-- 学习笔记整理
-
-**不适合**
-
-- 需要说话人分离的场景（暂不支持）
-- 非中文视频（模型主要针对中文优化）
-
 **性能数据**
 
 | 视频时长 | 模型加载 | 转录耗时 | 总耗时 |
@@ -99,9 +88,53 @@ Agent 会自己 clone 到对应目录，不用你操心路径。
 | 30 min | ~30s | ~75s | ~2 min |
 | 1h 22min | ~40s | ~180s | ~4 min |
 
+→ [SKILL.md](./douyin-transcribe/SKILL.md) · [脚本](./douyin-transcribe/scripts/)
+
+</td></tr>
+</table>
+
+<table>
+<tr><td>
+
+### 🎙️ podcast-transcribe（播客转录）
+
+> *"播客听不完？让它变成文字，想看就看。"*
+
+播客音频 → 下载 → faster-whisper 转录 → 存为 Markdown。支持小宇宙、喜马拉雅等平台，支持 RSS 批量下载。
+
+**它能做什么**
+
+- 🎧 支持小宇宙、喜马拉雅等播客平台
+- 📡 RSS 批量下载，一次处理整季播客
+- 📝 自动生成带时间戳的 Markdown 文件
+- ⏱️ 支持断点续传，已转录的自动跳过
+- 📁 按集数自动命名，方便整理
+
+**怎么触发**
+
+```
+帮我转录这个播客：https://www.xiaoyuzhoufm.com/episode/xxxxx
+批量转录这个播客：http://www.ximalaya.com/album/xxxxx.xml
+```
+
+**适合**
+
+- 内容创作者需要把播客转成文字稿
+- 知识管理需要把音频内容沉淀到笔记系统
+- 学习笔记整理
+- 播客内容检索
+
+**性能数据**
+
+| 模型 | 速度 (CPU) | 中文准确率 |
+|------|------|------|
+| faster-whisper tiny | ~149s/1h | 一般 |
+| faster-whisper small | ~10min/h | 良好 (~85-90%) |
+| faster-whisper large-v3 | ~30-60min/h | 最佳 |
+
 **🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
-→ [SKILL.md](./douyin-transcribe/SKILL.md) · [脚本](./douyin-transcribe/scripts/)
+→ [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
 
 </td></tr>
 </table>
@@ -110,6 +143,8 @@ Agent 会自己 clone 到对应目录，不用你操心路径。
 
 ## 🔧 环境要求
 
+### douyin-transcribe
+
 ```bash
 # Python 3.9+
 python -m venv .venv
@@ -117,6 +152,21 @@ source .venv/bin/activate
 
 # 依赖
 pip install funasr modelscope torch torchaudio
+
+# 系统依赖
+# macOS: brew install ffmpeg
+# Ubuntu: sudo apt install ffmpeg
+```
+
+### podcast-transcribe
+
+```bash
+# Python 3.9+
+python -m venv .venv
+source .venv/bin/activate
+
+# 依赖
+pip install faster-whisper
 
 # 系统依赖
 # macOS: brew install ffmpeg
