@@ -17,7 +17,7 @@
 
 </div>
 
-**我是 Chubby**，一个在 AI 和内容创作领域折腾的普通人。
+**我是 Chubby**，一个在 AI 和内容创作领域折腾的普通人。Ai+电商探索者；正在用 Ai 把自己的项目重开一局ing；人间体验派丨期待与你相识；
 
 - 🐦 [X/Twitter](https://x.com/Chubbyguan)
 - 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
