@@ -17,6 +17,13 @@
 
 </div>
 
+**我是 Chubby**，一个在 AI 和内容创作领域折腾的普通人。
+
+- 🐦 [X/Twitter](https://x.com/Chubbyguan)
+- 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
+
+---
+
 都是在自己项目里跑通了一段时间，确实省事，才搬出来开源的。没什么花活，就是几个挺实用的东西。
 
 这里的每个 Skill 都是 Agent 能直接加载的结构化指令集，遵循 [Agent Skills](https://agentskills.io) 开放标准。Claude Code、Codex、OpenCode、OpenClaw、Hermes 都能装。
@@ -30,7 +37,7 @@
 | 🎬 [**douyin-transcribe（抖音转录）**](#-douyin-transcribe抖音转录) | 抖音视频 → 下载 → 转录 → Markdown，无需 cookie/登录 |
 | 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量 |
 | 📺 [**bilibili-transcribe（B 站转录）**](#-bilibili-transcribeb-站转录) | B 站视频 → 下载 → 转录 → Markdown，无需登录 |
-| 📰 [**wechat-article-ingest（公众号处理）**](#-wechat-article-ingest公众号处理) | 公众号 PDF → Markdown + A层观点提取 + B层问题链 |
+| 📰 [**wechat-article-ingest（公众号处理）**](#-wechat-article-ingest公众号处理) | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
 
 ---
 
@@ -125,33 +132,23 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 
 ### 📰 wechat-article-ingest（公众号处理）
 
-> *"公众号文章存了一堆 PDF，终于可以结构化了。"*
+> *"公众号文章直接变成结构化知识。"*
 
-微信公众号文章 PDF → Markdown 提取 → A层观点提取 + B层问题链生成。支持批量处理、长文档子主题拆分。
-
-**为什么需要这个**
-
-微信公众号文章没有稳定的网页抓取方式（反爬、需要登录），但可以通过「笔记同步助手」等工具导出 PDF。这个 skill 解决：
-
-- PDF → Markdown 结构化提取
-- 观点提取（A层）：核心观点矩阵 + Takeaway
-- 问题链生成（B层）：L1→L2→L3 递进式提问
-- 长文档自动拆子主题
+微信公众号文章 → Markdown 提取 → A层观点提取 + B层问题链生成。支持直接链接抓取，无需登录。
 
 **它能做什么**
 
-- 📄 PDF → Markdown，保留标题/列表/表格结构
+- 🔗 直接从公众号链接抓取，无需登录、无需 cookie
+- 📄 PDF 提取作为备选（MarkItDown + pymupdf 双引擎）
 - 🔴 A层观点提取：支柱观点 + 支撑观点 + 延伸观点
-- 🟡 B层问题链：安全区→边缘区→核心区递进提问
+- 🟡 B层问题链：L1→L2→L3 递进式提问
 - 📁 长文档自动拆子主题，并行处理
-- 📦 批量处理，一次处理多篇文章
 
 **怎么触发**
 
 ```
-帮我处理这篇文章：path/to/article.pdf
+帮我处理这篇文章：https://mp.weixin.qq.com/s/xxxxx
 提取观点 + 问题链
-处理素材库里最近的公众号文章
 ```
 
 **A+B 双轨处理**
@@ -160,13 +157,6 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 |------|------|------|
 | A层 | 观点提取.md | 核心观点矩阵（P1-P6, S1-S8, E1-E4）+ Takeaway |
 | B层 | 问题链.md | 3-5 条问题链，每条 L1→L2→L3 递进 |
-
-**适合**
-
-- 内容创作者需要提取文章核心观点
-- 知识管理需要结构化沉淀
-- 学习笔记整理
-- 播客/长视频文字稿深度处理
 
 **🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
@@ -196,14 +186,17 @@ brew install ffmpeg  # macOS
 ### wechat-article-ingest
 
 ```bash
-pip install markitdown pymupdf
+pip install beautifulsoup4 markitdown pymupdf
 ```
 
 ---
 
 ## 🌟 关于
 
-我是 Chubby，一个在 AI 和内容创作领域折腾的普通人。这些 skill 都是我自己每天在用的，开源出来如果对你有帮助，给个 ⭐ 就行。有问题或建议，欢迎在 Issues / Discussions 里说一声。
+这些 skill 都是我自己每天在用的，开源出来如果对你有帮助，给个 ⭐ 就行。有问题或建议，欢迎在 Issues / Discussions 里说一声。
+
+- 🐦 [X/Twitter](https://x.com/Chubbyguan)
+- 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
 
 ---
 
