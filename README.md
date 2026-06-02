@@ -80,6 +80,13 @@
 - 🎯 中文准确率超过 Whisper，简体输出
 - 🔒 无需登录、无需 cookie、无需 API Key
 
+**致谢**
+
+- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案的灵感来源（Go CLI）
+- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
+- [FunASR](https://github.com/modelscope/FunASR) — 语音识别框架
+- [ModelScope](https://modelscope.cn) — 模型托管平台
+
 → [SKILL.md](./douyin-transcribe/SKILL.md) · [脚本](./douyin-transcribe/scripts/)
 
 </td></tr>
@@ -101,6 +108,11 @@
 - 📝 自动生成带时间戳的 Markdown 文件
 - ⏱️ 支持断点续传，已转录的自动跳过
 
+**致谢**
+
+- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现，速度快 4 倍
+- [OpenAI Whisper](https://github.com/openai/whisper) — 原始语音识别模型
+
 → [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
 
 </td></tr>
@@ -121,6 +133,12 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 - ⚡ 极速转录：7 分钟视频仅需 15 秒
 - 📝 自动生成带 frontmatter 的 Markdown 文件
 - 🔒 无需登录、无需 cookie
+
+**致谢**
+
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具，支持 B 站等上千个平台
+- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
+- [FunASR](https://github.com/modelscope/FunASR) — 语音识别框架
 
 → [SKILL.md](./bilibili-transcribe/SKILL.md) · [脚本](./bilibili-transcribe/scripts/)
 
@@ -158,6 +176,13 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 | A层 | 观点提取.md | 核心观点矩阵（P1-P6, S1-S8, E1-E4）+ Takeaway |
 | B层 | 问题链.md | 3-5 条问题链，每条 L1→L2→L3 递进 |
 
+**致谢**
+
+- [microsoft/markitdown](https://github.com/microsoft/markitdown) — PDF/文档转 Markdown 工具
+- [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — PDF 处理库
+- [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) — HTML 解析库
+- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论的启发
+
 **🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
 → [SKILL.md](./wechat-article-ingest/SKILL.md) · [脚本](./wechat-article-ingest/scripts/)
@@ -188,6 +213,40 @@ brew install ffmpeg  # macOS
 ```bash
 pip install beautifulsoup4 markitdown pymupdf
 ```
+
+---
+
+## 🙏 致谢
+
+这个仓库的诞生离不开以下开源项目和创作者：
+
+### 仓库结构灵感
+
+- [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) — 仓库结构和 README 风格参考，感谢卡兹克
+
+### 语音识别
+
+- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 阿里开源的中文语音识别模型，准确率超过 Whisper
+- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现，速度快 4 倍
+- [OpenAI Whisper](https://github.com/openai/whisper) — 开创性的语音识别模型
+
+### 视频下载
+
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具，支持上千个平台
+- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案的灵感来源
+
+### 文档处理
+
+- [microsoft/markitdown](https://github.com/microsoft/markitdown) — 微软开源的文档转 Markdown 工具
+- [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — 高性能 PDF 处理库
+
+### AI Agent
+
+- [Agent Skills](https://agentskills.io) — Agent Skill 开放标准
+- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论的启发
+- [Hermes Agent](https://github.com/nousresearch/hermes-agent) — 这些 skill 的运行环境
+
+感谢所有开源贡献者！🙏
 
 ---
 
