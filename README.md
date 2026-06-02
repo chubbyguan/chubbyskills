@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-4-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-5-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -17,7 +17,7 @@
 
 </div>
 
-**我是 Chubby**，一个在 AI 和内容创作领域折腾的普通人。Ai+电商探索者；正在用 Ai 把自己的项目重开一局ing；人间体验派丨期待与你相识；
+**我是 Chubby**，一个在 AI 和内容创作领域折腾的普通人。
 
 - 🐦 [X/Twitter](https://x.com/Chubbyguan)
 - 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
@@ -38,6 +38,7 @@
 | 🎙️ [**podcast-transcribe（播客转录）**](#-podcast-transcribe播客转录) | 播客/小宇宙 → 下载 → 转录 → Markdown，支持 RSS 批量 |
 | 📺 [**bilibili-transcribe（B 站转录）**](#-bilibili-transcribeb-站转录) | B 站视频 → 下载 → 转录 → Markdown，无需登录 |
 | 📰 [**wechat-article-ingest（公众号处理）**](#-wechat-article-ingest公众号处理) | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
+| 🌍 [**youtube-transcribe（YouTube 转录+翻译）**](#-youtube-trans录youtube-转录翻译) | YouTube → 下载 → 转录 → 英文翻译 → 中英对照 Markdown |
 
 ---
 
@@ -72,20 +73,11 @@
 | 速度 (CPU) | tiny: 149s/1h, small: 10-15min | **RTF ~0.04, 1h 音频约 2-3 分钟** |
 | VAD | 需额外配置 | **内置 fsmn-vad** |
 
-**它能做什么**
-
-- 🔗 支持抖音短链接和完整链接
-- ⚡ 极速转录：11 分钟视频仅需 22 秒
-- 📝 自动生成带 frontmatter 的 Markdown 文件
-- 🎯 中文准确率超过 Whisper，简体输出
-- 🔒 无需登录、无需 cookie、无需 API Key
-
 **致谢**
 
-- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案的灵感来源（Go CLI）
+- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案的灵感来源
 - [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
 - [FunASR](https://github.com/modelscope/FunASR) — 语音识别框架
-- [ModelScope](https://modelscope.cn) — 模型托管平台
 
 → [SKILL.md](./douyin-transcribe/SKILL.md) · [脚本](./douyin-transcribe/scripts/)
 
@@ -101,16 +93,9 @@
 
 播客音频 → 下载 → faster-whisper 转录 → 存为 Markdown。支持小宇宙、喜马拉雅等平台，支持 RSS 批量下载。
 
-**它能做什么**
-
-- 🎧 支持小宇宙、喜马拉雅等播客平台
-- 📡 RSS 批量下载，一次处理整季播客
-- 📝 自动生成带时间戳的 Markdown 文件
-- ⏱️ 支持断点续传，已转录的自动跳过
-
 **致谢**
 
-- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现，速度快 4 倍
+- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现
 - [OpenAI Whisper](https://github.com/openai/whisper) — 原始语音识别模型
 
 → [SKILL.md](./podcast-transcribe/SKILL.md) · [脚本](./podcast-transcribe/scripts/)
@@ -127,18 +112,10 @@
 
 B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markdown。支持 BV 号和完整链接，无需登录。
 
-**它能做什么**
-
-- 📺 支持 B 站 BV 号和完整链接
-- ⚡ 极速转录：7 分钟视频仅需 15 秒
-- 📝 自动生成带 frontmatter 的 Markdown 文件
-- 🔒 无需登录、无需 cookie
-
 **致谢**
 
-- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具，支持 B 站等上千个平台
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具
 - [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
-- [FunASR](https://github.com/modelscope/FunASR) — 语音识别框架
 
 → [SKILL.md](./bilibili-transcribe/SKILL.md) · [脚本](./bilibili-transcribe/scripts/)
 
@@ -154,21 +131,6 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 
 微信公众号文章 → Markdown 提取 → A层观点提取 + B层问题链生成。支持直接链接抓取，无需登录。
 
-**它能做什么**
-
-- 🔗 直接从公众号链接抓取，无需登录、无需 cookie
-- 📄 PDF 提取作为备选（MarkItDown + pymupdf 双引擎）
-- 🔴 A层观点提取：支柱观点 + 支撑观点 + 延伸观点
-- 🟡 B层问题链：L1→L2→L3 递进式提问
-- 📁 长文档自动拆子主题，并行处理
-
-**怎么触发**
-
-```
-帮我处理这篇文章：https://mp.weixin.qq.com/s/xxxxx
-提取观点 + 问题链
-```
-
 **A+B 双轨处理**
 
 | 层级 | 输出 | 内容 |
@@ -178,14 +140,71 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 
 **致谢**
 
-- [microsoft/markitdown](https://github.com/microsoft/markitdown) — PDF/文档转 Markdown 工具
+- [microsoft/markitdown](https://github.com/microsoft/markitdown) — 文档转 Markdown 工具
 - [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — PDF 处理库
-- [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) — HTML 解析库
-- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论的启发
+- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论
+
+→ [SKILL.md](./wechat-article-ingest/SKILL.md) · [脚本](./wechat-article-ingest/scripts/)
+
+</td></tr>
+</table>
+
+<table>
+<tr><td>
+
+### 🌍 youtube-transcribe（YouTube 转录+翻译）
+
+> *"英文 YouTube 终于能轻松看懂了。"*
+
+YouTube 视频 → yt-dlp 下载 → SenseVoice-Small 转录 → 英文自动翻译成中文 → 输出中英对照 Markdown。
+
+**它能做什么**
+
+- 📺 支持所有 YouTube 视频
+- 🎙️ SenseVoice-Small 转录，中英文都支持
+- 🌐 英文内容自动翻译成高质量中文
+- 📝 输出中英对照 Markdown，方便学习
+- 🔒 无需登录、无需 cookie
+
+**怎么触发**
+
+```
+把这个 YouTube 视频转成文字：https://www.youtube.com/watch?v=xxxxx
+帮我转录这个 YouTube
+YouTube 翻译
+```
+
+**输出效果**
+
+```markdown
+# 视频标题
+
+## 中文翻译
+这是一个3。它写得潦草，分辨率极低...
+
+---
+
+## English Original
+This is a three. It is sloppily written...
+```
+
+**性能数据**
+
+| 视频时长 | 下载 | 转录 | 翻译 | 总耗时 |
+|------|------|------|------|------|
+| 5 min | ~10s | ~5s | ~10s | ~30s |
+| 10 min | ~15s | ~10s | ~20s | ~50s |
+| 30 min | ~30s | ~30s | ~60s | ~2min |
+
+**致谢**
+
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 视频下载工具
+- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 语音识别模型
+- [DeepSeek](https://platform.deepseek.com/) — 翻译用 LLM
 
 **🌐 跨平台**：Claude Code · Codex · OpenCode · OpenClaw · Hermes
 
-→ [SKILL.md](./wechat-article-ingest/SKILL.md) · [脚本](./wechat-article-ingest/scripts/)
+→ [SKILL.md](./youtube-transcribe/SKILL.md) · [脚本](./youtube-transcribe/scripts/)
 
 </td></tr>
 </table>
@@ -194,13 +213,14 @@ B 站视频 → yt-dlp 下载音频 → SenseVoice-Small 转录 → 存为 Markd
 
 ## 🔧 环境要求
 
-### douyin-transcribe / bilibili-transcribe
+### douyin-transcribe / bilibili-transcribe / youtube-transcribe
 
 ```bash
 pip install funasr modelscope torch torchaudio
 brew install ffmpeg yt-dlp  # macOS
-```
 
+# YouTube 翻译功能（可选）
+export DEEPSEEK_API_KEY="your...
 ### podcast-transcribe
 
 ```bash
@@ -222,28 +242,29 @@ pip install beautifulsoup4 markitdown pymupdf
 
 ### 仓库结构灵感
 
-- [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) — 仓库结构和 README 风格参考，感谢卡兹克
+- [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) — 仓库结构和 README 风格参考
 
 ### 语音识别
 
-- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 阿里开源的中文语音识别模型，准确率超过 Whisper
-- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现，速度快 4 倍
+- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) — 阿里开源的中文语音识别模型
+- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) — Whisper 的 CTranslate2 实现
 - [OpenAI Whisper](https://github.com/openai/whisper) — 开创性的语音识别模型
 
 ### 视频下载
 
-- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具，支持上千个平台
-- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案的灵感来源
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载工具
+- [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) — 抖音下载方案灵感
 
 ### 文档处理
 
-- [microsoft/markitdown](https://github.com/microsoft/markitdown) — 微软开源的文档转 Markdown 工具
-- [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — 高性能 PDF 处理库
+- [microsoft/markitdown](https://github.com/microsoft/markitdown) — 文档转 Markdown 工具
+- [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) — PDF 处理库
 
-### AI Agent
+### AI Agent & 翻译
 
 - [Agent Skills](https://agentskills.io) — Agent Skill 开放标准
-- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论的启发
+- [DeepSeek](https://platform.deepseek.com/) — 翻译用 LLM
+- [dontbesilent](https://github.com/dontbesilent) — A+B 双轨处理方法论
 - [Hermes Agent](https://github.com/nousresearch/hermes-agent) — 这些 skill 的运行环境
 
 感谢所有开源贡献者！🙏
