@@ -36,6 +36,7 @@ export DEEPSEEK_API_KEY="your-api-key"
 # 1) 采集笔记 → 统一 frontmatter Markdown
 python scripts/fetch_note.py "https://www.xiaohongshu.com/explore/xxxx" -o ./out
 python scripts/fetch_note.py "http://xhslink.com/xxxx" -o ./out
+python scripts/fetch_note.py "链接" -o ./out --no-images   # 只留图片链接，不下载
 
 # 2) 爆款拆解 → 拆解报告 + 5 条衍生选题
 python scripts/analyze_hook.py ./out/某笔记.md -o ./out
@@ -43,7 +44,7 @@ python scripts/analyze_hook.py ./out/某笔记.md -o ./out
 
 ## 产出
 
-- `fetch_note.py`：标题、正文、标签、作者、互动数据（赞/藏/评）、图片链接 → 统一 frontmatter Markdown（`platform: xiaohongshu`）
+- `fetch_note.py`：标题、正文、标签、作者、互动数据（赞/藏/评）→ 统一 frontmatter Markdown（`platform: xiaohongshu`）；**图片下载到本地 `<标题>.assets/` 并以 `![]()` 嵌入**——图文笔记的正文常在图里，本地化后在 Obsidian 直接可见。`--no-images` 可只留链接；某张下载失败自动回退为链接
 - `analyze_hook.py`：目标人群 / 场景 / 痛点 / 情绪价值 / 标题钩子 / 正文结构 / 可复用模板 / 5 条衍生选题（带 `- [ ]` 勾选，可直接进选题库）
 
 ## ⚠️ 关于反爬（务必先读）

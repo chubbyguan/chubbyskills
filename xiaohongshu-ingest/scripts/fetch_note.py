@@ -161,9 +161,8 @@ def parse_from_meta(html):
             "likes": "", "collects": "", "comments": "", "images": []}
 
 
-def build_markdown(data, url):
+def build_markdown(data, url, title, image_refs):
     now = datetime.now().strftime("%Y-%m-%d")
-    title = data["title"] or (data["desc"][:30] if data["desc"] else "小红书笔记")
     tags = ["小红书"] + data["tags"]
     tags_yaml = ", ".join(tags)
     stat = f"👍 {data['likes']} · ⭐ {data['collects']} · 💬 {data['comments']}"
@@ -188,11 +187,13 @@ def build_markdown(data, url):
         "",
         data["desc"] or "（正文为空，可能被反爬拦截，建议配置 XHS_COOKIE）",
     ]
-    if data["images"]:
-        lines += ["", "## 图片"]
-        lines += [f"- {u}" for u in data["images"]]
+    if image_refs:
+        lines += ["", "## 图片", ""]
+        for kind, val in image_refs:
+            # 图文笔记的正文常在图里，本地化嵌入后在 Markdown 直接可见
+            lines.append(f"![]({val})" if kind == "local" else f"- {val}")
     lines.append("")
-    return "\n".join(lines), title
+    return "\n".join(lines)
 
 
 def sanitize(name):
@@ -201,10 +202,42 @@ def sanitize(name):
     return s[:50] or "xhs-note"
 
 
+def compute_title(data):
+    return data["title"] or (data["desc"][:30] if data["desc"] else "小红书笔记")
+
+
+def download_images(urls, out_dir, base, cookie):
+    """下载图片到 <base>.assets/ 子目录。返回 [(kind, value)]：
+    kind=local 用本地相对路径嵌入；某张下载失败则回退 kind=url 保留链接。"""
+    refs = []
+    if not urls:
+        return refs
+    asset_dir = os.path.join(out_dir, f"{base}.assets")
+    for i, u in enumerate(urls, 1):
+        try:
+            os.makedirs(asset_dir, exist_ok=True)
+            headers = {"User-Agent": UA, "Referer": "https://www.xiaohongshu.com/"}
+            if cookie:
+                headers["Cookie"] = cookie
+            req = urllib.request.Request(u, headers=headers)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                blob = resp.read()
+            fn = f"img_{i}.jpg"
+            with open(os.path.join(asset_dir, fn), "wb") as f:
+                f.write(blob)
+            print(f"  🖼️  图片 {i}/{len(urls)}（{len(blob) // 1024} KB）", file=sys.stderr)
+            refs.append(("local", f"{base}.assets/{fn}"))
+        except Exception as e:
+            print(f"  ⚠️  图片 {i} 下载失败，保留链接：{e}", file=sys.stderr)
+            refs.append(("url", u))
+    return refs
+
+
 def main():
     parser = argparse.ArgumentParser(description="小红书笔记采集")
     parser.add_argument("url", help="小红书笔记链接或 xhslink 短链")
     parser.add_argument("--output", "-o", default=".", help="输出目录")
+    parser.add_argument("--no-images", action="store_true", help="不下载图片，只在 Markdown 里保留图片链接")
     args = parser.parse_args()
 
     cookie = os.environ.get("XHS_COOKIE")
@@ -237,15 +270,25 @@ def main():
               "建议：① 设置 XHS_COOKIE；② 手动复制正文走 analyze_hook.py", file=sys.stderr)
         sys.exit(1)
 
-    markdown, title = build_markdown(data, final_url)
+    title = compute_title(data)
+    base = sanitize(title)
     os.makedirs(args.output, exist_ok=True)
-    output_path = os.path.join(args.output, f"{sanitize(title)}.md")
+
+    if data["images"] and not args.no_images:
+        print(f"  ⬇️  下载 {len(data['images'])} 张图片...", file=sys.stderr)
+        image_refs = download_images(data["images"], args.output, base, cookie)
+    else:
+        image_refs = [("url", u) for u in data["images"]]
+
+    markdown = build_markdown(data, final_url, title, image_refs)
+    output_path = os.path.join(args.output, f"{base}.md")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(markdown)
 
+    local_n = sum(1 for k, _ in image_refs if k == "local")
     print(f"✅ Saved: {output_path}", file=sys.stderr)
-    print(f"  作者：{data['author'] or '未知'} | 👍 {data['likes']} ⭐ {data['collects']}",
-          file=sys.stderr)
+    print(f"  作者：{data['author'] or '未知'} | 👍 {data['likes']} ⭐ {data['collects']} "
+          f"| 本地图片：{local_n} 张", file=sys.stderr)
     print(output_path)
 
 

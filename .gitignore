@@ -21,6 +21,11 @@ build/
 # Output files
 output/
 *.md.bak
+*.assets/
+*.jpg
+*.jpeg
+*.png
+*.webp
 
 # IDE
 .vscode/
