@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-12-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-13-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -55,6 +55,7 @@
 |---|---|---|
 | 📰 [**wechat-article-ingest**](#-wechat-article-ingest公众号处理) | 微信公众号 | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
 | 📕 [**xiaohongshu-ingest**](#-xiaohongshu-ingest小红书采集) | 小红书 | 图文存图/视频转文字稿 + 爆款拆解 + 衍生选题 |
+| 🐦 [**x-ingest**](#-x-ingestxtwitter采集) | X / Twitter | 推文采集 → 图文存图 / 视频转文字稿（免登录）|
 
 ### 知识库管理
 
@@ -215,6 +216,18 @@ YouTube 视频 → yt-dlp 下载 → SenseVoice-Small 转录 → 英文自动翻
 
 ---
 
+### 🐦 x-ingest（X/Twitter 采集）
+
+> *"一条推文，图存下来、视频转成字。"*
+
+X 推文 → 统一 frontmatter Markdown（正文/作者/赞回复/话题）。**自动区分图文/视频**：图文下载图片本地嵌入，视频提取最高码率 mp4 直链转成文字稿。走 X 官方嵌入端点，**免登录、免 API Key**；目前支持单条推文。
+
+**致谢**：[FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) · X 官方嵌入端点
+
+→ [SKILL.md](./x-ingest/SKILL.md) · [脚本](./x-ingest/scripts/)
+
+---
+
 ### 🧠 knowledge-base-management（知识库管理）
 
 > *"知识库从素材入库到健康检查，一套流程全搞定。"*
@@ -314,6 +327,13 @@ pip install -r wechat-article-ingest/requirements.txt
 # 采集与拆解均零 pip 依赖（仅标准库）
 export XHS_COOKIE="你的小红书 cookie"   # 可选，提高采集成功率
 export DEEPSEEK_API_KEY="your-key"       # 爆款拆解必需
+```
+
+### X/Twitter 采集
+
+```bash
+# 图文/文字采集零依赖、免登录；视频转录才需要 funasr + ffmpeg
+pip install funasr modelscope torch torchaudio   # 仅视频推文需要
 ```
 
 ### 知识库管理

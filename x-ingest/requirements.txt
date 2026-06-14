@@ -1,0 +1,9 @@
+# X(Twitter) 推文采集
+#
+# 图文/文字采集（fetch_tweet.py）：零 pip 依赖（仅标准库）
+#
+# 视频推文转录（fetch_tweet.py 视频推文）才需要以下（与抖音/B站/小红书同一套）：
+#   pip install funasr modelscope torch torchaudio
+#   系统依赖：ffmpeg（macOS: brew install ffmpeg / Ubuntu: apt install ffmpeg）
+#
+# 采集走 X 官方嵌入端点，无需登录、无需 API Key。
