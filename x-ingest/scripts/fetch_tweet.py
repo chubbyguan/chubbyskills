@@ -123,10 +123,30 @@ def extract_photos(tw):
 def parse_tweet(tw):
     user = tw.get("user") or {}
     text = (tw.get("text") or tw.get("full_text") or "").strip()
-    tags = re.findall(r"#(\w+)", text)
     video_url = extract_video_url(tw)
     photos = extract_photos(tw)
-    note_type = "video" if video_url else ("image" if photos else "text")
+
+    # X Article（长文章）：syndication 只给标题+预览+封面，全文需登录另抓
+    article = tw.get("article") or {}
+    article_title = ""
+    if article:
+        article_title = (article.get("title") or "").strip()
+        preview = (article.get("preview_text") or "").strip()
+        if preview:
+            text = preview
+        cover = ((article.get("cover_media") or {}).get("media_info") or {}).get("original_img_url")
+        if cover and not photos:
+            photos = [cover]
+
+    tags = re.findall(r"#(\w+)", text)
+    if article:
+        note_type = "article"
+    elif video_url:
+        note_type = "video"
+    elif photos:
+        note_type = "image"
+    else:
+        note_type = "text"
     created = (tw.get("created_at") or "")[:10]
     return {
         "text": text,
@@ -139,6 +159,7 @@ def parse_tweet(tw):
         "photos": photos,
         "video_url": video_url,
         "note_type": note_type,
+        "article_title": article_title,
     }
 
 
@@ -205,8 +226,10 @@ def sanitize(name):
 
 
 def compute_title(data):
+    if data.get("article_title"):
+        return data["article_title"][:60]
     first_line = (data["text"].splitlines() or [""])[0].strip()
-    if first_line:
+    if first_line and not first_line.startswith("http"):
         return first_line[:40]
     who = data["author"] or data["screen_name"] or "X"
     return f"{who}的推文"
@@ -219,6 +242,9 @@ def build_markdown(data, url, title, image_refs, transcript=None):
     handle = f"@{data['screen_name']}" if data["screen_name"] else ""
     author_line = f"{data['author']} {handle}".strip() or "未知"
     stat = f"👍 {data['likes']} · 💬 {data['replies']}"
+    body = data["text"] or "（推文无正文）"
+    if data["note_type"] == "article":
+        body = "> 📄 X 长文章，以下为预览，全文见上方 source 链接\n\n" + body
 
     lines = [
         "---",
@@ -238,7 +264,7 @@ def build_markdown(data, url, title, image_refs, transcript=None):
         "",
         f"> 👤 {author_line} | {stat}",
         "",
-        data["text"] or "（推文无正文）",
+        body,
     ]
     if transcript:
         lines += ["", "## 视频文字稿", "", transcript]
