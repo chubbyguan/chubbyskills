@@ -52,7 +52,10 @@ def get_info(url: str, bvid: str) -> tuple:
         )
         line = r.stdout.strip().split("\n")[0]
         title, _, uploader = line.partition("|||")
-        return (title.strip() or bvid, uploader.strip())
+        uploader = uploader.strip()
+        if uploader in ("NA", "None"):  # yt-dlp 缺失字段会输出 NA
+            uploader = ""
+        return (title.strip() or bvid, uploader)
     except Exception:
         return bvid, ""
 

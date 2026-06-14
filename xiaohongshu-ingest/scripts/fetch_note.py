@@ -39,14 +39,46 @@ def http_get(url, cookie=None, timeout=20):
         return resp.read().decode("utf-8", "replace"), resp.geturl()
 
 
+def _balanced_json(s):
+    """从首个 '{' 起做括号配平提取（正确跳过字符串内的花括号），返回 JSON 文本。"""
+    depth, in_str, esc = 0, False, False
+    for i, ch in enumerate(s):
+        if esc:
+            esc = False
+            continue
+        if ch == "\\":
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return s[:i + 1]
+    return None
+
+
 def extract_initial_state(html):
-    """从页面提取 window.__INITIAL_STATE__ 的 JSON。返回 dict 或 None。"""
-    m = re.search(r"window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*</script>", html, re.DOTALL)
-    if not m:
+    """从页面提取 window.__INITIAL_STATE__ 的 JSON。返回 dict 或 None。
+
+    用括号配平而非 `}</script>` 正则——真实页面里 JSON 后面常紧跟其它 JS，
+    正则会失配。配平能稳定截出完整对象。
+    """
+    idx = html.find("__INITIAL_STATE__")
+    if idx == -1:
         return None
-    raw = m.group(1)
-    # 小红书的内联状态是 JS 对象，值位置的 undefined 需替换为合法 JSON null。
-    # 只替换 :/,/[ 之后的 undefined，避免污染字符串正文里出现的该词。
+    brace = html.find("{", idx)
+    if brace == -1:
+        return None
+    raw = _balanced_json(html[brace:])
+    if not raw:
+        return None
+    # 值位置的 undefined 替换为合法 JSON null，避免污染字符串正文里出现的该词。
     raw = re.sub(r"([:,\[]\s*)undefined\b", r"\1null", raw)
     try:
         return json.loads(raw)
@@ -55,7 +87,12 @@ def extract_initial_state(html):
 
 
 def find_note(state):
-    """从 __INITIAL_STATE__ 里定位 note 详情对象。结构多变，做防御性遍历。"""
+    """从 __INITIAL_STATE__ 里定位 note 详情对象。
+
+    小红书的 state 结构随版本/端变化（note.noteDetailMap / noteData.data / ...），
+    所以先走已知路径，再用递归兜底：搜整个 state 找含 interactInfo + (desc/title)
+    的对象——即笔记本体。这样结构怎么变都能命中。
+    """
     try:
         note_map = state["note"]["noteDetailMap"]
         for v in note_map.values():
@@ -63,7 +100,24 @@ def find_note(state):
                 return v["note"]
     except Exception:
         pass
-    return None
+
+    found = [None]
+
+    def walk(o):
+        if found[0] is not None:
+            return
+        if isinstance(o, dict):
+            if "interactInfo" in o and ("desc" in o or "title" in o):
+                found[0] = o
+                return
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(state)
+    return found[0]
 
 
 def parse_from_state(note):
@@ -71,6 +125,11 @@ def parse_from_state(note):
     images = []
     for img in img_list:
         u = img.get("urlDefault") or img.get("url") or ""
+        if not u:
+            for info in (img.get("infoList") or []):
+                if info.get("url"):
+                    u = info["url"]
+                    break
         if u:
             images.append(u)
     interact = note.get("interactInfo") or {}
