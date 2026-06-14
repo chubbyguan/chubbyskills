@@ -7,7 +7,7 @@
 #### 我自己每天在用的一些 AI Skill，都开源在这里
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-11-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-12-10B981?style=for-the-badge)](#-skills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -54,6 +54,7 @@
 | 名字 | 平台 | 一句话 |
 |---|---|---|
 | 📰 [**wechat-article-ingest**](#-wechat-article-ingest公众号处理) | 微信公众号 | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
+| 📕 [**xiaohongshu-ingest**](#-xiaohongshu-ingest小红书采集) | 小红书 | 笔记采集 → Markdown + 爆款拆解 + 衍生选题 |
 
 ### 知识库管理
 
@@ -202,6 +203,18 @@ YouTube 视频 → yt-dlp 下载 → SenseVoice-Small 转录 → 英文自动翻
 
 ---
 
+### 📕 xiaohongshu-ingest（小红书采集）
+
+> *"采集爆款笔记，顺手拆出能直接写的选题。"*
+
+小红书笔记 → 统一 frontmatter Markdown（标题/正文/标签/作者/赞藏评/图片）→ DeepSeek 爆款拆解（人群×场景×痛点×情绪×钩子）→ 5 条衍生选题。零依赖采集，支持 xhslink 短链；建议配 `XHS_COOKIE` 规避风控。
+
+**致谢**：[DeepSeek](https://platform.deepseek.com/) · 小红书爆款方法论
+
+→ [SKILL.md](./xiaohongshu-ingest/SKILL.md) · [脚本](./xiaohongshu-ingest/scripts/)
+
+---
+
 ### 🧠 knowledge-base-management（知识库管理）
 
 > *"知识库从素材入库到健康检查，一套流程全搞定。"*
@@ -293,6 +306,14 @@ brew install ffmpeg  # macOS
 
 ```bash
 pip install -r wechat-article-ingest/requirements.txt
+```
+
+### 小红书采集
+
+```bash
+# 采集与拆解均零 pip 依赖（仅标准库）
+export XHS_COOKIE="你的小红书 cookie"   # 可选，提高采集成功率
+export DEEPSEEK_API_KEY="your-key"       # 爆款拆解必需
 ```
 
 ### 知识库管理

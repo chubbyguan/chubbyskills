@@ -1,0 +1,8 @@
+# 小红书采集 + 爆款拆解：零 pip 依赖（仅 Python 标准库）
+#
+# 采集（fetch_note.py）：纯标准库
+# 拆解（analyze_hook.py）：纯标准库，运行时需要环境变量 DEEPSEEK_API_KEY
+#
+# 可选环境变量：
+#   XHS_COOKIE       — 提高小红书采集成功率（规避风控）
+#   DEEPSEEK_API_KEY — 爆款拆解必需
