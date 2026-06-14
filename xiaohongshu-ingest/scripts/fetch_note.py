@@ -21,6 +21,9 @@ import os
 import re
 import json
 import argparse
+import subprocess
+import tempfile
+import shutil
 import urllib.request
 from datetime import datetime
 
@@ -120,6 +123,74 @@ def find_note(state):
     return found[0]
 
 
+def extract_video_url(note):
+    """从 note.video 提取可下载的视频直链（masterUrl）。结构多变，做防御性遍历。"""
+    video = note.get("video") or {}
+    stream = (video.get("media") or {}).get("stream") or {}
+    for codec in ("h264", "h265", "h266", "av1"):
+        for item in (stream.get(codec) or []):
+            if item.get("masterUrl"):
+                return item["masterUrl"]
+    found = [None]
+
+    def walk(o):
+        if found[0] is not None:
+            return
+        if isinstance(o, dict):
+            if isinstance(o.get("masterUrl"), str):
+                found[0] = o["masterUrl"]
+                return
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(video)
+    return found[0]
+
+
+def transcribe_video(video_url, cookie):
+    """下载小红书视频 → ffmpeg 抽音频 → SenseVoice 转录，返回文字稿。
+
+    需要 ffmpeg 与 funasr（与抖音/B站转录同一套依赖）；funasr 延迟导入，
+    图文笔记完全不触发，因此纯图文使用者无需安装。
+    """
+    tmp = tempfile.mkdtemp(prefix="xhs-video-")
+    try:
+        headers = {"User-Agent": UA, "Referer": "https://www.xiaohongshu.com/"}
+        if cookie:
+            headers["Cookie"] = cookie
+        video_path = os.path.join(tmp, "v.mp4")
+        print("  ⬇️  下载视频...", file=sys.stderr)
+        req = urllib.request.Request(video_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=180) as resp, open(video_path, "wb") as f:
+            shutil.copyfileobj(resp, f)
+        print(f"  ✅ 视频 {os.path.getsize(video_path) / 1048576:.1f} MB", file=sys.stderr)
+
+        audio_path = os.path.join(tmp, "a.mp3")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "libmp3lame",
+             "-q:a", "4", audio_path],
+            capture_output=True, timeout=300, check=True)
+
+        print("  🎙️  SenseVoice 转录...", file=sys.stderr)
+        from funasr import AutoModel
+        from funasr.utils.postprocess_utils import rich_transcription_postprocess
+        model = AutoModel(
+            model="iic/SenseVoiceSmall", trust_remote_code=True,
+            vad_model="fsmn-vad", vad_kwargs={"max_single_segment_time": 30000},
+            device="cpu")
+        result = model.generate(input=audio_path, language="zh", use_itn=True, batch_size_s=60)
+        text = ""
+        for r in (result or []):
+            if "text" in r:
+                text += rich_transcription_postprocess(r["text"]) + "\n\n"
+        return text.strip()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def parse_from_state(note):
     img_list = note.get("imageList") or []
     images = []
@@ -143,6 +214,8 @@ def parse_from_state(note):
         "collects": interact.get("collectedCount", ""),
         "comments": interact.get("commentCount", ""),
         "images": images,
+        "video_url": extract_video_url(note),
+        "note_type": "video" if (note.get("type") == "video" or extract_video_url(note)) else "image",
     }
 
 
@@ -158,10 +231,11 @@ def parse_from_meta(html):
     if not title and not desc:
         return None
     return {"title": title, "desc": desc, "author": "", "tags": [],
-            "likes": "", "collects": "", "comments": "", "images": []}
+            "likes": "", "collects": "", "comments": "", "images": [],
+            "video_url": None, "note_type": "image"}
 
 
-def build_markdown(data, url, title, image_refs):
+def build_markdown(data, url, title, image_refs, transcript=None):
     now = datetime.now().strftime("%Y-%m-%d")
     tags = ["小红书"] + data["tags"]
     tags_yaml = ", ".join(tags)
@@ -172,6 +246,7 @@ def build_markdown(data, url, title, image_refs):
         f"title: {title}",
         "type: note",
         "platform: xiaohongshu",
+        f"note_type: {data['note_type']}",
         f"source: {url}",
         f"author: {data['author']}",
         f"created: {now}",
@@ -187,6 +262,10 @@ def build_markdown(data, url, title, image_refs):
         "",
         data["desc"] or "（正文为空，可能被反爬拦截，建议配置 XHS_COOKIE）",
     ]
+    if transcript:
+        lines += ["", "## 视频文字稿", "", transcript]
+    elif data["note_type"] == "video" and data["video_url"]:
+        lines += ["", "## 视频", "", f"- {data['video_url']}"]
     if image_refs:
         lines += ["", "## 图片", ""]
         for kind, val in image_refs:
@@ -238,6 +317,7 @@ def main():
     parser.add_argument("url", help="小红书笔记链接或 xhslink 短链")
     parser.add_argument("--output", "-o", default=".", help="输出目录")
     parser.add_argument("--no-images", action="store_true", help="不下载图片，只在 Markdown 里保留图片链接")
+    parser.add_argument("--no-video", action="store_true", help="视频笔记不转录，只在 Markdown 里保留视频链接")
     args = parser.parse_args()
 
     cookie = os.environ.get("XHS_COOKIE")
@@ -274,20 +354,32 @@ def main():
     base = sanitize(title)
     os.makedirs(args.output, exist_ok=True)
 
-    if data["images"] and not args.no_images:
+    transcript = None
+    if data["note_type"] == "video" and data["video_url"] and not args.no_video:
+        print("  🎬 视频笔记，开始转录...", file=sys.stderr)
+        try:
+            transcript = transcribe_video(data["video_url"], cookie)
+            print(f"  ✅ 转录完成（{len(transcript)} 字）", file=sys.stderr)
+        except Exception as e:
+            print(f"  ⚠️  视频转录失败：{e}", file=sys.stderr)
+            print("     需 ffmpeg + funasr；或加 --no-video 只存视频链接", file=sys.stderr)
+
+    image_refs = []
+    if not transcript and data["images"] and not args.no_images:
         print(f"  ⬇️  下载 {len(data['images'])} 张图片...", file=sys.stderr)
         image_refs = download_images(data["images"], args.output, base, cookie)
-    else:
+    elif not transcript and data["images"]:
         image_refs = [("url", u) for u in data["images"]]
 
-    markdown = build_markdown(data, final_url, title, image_refs)
+    markdown = build_markdown(data, final_url, title, image_refs, transcript)
     output_path = os.path.join(args.output, f"{base}.md")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(markdown)
 
     local_n = sum(1 for k, _ in image_refs if k == "local")
+    kind = "视频(已转录)" if transcript else data["note_type"]
     print(f"✅ Saved: {output_path}", file=sys.stderr)
-    print(f"  作者：{data['author'] or '未知'} | 👍 {data['likes']} ⭐ {data['collects']} "
+    print(f"  类型：{kind} | 作者：{data['author'] or '未知'} | 👍 {data['likes']} ⭐ {data['collects']} "
           f"| 本地图片：{local_n} 张", file=sys.stderr)
     print(output_path)
 

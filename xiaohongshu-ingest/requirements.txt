@@ -1,8 +1,12 @@
-# 小红书采集 + 爆款拆解：零 pip 依赖（仅 Python 标准库）
+# 小红书采集 + 爆款拆解
 #
-# 采集（fetch_note.py）：纯标准库
-# 拆解（analyze_hook.py）：纯标准库，运行时需要环境变量 DEEPSEEK_API_KEY
+# 图文采集（fetch_note.py 图文笔记）：零 pip 依赖（仅标准库）
+# 爆款拆解（analyze_hook.py）：零 pip 依赖，运行时需 DEEPSEEK_API_KEY
+#
+# 视频笔记转录（fetch_note.py 视频笔记）才需要以下（与抖音/B站同一套）：
+#   pip install funasr modelscope torch torchaudio
+#   系统依赖：ffmpeg（macOS: brew install ffmpeg / Ubuntu: apt install ffmpeg）
 #
 # 可选环境变量：
-#   XHS_COOKIE       — 提高小红书采集成功率（规避风控）
+#   XHS_COOKIE       — 提高采集成功率（规避风控）
 #   DEEPSEEK_API_KEY — 爆款拆解必需

@@ -54,7 +54,7 @@
 | 名字 | 平台 | 一句话 |
 |---|---|---|
 | 📰 [**wechat-article-ingest**](#-wechat-article-ingest公众号处理) | 微信公众号 | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
-| 📕 [**xiaohongshu-ingest**](#-xiaohongshu-ingest小红书采集) | 小红书 | 笔记采集 → Markdown + 爆款拆解 + 衍生选题 |
+| 📕 [**xiaohongshu-ingest**](#-xiaohongshu-ingest小红书采集) | 小红书 | 图文存图/视频转文字稿 + 爆款拆解 + 衍生选题 |
 
 ### 知识库管理
 
@@ -207,7 +207,7 @@ YouTube 视频 → yt-dlp 下载 → SenseVoice-Small 转录 → 英文自动翻
 
 > *"采集爆款笔记，顺手拆出能直接写的选题。"*
 
-小红书笔记 → 统一 frontmatter Markdown（标题/正文/标签/作者/赞藏评/图片）→ DeepSeek 爆款拆解（人群×场景×痛点×情绪×钩子）→ 5 条衍生选题。零依赖采集，支持 xhslink 短链；建议配 `XHS_COOKIE` 规避风控。
+小红书笔记 → 统一 frontmatter Markdown（标题/正文/标签/作者/赞藏评）→ DeepSeek 爆款拆解（人群×场景×痛点×情绪×钩子）→ 5 条衍生选题。**自动区分图文/视频**：图文下载图片本地嵌入，视频提取直链转成文字稿（同抖音）。支持 xhslink 短链；建议配 `XHS_COOKIE` 规避风控。
 
 **致谢**：[DeepSeek](https://platform.deepseek.com/) · 小红书爆款方法论
 
