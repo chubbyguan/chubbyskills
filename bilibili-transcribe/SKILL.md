@@ -14,7 +14,7 @@ tags: [media, audio, video, transcription, bilibili]
 
 # B 站视频转录 Skill
 
-将 B 站视频下载音频，用 SenseVoice-Small 转录为文字，存为 Markdown 文件。
+**字幕优先**：先尝试抓取官方/自动字幕（秒级、免 GPU、免 funasr）；抓不到再下载音频用 SenseVoice-Small 转录，存为 Markdown 文件。加 `--no-subtitle` 可强制走音频转录。
 
 ## 环境要求
 
@@ -36,6 +36,7 @@ pip install funasr modelscope torch torchaudio
 ```bash
 python scripts/transcribe.py "https://www.bilibili.com/video/BV1rrQGBeEen/"
 python scripts/transcribe.py "BV1rrQGBeEen"
+python scripts/transcribe.py "BV1rrQGBeEen" --no-subtitle   # 强制音频转录
 ```
 
 ## 流程

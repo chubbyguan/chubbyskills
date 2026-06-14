@@ -323,6 +323,25 @@ export DEEPSEEK_API_KEY=your-key
 
 ---
 
+## 📐 统一 frontmatter 约定
+
+所有采集类 skill 产出的 Markdown 使用统一的 frontmatter，便于知识库按来源/平台聚合与检索：
+
+| 字段 | 含义 | 示例 |
+|------|------|------|
+| `title` | 标题 | 某视频标题 |
+| `type` | 类型 | `note` |
+| `platform` | 机器可读来源（聚合用） | `bilibili` / `youtube` / `douyin` / `tiktok` / `weibo` / `zhihu` / `podcast` / `wechat` / `xiaohongshu` |
+| `source` | 原始链接（本地文件则为路径） | `https://...` |
+| `author` | 作者 / UP主 / 公众号（可空） | 某某 |
+| `created` | 入库日期 | `2026-06-14` |
+| `tags` | 中文平台标签 | `[B站]` |
+| `transcriber` | 转录引擎（仅转录类） | `字幕` / `SenseVoice-Small` / `faster-whisper-small` |
+
+视频/音频类还可能带 `language`、`translated` 字段。`platform` 字段是机器可读的，建议在 Obsidian/Dataview 里用它做按平台聚合的视图。
+
+---
+
 ## 🙏 致谢
 
 ### 仓库结构灵感

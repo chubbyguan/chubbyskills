@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from download_douyin_audio import extract_video_id, download_audio
 
 
-def transcribe(audio_path: str, output_path: str, title: str):
+def transcribe(audio_path: str, output_path: str, title: str, source: str = ""):
     """Transcribe audio using SenseVoice-Small and save as Markdown."""
     from funasr import AutoModel
     from funasr.utils.postprocess_utils import rich_transcription_postprocess
@@ -62,9 +62,11 @@ def transcribe(audio_path: str, output_path: str, title: str):
     markdown = f"""---
 title: {clean_title}
 type: note
+platform: douyin
 tags: [抖音]
 created: {now}
-source: 抖音
+source: {source}
+author:
 transcriber: SenseVoice-Small
 ---
 
@@ -115,7 +117,7 @@ def main():
         output_filename = f"{safe_title}.md"
         output_path = os.path.join(output_dir, output_filename)
 
-        elapsed, chars = transcribe(audio_path, output_path, title)
+        elapsed, chars = transcribe(audio_path, output_path, title, url)
 
         print("\n" + "=" * 50, file=sys.stderr)
         print("✅ Done!", file=sys.stderr)

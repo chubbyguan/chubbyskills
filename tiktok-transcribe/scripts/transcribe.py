@@ -122,9 +122,11 @@ def build_markdown(title: str, text: str, url: str) -> str:
     return f"""---
 title: {title}
 type: note
+platform: tiktok
 tags: [{TAG}]
 created: {now}
 source: {url}
+author:
 transcriber: SenseVoice-Small
 ---
 

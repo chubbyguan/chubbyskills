@@ -15,8 +15,12 @@ import json
 import subprocess
 import tempfile
 import shutil
+import glob
 import urllib.request
 from datetime import datetime
+
+
+SUB_LANGS = "en,en-US,en-orig,zh-Hans,zh-CN,zh,zh-Hant"
 
 
 def get_video_info(url: str) -> dict:
@@ -49,6 +53,58 @@ def download_audio(url: str, output_dir: str) -> str:
     size_mb = os.path.getsize(audio_path) / (1024 * 1024)
     print(f"  ✅ Audio: {size_mb:.1f} MB", file=sys.stderr)
     return audio_path
+
+
+def parse_vtt(path: str) -> str:
+    """把 vtt 字幕解析成纯文本，去时间轴、去标签、去连续重复行。"""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = f.read().splitlines()
+    out = []
+    for line in lines:
+        line = line.strip()
+        if not line or line == "WEBVTT" or "-->" in line:
+            continue
+        if line.isdigit() or line.startswith(("Kind:", "Language:", "NOTE")):
+            continue
+        line = re.sub(r"<[^>]+>", "", line).replace("&nbsp;", " ").strip()
+        if not line or (out and out[-1] == line):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def try_subtitles(url: str, tmpdir: str):
+    """字幕优先：抓官方/自动字幕，免下载+转录。返回 (text, language) 或 None。"""
+    print("  💬 尝试抓取字幕...", file=sys.stderr)
+    try:
+        subprocess.run(
+            ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs",
+             "--sub-langs", SUB_LANGS, "--sub-format", "vtt",
+             "--no-check-certificates",
+             "-o", os.path.join(tmpdir, "sub.%(ext)s"), url],
+            capture_output=True, text=True, timeout=120,
+        )
+    except Exception:
+        return None
+    files = glob.glob(os.path.join(tmpdir, "*.vtt"))
+    if not files:
+        print("  💬 无字幕，回退音频转录", file=sys.stderr)
+        return None
+
+    def rank(p):
+        name = os.path.basename(p).lower()
+        for i, tag in enumerate(["en", "zh-hans", "zh-cn", "zh"]):
+            if tag in name:
+                return i
+        return 99
+    chosen = sorted(files, key=rank)[0]
+    text = parse_vtt(chosen)
+    if len(text) < 50:
+        return None
+    chinese = len(re.findall(r"[一-鿿]", text))
+    language = "zh" if chinese / max(len(text), 1) > 0.3 else "en"
+    print(f"  ✅ 命中字幕（{language}，{len(text)} 字）", file=sys.stderr)
+    return text, language
 
 
 def transcribe_audio(audio_path: str) -> tuple:
@@ -156,7 +212,7 @@ def translate_text(text: str, api_key: str = None) -> str:
     return "\n\n".join(translated_chunks)
 
 
-def generate_markdown(title: str, original: str, translated: str, language: str, url: str) -> str:
+def generate_markdown(title: str, original: str, translated: str, language: str, url: str, transcriber: str = "SenseVoice-Small") -> str:
     """Generate bilingual Markdown."""
     now = datetime.now().strftime("%Y-%m-%d")
     elapsed_note = ""
@@ -165,11 +221,14 @@ def generate_markdown(title: str, original: str, translated: str, language: str,
         return f"""---
 title: {title}
 type: note
+platform: youtube
 tags: [YouTube]
 created: {now}
 source: {url}
+author:
 language: en
 translated: true
+transcriber: {transcriber}
 ---
 
 # {title}
@@ -192,10 +251,13 @@ translated: true
         return f"""---
 title: {title}
 type: note
+platform: youtube
 tags: [YouTube]
 created: {now}
 source: {url}
+author:
 language: {language}
+transcriber: {transcriber}
 ---
 
 # {title}
@@ -217,6 +279,7 @@ def main():
     parser.add_argument('url', help='YouTube URL')
     parser.add_argument('--output', '-o', default='.', help='输出目录')
     parser.add_argument('--no-translate', action='store_true', help='不翻译')
+    parser.add_argument('--no-subtitle', action='store_true', help='跳过字幕，强制音频转录')
     args = parser.parse_args()
     
     # Step 1: Get video info
@@ -229,21 +292,29 @@ def main():
     print(f"  📺 Title: {title}", file=sys.stderr)
     print(f"  ⏱️  Duration: {info['duration']}", file=sys.stderr)
     
-    # Step 2: Download audio
+    # Step 2: Get transcript (subtitle-first, fallback to audio)
     print("\n" + "=" * 50, file=sys.stderr)
-    print("Step 2: Downloading audio...", file=sys.stderr)
+    print("Step 2: Getting transcript...", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
     
     tmpdir = tempfile.mkdtemp(prefix="youtube-")
     try:
-        audio_path = download_audio(args.url, tmpdir)
+        transcriber = "SenseVoice-Small"
+        sub = None if args.no_subtitle else try_subtitles(args.url, tmpdir)
+        if sub:
+            transcriber = "字幕"
+        else:
+            audio_path = download_audio(args.url, tmpdir)
         
         # Step 3: Transcribe
         print("\n" + "=" * 50, file=sys.stderr)
-        print("Step 3: Transcribing...", file=sys.stderr)
+        print("Step 3: Building transcript...", file=sys.stderr)
         print("=" * 50, file=sys.stderr)
-        
-        text, language = transcribe_audio(audio_path)
+
+        if sub:
+            text, language = sub
+        else:
+            text, language = transcribe_audio(audio_path)
         
         # Step 4: Translate if English
         translated = None
@@ -258,7 +329,7 @@ def main():
         print("Step 5: Generating Markdown...", file=sys.stderr)
         print("=" * 50, file=sys.stderr)
         
-        markdown = generate_markdown(title, text, translated, language, args.url)
+        markdown = generate_markdown(title, text, translated, language, args.url, transcriber)
         
         # Save
         safe_title = sanitize_filename(title)

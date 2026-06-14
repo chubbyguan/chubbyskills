@@ -15,7 +15,7 @@ tags: [media, audio, video, transcription, youtube, translation]
 
 # YouTube 视频转录 + 翻译 Skill
 
-将 YouTube 视频下载音频，用 SenseVoice-Small 转录，英文内容自动翻译成中文，输出中英对照 Markdown。
+**字幕优先**：先抓官方/自动字幕（秒级、免 GPU），抓不到再下载音频用 SenseVoice-Small 转录；英文内容自动翻译成中文，输出中英对照 Markdown。加 `--no-subtitle` 可强制走音频转录。
 
 ## 为什么需要这个
 
@@ -49,6 +49,7 @@ export DEEPSEEK_API_KEY="your-api-key"
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx"
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --output ./output
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --no-translate  # 不翻译
+python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --no-subtitle  # 强制音频转录
 ```
 
 ## 流程

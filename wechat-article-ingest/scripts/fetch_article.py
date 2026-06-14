@@ -131,6 +131,7 @@ def generate_markdown(title: str, author: str, content: str, source: str) -> str
     return f"""---
 title: {title}
 type: note
+platform: wechat
 tags: [公众号]
 created: {now}
 author: {author}

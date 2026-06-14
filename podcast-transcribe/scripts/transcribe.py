@@ -132,7 +132,7 @@ def download_audio(url: str, output_dir: str) -> tuple:
     return audio_path, title
 
 
-def transcribe_audio(audio_path: str, output_path: str, title: str):
+def transcribe_audio(audio_path: str, output_path: str, title: str, source: str = ""):
     """Transcribe audio using faster-whisper and save as Markdown."""
     from faster_whisper import WhisperModel
 
@@ -163,9 +163,11 @@ def transcribe_audio(audio_path: str, output_path: str, title: str):
     markdown = f"""---
 title: {title}
 type: note
+platform: podcast
 tags: [播客]
 created: {now}
-source: podcast
+source: {source}
+author:
 transcriber: faster-whisper-small
 ---
 
@@ -221,7 +223,7 @@ def main():
         output_filename = f"{safe_title}.md"
         output_path = os.path.join(output_dir, output_filename)
 
-        elapsed, seg_count = transcribe_audio(audio_path, output_path, title)
+        elapsed, seg_count = transcribe_audio(audio_path, output_path, title, source)
 
         print("\n" + "=" * 50, file=sys.stderr)
         print("✅ Done!", file=sys.stderr)
