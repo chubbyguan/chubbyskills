@@ -133,10 +133,11 @@ def parse_from_state(note):
         if u:
             images.append(u)
     interact = note.get("interactInfo") or {}
+    user = note.get("user") or {}
     return {
         "title": (note.get("title") or "").strip(),
-        "desc": (note.get("desc") or "").strip(),
-        "author": ((note.get("user") or {}).get("nickname") or "").strip(),
+        "desc": (note.get("desc") or "").strip().replace("\xa0", " "),
+        "author": (user.get("nickName") or user.get("nickname") or "").strip(),
         "tags": [t.get("name", "") for t in (note.get("tagList") or []) if t.get("name")],
         "likes": interact.get("likedCount", ""),
         "collects": interact.get("collectedCount", ""),
