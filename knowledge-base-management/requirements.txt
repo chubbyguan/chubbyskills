@@ -1,0 +1,9 @@
+# 知识库管理
+#
+# 健康检查（vault_health_check.py）：零依赖（仅 Python 标准库）
+#
+# MCP server（mcp_server.py）才需要：
+#   pip install mcp
+# 运行：VAULT_DIR=/path/to/vault python3 scripts/mcp_server.py
+#
+# GBrain / GraphRAG / LLM Wiki 等为可选第三方工具，详见 SKILL.md。

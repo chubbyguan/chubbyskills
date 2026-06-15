@@ -165,6 +165,34 @@ summary: 已被 [[新位置/新文件名|新版本]] 取代。
 
 ## 3. 工具集成 (Tools)
 
+### 🔌 MCP Server（本仓库提供，推荐）
+
+`scripts/mcp_server.py` 把知识库的「搜索 / 读取 / 最近笔记」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
+
+```bash
+pip install mcp
+VAULT_DIR=/path/to/your-vault python3 scripts/mcp_server.py
+```
+
+在 Agent 的 MCP 配置里：
+
+```json
+{
+  "mcpServers": {
+    "chubby-kb": {
+      "command": "python3",
+      "args": ["<knowledge-base-management/scripts/mcp_server.py 的绝对路径>"],
+      "env": { "VAULT_DIR": "/path/to/your-vault" }
+    }
+  }
+}
+```
+
+暴露的工具：`search_vault(query, limit)`、`read_kb_note(path)`、`list_recent_notes(limit)`。
+内置路径穿越防护，只能读 `VAULT_DIR` 范围内的笔记。
+
+---
+
 > 以下均为**可选的第三方/外部工具**，不随本仓库提供。路径（如 `~/graphrag-poc/`、
 > `~/.hermes/...`）是作者本机的示例位置，请替换为你自己的安装路径。没有它们也不影响
 > 第 1、2 节的核心流程与 `scripts/vault_health_check.py`。

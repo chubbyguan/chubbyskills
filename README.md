@@ -232,7 +232,7 @@ X 推文 → 统一 frontmatter Markdown（正文/作者/赞回复/话题）。*
 
 > *"知识库从素材入库到健康检查，一套流程全搞定。"*
 
-Obsidian 知识库全生命周期管理：三层架构（素材库/Wiki/产出）、素材 ABC 分级入库、健康检查与清理、GBrain/GraphRAG/LLM Wiki 三件套集成、目录整理与归档。
+Obsidian 知识库全生命周期管理：三层架构（素材库/Wiki/产出）、素材 ABC 分级入库、健康检查与清理、GBrain/GraphRAG/LLM Wiki 三件套集成、目录整理与归档。**附带 MCP Server**（`mcp_server.py`）——把知识库检索暴露给任何 MCP Agent，「采集写入 + MCP 查询」闭环。
 
 **核心能力**：
 - 📥 素材入库：ABC 分级 + 公众号/群聊自动同步
