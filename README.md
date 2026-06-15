@@ -19,10 +19,16 @@
 
 </div>
 
-**我是 Chubby**，一个在 AI 和内容创作领域折腾的普通人。
+**我是 Chubby**，一个在 AI 和内容创作领域折腾的独立创作者。
 
-- 🐦 [X/Twitter](https://x.com/Chubbyguan)
+平时做内容、搭个人知识库，也写一些 AI Agent / Skill 的实践。我习惯把每天刷到的好东西——视频、播客、公众号、小红书、推特——自动收进自己的知识库，让信息真正沉淀下来，而不是看完就忘。这个仓库里的工具，就是这套工作流里我自己每天在用的那几件。
+
+同好的话，欢迎来唠：
+
+- 🐦 [X / Twitter](https://x.com/Chubbyguan)
 - 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
+- 📕 [小红书](https://www.xiaohongshu.com/user/profile/57c061626a6a696f5a70f9a8)
+- 📰 微信公众号：**关关不过**
 
 ---
 
@@ -455,8 +461,10 @@ export DEEPSEEK_API_KEY=your-key
 
 这些 skill 都是我自己每天在用的，开源出来如果对你有帮助，给个 ⭐ 就行。
 
-- 🐦 [X/Twitter](https://x.com/Chubbyguan)
+- 🐦 [X / Twitter](https://x.com/Chubbyguan)
 - 💬 [即刻](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
+- 📕 [小红书](https://www.xiaohongshu.com/user/profile/57c061626a6a696f5a70f9a8)
+- 📰 微信公众号：**关关不过**
 
 ---
 

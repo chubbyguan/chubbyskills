@@ -230,7 +230,12 @@ pip install -r podcast-transcribe/requirements.txt
 
 ## 🌟 About
 
-I'm Chubby, an ordinary person折腾 in AI and content creation. These are skills I use daily. If they help you, give it a ⭐. Issues and discussions welcome.
+I'm Chubby, an indie creator tinkering with AI and content. I like to auto-collect everything I come across — videos, podcasts, articles, Xiaohongshu, tweets — into my own knowledge base so it actually sticks instead of being forgotten. These skills are what I use daily for exactly that. If they help, give it a ⭐. Issues and discussions welcome.
+
+- 🐦 [X / Twitter](https://x.com/Chubbyguan)
+- 💬 [Jike (即刻)](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
+- 📕 [Xiaohongshu](https://www.xiaohongshu.com/user/profile/57c061626a6a696f5a70f9a8)
+- 📰 WeChat Official Account: **关关不过**
 
 ---
 
