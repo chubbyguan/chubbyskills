@@ -7,7 +7,7 @@
 #### 一套把中文全渠道内容采集进个人知识库的 AI Skill —— 我自己每天在用
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-13-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#-skills)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 [![Hype 周榜](https://img.shields.io/badge/🔥_Hype_ML%2FAI_周榜-已上榜-FF6B35?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills)
 
@@ -74,6 +74,12 @@
 | 📰 [**wechat-article-ingest**](#-wechat-article-ingest公众号处理) | 微信公众号 | 公众号链接 → Markdown + A层观点提取 + B层问题链 |
 | 📕 [**xiaohongshu-ingest**](#-xiaohongshu-ingest小红书采集) | 小红书 | 图文存图/视频转文字稿 + 爆款拆解 + 衍生选题 |
 | 🐦 [**x-ingest**](#-x-ingestxtwitter采集) | X / Twitter | 推文采集 → 图文存图 / 视频转文字稿（免登录）|
+
+### 内容加工
+
+| 名字 | 一句话 |
+|---|---|
+| ✨ [**content-enrich**](#-content-enrich内容加工) | 给任意采集产物自动补「摘要 + 要点 + 标签 + 价值判断」，惠及全部采集 skill |
 
 ### 知识库管理
 
@@ -246,6 +252,18 @@ X 推文 → 统一 frontmatter Markdown（正文/作者/赞回复/话题）。*
 
 ---
 
+### ✨ content-enrich（内容加工）
+
+> *"采集进来的原始文本，一键变成带摘要、要点、标签的可用知识。"*
+
+给**任意采集产物**（转录稿 / 文章 / 笔记）自动补元信息：用 DeepSeek 提炼一句话总结、3-5 条要点、领域、标签、「值得深读？」判断，写进 frontmatter 并在正文顶部插入 `## 📝 摘要` 区块，原内容完整保留。支持单篇就地增强、整目录批量；幂等可重做。是连接「采集」与「知识库」的加工层通用能力。
+
+**致谢**：[DeepSeek](https://platform.deepseek.com/)
+
+→ [SKILL.md](./content-enrich/SKILL.md) · [脚本](./content-enrich/scripts/)
+
+---
+
 ### 🧠 knowledge-base-management（知识库管理）
 
 > *"知识库从素材入库到健康检查，一套流程全搞定。"*
@@ -354,6 +372,13 @@ export DEEPSEEK_API_KEY="your-key"       # 爆款拆解必需
 ```bash
 # 图文/文字采集零依赖、免登录；视频转录才需要 funasr + ffmpeg
 pip install funasr modelscope torch torchaudio   # 仅视频推文需要
+```
+
+### 内容加工
+
+```bash
+# 零 pip 依赖（仅标准库）
+export DEEPSEEK_API_KEY="your-key"   # 用于提炼摘要/要点/标签
 ```
 
 ### 知识库管理

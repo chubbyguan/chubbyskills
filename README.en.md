@@ -7,7 +7,7 @@
 #### AI Skills that pull Chinese content into your personal knowledge base — I use them daily
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-13-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#-skills)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 [![Hype Weekly](https://img.shields.io/badge/🔥_Featured_on-Hype_ML%2FAI-FF6B35?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills)
 
@@ -59,9 +59,10 @@ Each Skill here is a structured instruction set that Agents can load directly, f
 | 📕 **xiaohongshu-ingest** | Xiaohongshu | Image saved / video transcribed + hook analysis |
 | 🐦 **x-ingest** | X / Twitter | Tweet → image saved / video transcribed (no login) |
 
-### Knowledge base & workflows
+### Enrich & knowledge base
 | Skill | One-liner |
 |---|---|
+| ✨ **content-enrich** | Auto-add summary + key points + tags to any ingested note |
 | 🧠 **knowledge-base-management** | Vault lifecycle + health check + **MCP server** |
 | 📡 **industry-intelligence-radar** | Multi-source scan → daily intel brief |
 | 📚 **learning-notes-automation** | Transcript → key points → Anki flashcards |
