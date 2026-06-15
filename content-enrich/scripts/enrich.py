@@ -92,10 +92,14 @@ def insert_block(body, block):
 
 def enrich_text(text, data):
     fm, body = split_frontmatter(text)
+    # 注入 YAML 前做转义：tldr/domain 可能含冒号、引号、换行，裸写会破坏 frontmatter
+    def _yk(s):
+        return '"' + str(s).replace("\\", "\\\\").replace("\n", " ").replace('"', '\\"').strip() + '"'
+    safe_tags = [str(t).replace(",", " ").replace("\n", " ").strip() for t in data.get("tags", [])]
     extra = {
-        "summary": data.get("tldr", ""),
-        "domain": data.get("domain", ""),
-        "auto_tags": "[" + ", ".join(data.get("tags", [])) + "]",
+        "summary": _yk(data.get("tldr", "")),
+        "domain": _yk(data.get("domain", "")),
+        "auto_tags": "[" + ", ".join(safe_tags) + "]",
         "enriched": "true",
     }
     block = build_summary_block(data)
