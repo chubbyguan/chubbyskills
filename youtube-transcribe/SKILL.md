@@ -133,3 +133,7 @@ export DEEPSEEK_API_KEY="your-api-key"
 - [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) - 视频下载工具
 - [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) - 语音识别模型
 - [DeepSeek](https://platform.deepseek.com/) - 翻译用 LLM
+
+## ⚖️ 合规声明
+
+仅供**个人学习与研究**使用。请遵守目标平台的服务条款（ToS）与 robots 规则，控制请求频率，不要用于批量抓取、商用爬取或侵犯他人权益的场景。下载内容的版权归原作者所有。

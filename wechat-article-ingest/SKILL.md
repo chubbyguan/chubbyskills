@@ -121,3 +121,7 @@ python scripts/extract.py "path/to/article.pdf" --output ./output
 - [microsoft/markitdown](https://github.com/microsoft/markitdown) - PDF/文档转 Markdown
 - [pymupdf/PyMuPDF](https://github.com/pymupdf/PyMuPDF) - PDF 处理库
 - [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) - HTML 解析
+
+## ⚖️ 合规声明
+
+仅供**个人学习与研究**使用。请遵守目标平台的服务条款（ToS）与 robots 规则，控制请求频率，不要用于批量抓取、商用爬取或侵犯他人权益的场景。下载内容的版权归原作者所有。

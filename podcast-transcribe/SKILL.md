@@ -95,3 +95,7 @@ segments, info = model.transcribe(
 
 - [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) - Whisper 的 CTranslate2 实现
 - [OpenAI Whisper](https://github.com/openai/whisper) - 原始 Whisper 模型
+
+## ⚖️ 合规声明
+
+仅供**个人学习与研究**使用。请遵守目标平台的服务条款（ToS）与 robots 规则，控制请求频率，不要用于批量抓取、商用爬取或侵犯他人权益的场景。下载内容的版权归原作者所有。
