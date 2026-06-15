@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
 [![Skills](https://img.shields.io/badge/Skills-13-10B981?style=for-the-badge)](#-skills)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
-[![Hype Weekly](https://img.shields.io/badge/🔥_Hype_ML%2FAI_Weekly-Top_11-FF6B35?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills)
+[![Hype Weekly](https://img.shields.io/badge/🔥_Featured_on-Hype_ML%2FAI-FF6B35?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
