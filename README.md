@@ -4,10 +4,11 @@
 
 # 🧰 Chubby Skills
 
-#### 我自己每天在用的一些 AI Skill，都开源在这里
+#### 一套把中文全渠道内容采集进个人知识库的 AI Skill —— 我自己每天在用
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
 [![Skills](https://img.shields.io/badge/Skills-13-10B981?style=for-the-badge)](#-skills)
+[![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -27,6 +28,16 @@
 都是在自己项目里跑通了一段时间，确实省事，才搬出来开源的。没什么花活，就是几个挺实用的东西。
 
 这里的每个 Skill 都是 Agent 能直接加载的结构化指令集，遵循 [Agent Skills](https://agentskills.io) 开放标准。Claude Code、Codex、OpenCode、OpenClaw、Hermes 都能装。
+
+## ✨ 能帮你做什么
+
+- 📥 **全渠道采集** —— 抖音 / B站 / 小红书 / 公众号 / X / 播客 / YouTube，把链接丢进来就行
+- 🎬 **图文 / 视频自动分流** —— 图文笔记存图、视频笔记转成文字稿，不用你操心
+- ⚡ **字幕优先，免 GPU** —— YouTube / B站 有字幕时秒出文字，不必先装一堆模型
+- 🧠 **沉淀进知识库** —— 统一格式入 Obsidian，还带一个 MCP server，让任何 Agent 都能查你的库
+- 🧩 **每个 skill 独立可装** —— 只装你需要的那一个，纯图文 / 文字采集零依赖
+
+> 一句话：**把中文全渠道的内容，变成你自己的、可检索的第二大脑。**
 
 ---
 

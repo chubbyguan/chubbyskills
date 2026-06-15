@@ -4,10 +4,11 @@
 
 # 🧰 Chubby Skills
 
-#### AI Skills I use daily, all open-sourced
+#### AI Skills that pull Chinese content into your personal knowledge base — I use them daily
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-11-10B981?style=for-the-badge)](#-skills)
+[![Skills](https://img.shields.io/badge/Skills-13-10B981?style=for-the-badge)](#-skills)
+[![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
 ![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
@@ -21,15 +22,48 @@ These are AI Skills I've been using in my own projects. They've proven useful, s
 
 Each Skill here is a structured instruction set that Agents can load directly, following the [Agent Skills](https://agentskills.io) open standard. Works with Claude Code, Codex, OpenCode, OpenClaw, and Hermes.
 
+## ✨ What it does for you
+
+- 📥 **Multi-platform ingest** — Douyin, Bilibili, Xiaohongshu, WeChat, X, podcasts, YouTube; just drop a link
+- 🎬 **Auto image/video routing** — image notes keep their images, video notes get transcribed
+- ⚡ **Subtitle-first, no GPU** — instant text when YouTube/Bilibili captions exist
+- 🧠 **Into your knowledge base** — unified Markdown for Obsidian, plus an MCP server so any agent can query your vault
+- 🧩 **Each skill installs independently** — grab only what you need; image/text ingest is zero-dependency
+
+> In one line: **turn Chinese content from everywhere into your own searchable second brain.**
+
 ---
 
 ## 📋 Table of Contents
 
-| Name | Description |
+### Video transcription
+| Skill | Platform | One-liner |
+|---|---|---|
+| 🎬 **douyin-transcribe** | Douyin | Video → transcribe → Markdown |
+| 📺 **bilibili-transcribe** | Bilibili | Video → subtitle-first transcribe → Markdown |
+| 🎵 **tiktok-transcribe** | TikTok | Video → transcribe → Markdown |
+| 📱 **weibo-transcribe** | Weibo | Video → transcribe → Markdown |
+| 💡 **zhihu-transcribe** | Zhihu | Video → transcribe → Markdown |
+| 🌍 **youtube-transcribe** | YouTube | Subtitle-first → transcribe → CN translation |
+
+### Podcast
+| Skill | Platform | One-liner |
+|---|---|---|
+| 🎙️ **podcast-transcribe** | Xiaoyuzhou / Ximalaya | Podcast → transcribe → Markdown (RSS batch) |
+
+### Content ingest
+| Skill | Platform | One-liner |
+|---|---|---|
+| 📰 **wechat-article-ingest** | WeChat | Article → Markdown + A/B insight extraction |
+| 📕 **xiaohongshu-ingest** | Xiaohongshu | Image saved / video transcribed + hook analysis |
+| 🐦 **x-ingest** | X / Twitter | Tweet → image saved / video transcribed (no login) |
+
+### Knowledge base & workflows
+| Skill | One-liner |
 |---|---|
-| 🎬 [**douyin-transcribe**](#-douyin-transcribe) | Douyin video → download → transcribe → Markdown, no cookie/login needed, Chinese accuracy exceeds Whisper |
-| 🎙️ [**podcast-transcribe**](#-podcast-transcribe) | Podcast/Xiaoyuzhou → download → transcribe → Markdown, supports RSS batch download |
-| 📺 [**bilibili-transcribe**](#-bilibili-transcribe) | Bilibili video → download → transcribe → Markdown, no login needed |
+| 🧠 **knowledge-base-management** | Vault lifecycle + health check + **MCP server** |
+| 📡 **industry-intelligence-radar** | Multi-source scan → daily intel brief |
+| 📚 **learning-notes-automation** | Transcript → key points → Anki flashcards |
 
 ---
 
