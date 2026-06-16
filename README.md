@@ -4,7 +4,7 @@
 
 # 🧰 Chubby Skills
 
-#### 一套把中文全渠道内容采集进个人知识库的 AI Skill —— 我自己每天在用
+#### 信息流会忘，知识库会记 —— 把全渠道好内容采集进你的第二大脑
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#-skills)

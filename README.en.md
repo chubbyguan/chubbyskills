@@ -4,7 +4,7 @@
 
 # 🧰 Chubby Skills
 
-#### AI Skills that pull Chinese content into your personal knowledge base — I use them daily
+#### Your feed forgets. Your knowledge base doesn't. — pull content from everywhere into your second brain
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#-skills)
