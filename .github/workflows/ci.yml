@@ -60,3 +60,6 @@ jobs:
         run: |
           cd knowledge-base-management/scripts
           python vault_health_check.py --help || true
+
+      - name: Test setup.sh dependency routing
+        run: bash tests/setup_sh_test.sh

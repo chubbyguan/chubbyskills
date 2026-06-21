@@ -78,7 +78,7 @@ def main():
 
     print("\n💡 轻量模式：纯图文/文字采集（小红书·X·公众号·情报雷达·知识库管理）完全零依赖；")
     print("   YouTube/B站优先抓字幕，命中时也无需 funasr。只有「视频/播客转录」才需要 funasr / whisper。")
-    print("\n   一键安装依赖：bash setup.sh [skill-name ...]")
+    print("\n   安装运行依赖：bash setup.sh [skill-name ...]")
 
 
 if __name__ == "__main__":
