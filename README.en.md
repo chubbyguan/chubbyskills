@@ -71,13 +71,14 @@ Each Skill here is a structured instruction set that Agents can load directly, f
 
 ## 📦 Installation
 
-### Option 1: One-click install (Recommended)
+### Option 1: Install runtime dependencies (Recommended)
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-bash setup.sh          # Install all dependencies
-bash setup.sh podcast   # Install for a specific skill only
+bash setup.sh          # Install all runtime dependencies
+bash setup.sh podcast   # Install runtime dependencies for a specific skill only
+bash setup.sh x-ingest  # Install runtime deps for X video transcription; text/image ingest works with zero pip deps
 ```
 
 ### Option 2: Manual install
@@ -91,11 +92,13 @@ pip install -r podcast-transcribe/requirements.txt   # Single skill
 
 ### Option 3: Agent install
 
-In any Agent that supports Skills (Claude Code, Codex, OpenClaw, Hermes, etc.), just say:
+Each skill is a standard Agent Skills directory (with `SKILL.md` plus optional `scripts/` and other resources). In any Agent that supports Skills (Claude Code, Codex, OpenClaw, Hermes, etc.), import the whole skill directory using that Agent's install flow, for example:
 
 ```
 Install this skill: https://github.com/chubbyguan/chubbyskills/tree/main/<skill-name>
 ```
+
+You can also copy or symlink the `<skill-name>/` directory into the skills directory used by your Agent. Check that Agent's documentation for the exact path. `setup.sh` only installs runtime dependencies; it does not register skills with a specific Agent.
 
 ---
 

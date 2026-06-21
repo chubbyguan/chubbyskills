@@ -20,12 +20,69 @@ info()  { echo -e "${GREEN}[✓]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
 error() { echo -e "${RED}[✗]${NC} $*"; }
 
+ALL_SKILLS=(
+    douyin-transcribe
+    bilibili-transcribe
+    tiktok-transcribe
+    weibo-transcribe
+    zhihu-transcribe
+    youtube-transcribe
+    podcast-transcribe
+    wechat-article-ingest
+    xiaohongshu-ingest
+    x-ingest
+    content-enrich
+    knowledge-base-management
+    industry-intelligence-radar
+    learning-notes-automation
+)
+
 check_cmd() {
     if ! command -v "$1" &>/dev/null; then
         error "未找到 $1，请先安装"
         return 1
     fi
     info "已安装 $1"
+}
+
+# ── 解析参数 ──────────────────────────────────────────
+INSTALL_ALL=true
+SKILLS=()
+if [[ $# -gt 0 ]]; then
+    INSTALL_ALL=false
+    for s in "$@"; do
+        case "$s" in
+            douyin|douyin-transcribe) SKILLS+=("douyin") ;;
+            bilibili|bilibili-transcribe) SKILLS+=("bilibili") ;;
+            tiktok|tiktok-transcribe) SKILLS+=("tiktok") ;;
+            weibo|weibo-transcribe) SKILLS+=("weibo") ;;
+            zhihu|zhihu-transcribe) SKILLS+=("zhihu") ;;
+            youtube|youtube-transcribe) SKILLS+=("youtube") ;;
+            podcast|podcast-transcribe) SKILLS+=("podcast") ;;
+            wechat|wechat-article-ingest) SKILLS+=("wechat") ;;
+            xiaohongshu|xhs|xiaohongshu-ingest) SKILLS+=("xiaohongshu") ;;
+            x|twitter|x-ingest) SKILLS+=("x") ;;
+            content|enrich|content-enrich) SKILLS+=("content") ;;
+            knowledge|kb|knowledge-base-management) SKILLS+=("knowledge") ;;
+            industry|radar|industry-intelligence-radar) SKILLS+=("industry") ;;
+            learning|learning-notes-automation) SKILLS+=("learning") ;;
+            *)
+                error "未知 skill: $s" >&2
+                echo "可用 skill:" >&2
+                printf '  - %s\n' "${ALL_SKILLS[@]}" >&2
+                exit 1
+                ;;
+        esac
+    done
+fi
+
+needs() {
+    # 检查是否需要安装某个 skill 的依赖
+    if $INSTALL_ALL; then return 0; fi
+    for s in "${SKILLS[@]}"; do
+        if [[ "$1" == "$s" ]]; then return 0; fi
+    done
+    return 1
 }
 
 # ── 基础检查 ──────────────────────────────────────────
@@ -36,33 +93,18 @@ echo "========================================="
 echo ""
 
 check_cmd python3
-check_cmd ffmpeg
-check_cmd curl
-
-# ── 解析参数 ──────────────────────────────────────────
-INSTALL_ALL=true
-SKILLS=()
-if [[ $# -gt 0 ]]; then
-    INSTALL_ALL=false
-    SKILLS=("$@")
+if needs "douyin" || needs "bilibili" || needs "tiktok" || needs "weibo" || needs "zhihu" || needs "youtube" || needs "xiaohongshu" || needs "x" || needs "podcast"; then
+    check_cmd ffmpeg
 fi
-
-needs() {
-    # 检查是否需要安装某个 skill 的依赖
-    if $INSTALL_ALL; then return 0; fi
-    for s in "${SKILLS[@]}"; do
-        case "$1" in
-            *"$s"*) return 0 ;;
-        esac
-    done
-    return 1
-}
+if needs "douyin" || needs "podcast" || needs "wechat"; then
+    check_cmd curl
+fi
 
 # ── 视频转录依赖 (funasr + torch) ────────────────────
 install_video_deps() {
     echo ""
     echo "--- 视频转录依赖 (funasr / torch) ---"
-    if needs "douyin" || needs "bilibili" || needs "tiktok" || needs "weibo" || needs "zhihu" || needs "youtube" || needs "video"; then
+    if needs "douyin" || needs "bilibili" || needs "tiktok" || needs "weibo" || needs "zhihu" || needs "youtube" || needs "xiaohongshu" || needs "x" || needs "video"; then
         info "安装 funasr + torch（首次较慢，约 2-3 GB）..."
         pip install funasr modelscope torch torchaudio
         info "视频转录依赖安装完成"
