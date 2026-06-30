@@ -50,6 +50,7 @@ python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx"
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --output ./output
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --no-translate  # 不翻译
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --no-subtitle  # 强制音频转录
+python scripts/batch_transcribe.py ../../examples/youtube-urls.txt -o ./output --no-translate
 ```
 
 ## 流程
@@ -99,6 +100,10 @@ translated: true
 
 原文内容...
 ```
+
+### 批量模式
+
+`scripts/batch_transcribe.py` 支持 URL 列表批处理，默认单条失败后继续处理下一条；需要严格模式时加 `--stop-on-error`。
 
 ## 翻译配置
 

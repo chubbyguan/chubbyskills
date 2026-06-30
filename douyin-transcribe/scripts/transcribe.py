@@ -87,7 +87,7 @@ transcriber: SenseVoice-Small
 def main():
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} <douyin_url> [output_dir]")
-        print(f"\nExample:")
+        print("\nExample:")
         print(f'  {sys.argv[0]} "https://v.douyin.com/xxxxx"')
         print(f'  {sys.argv[0]} "https://v.douyin.com/xxxxx" ./output')
         sys.exit(1)

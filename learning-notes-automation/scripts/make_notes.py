@@ -112,6 +112,7 @@ def build_notes_md(data: dict, source_name: str) -> str:
         "---",
         f"title: {title} - 学习笔记",
         "type: knowledge-card",
+        "platform: learning",
         f"tags: [学习{', ' + domain if domain else ''}]",
         f"source: {source_name}",
         f"created: {now}",

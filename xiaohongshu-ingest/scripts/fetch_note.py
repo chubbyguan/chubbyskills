@@ -275,6 +275,37 @@ def build_markdown(data, url, title, image_refs, transcript=None):
     return "\n".join(lines)
 
 
+def read_fallback_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def build_fallback_data(text, title):
+    return {
+        "title": title or "",
+        "desc": text,
+        "author": "",
+        "tags": [],
+        "likes": "",
+        "collects": "",
+        "comments": "",
+        "images": [],
+        "video_url": None,
+        "note_type": "image",
+    }
+
+
+def save_markdown(data, source_url, output_dir, title=None, image_refs=None, transcript=None):
+    title = title or compute_title(data)
+    base = sanitize(title)
+    os.makedirs(output_dir, exist_ok=True)
+    markdown = build_markdown(data, source_url, title, image_refs or [], transcript)
+    output_path = os.path.join(output_dir, f"{base}.md")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+    return output_path
+
+
 def sanitize(name):
     s = re.sub(r'[<>:"/\\|?*\n]', "", name)
     s = re.sub(r"\s+", "-", s)
@@ -318,6 +349,8 @@ def main():
     parser.add_argument("--output", "-o", default=".", help="输出目录")
     parser.add_argument("--no-images", action="store_true", help="不下载图片，只在 Markdown 里保留图片链接")
     parser.add_argument("--no-video", action="store_true", help="视频笔记不转录，只在 Markdown 里保留视频链接")
+    parser.add_argument("--fallback-text", help="抓取/解析失败时使用这个 txt/md 文件生成标准 Markdown")
+    parser.add_argument("--fallback-title", help="fallback 模式下指定标题")
     args = parser.parse_args()
 
     cookie = os.environ.get("XHS_COOKIE")
@@ -328,10 +361,24 @@ def main():
     try:
         html, final_url = http_get(args.url, cookie)
     except Exception as e:
+        if args.fallback_text:
+            print(f"  ⚠️  请求失败，改用 fallback 文本：{e}", file=sys.stderr)
+            data = build_fallback_data(read_fallback_text(args.fallback_text), args.fallback_title)
+            output_path = save_markdown(data, args.url, args.output, args.fallback_title)
+            print(f"✅ Saved fallback: {output_path}", file=sys.stderr)
+            print(output_path)
+            return
         print(f"❌ 请求失败：{e}", file=sys.stderr)
         sys.exit(1)
 
     if "请通过小红书" in html or "verify" in final_url.lower():
+        if args.fallback_text:
+            print("  ⚠️  被风控拦截，改用 fallback 文本", file=sys.stderr)
+            data = build_fallback_data(read_fallback_text(args.fallback_text), args.fallback_title)
+            output_path = save_markdown(data, final_url, args.output, args.fallback_title)
+            print(f"✅ Saved fallback: {output_path}", file=sys.stderr)
+            print(output_path)
+            return
         print("❌ 被风控拦截。请设置 XHS_COOKIE 后重试，或手动复制正文交给 analyze_hook.py",
               file=sys.stderr)
         sys.exit(1)
@@ -346,8 +393,15 @@ def main():
         print("  ⚠️  结构化解析失败，回退 og 元标签", file=sys.stderr)
         data = parse_from_meta(html) or data
     if not data or not (data["desc"] or data["title"]):
+        if args.fallback_text:
+            print("  ⚠️  解析失败，改用 fallback 文本", file=sys.stderr)
+            data = build_fallback_data(read_fallback_text(args.fallback_text), args.fallback_title)
+            output_path = save_markdown(data, final_url, args.output, args.fallback_title)
+            print(f"✅ Saved fallback: {output_path}", file=sys.stderr)
+            print(output_path)
+            return
         print("❌ 无法解析笔记内容（页面结构可能已变化或被拦截）。"
-              "建议：① 设置 XHS_COOKIE；② 手动复制正文走 analyze_hook.py", file=sys.stderr)
+              "建议：① 设置 XHS_COOKIE；② 使用 --fallback-text；③ 手动复制正文走 analyze_hook.py", file=sys.stderr)
         sys.exit(1)
 
     title = compute_title(data)
@@ -371,10 +425,7 @@ def main():
     elif not transcript and data["images"]:
         image_refs = [("url", u) for u in data["images"]]
 
-    markdown = build_markdown(data, final_url, title, image_refs, transcript)
-    output_path = os.path.join(args.output, f"{base}.md")
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(markdown)
+    output_path = save_markdown(data, final_url, args.output, title, image_refs, transcript)
 
     local_n = sum(1 for k, _ in image_refs if k == "local")
     kind = "视频(已转录)" if transcript else data["note_type"]

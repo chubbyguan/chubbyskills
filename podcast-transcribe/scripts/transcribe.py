@@ -42,7 +42,7 @@ def download_audio(url: str, output_dir: str) -> tuple:
             pass
     else:
         # Fetch page HTML to extract audio URL and title
-        print(f"  Fetching page...", file=sys.stderr)
+        print("  Fetching page...", file=sys.stderr)
         try:
             result = subprocess.run(
                 ["curl", "-s", "-L", "--max-time", "30", url],
@@ -147,19 +147,19 @@ def transcribe_audio(audio_path: str, output_path: str, title: str, source: str 
         beam_size=5,
         vad_filter=True,
     )
-    
+
     # Collect segments
     text_segments = []
     for segment in segments:
         ts = "[{:6.1f}s -> {:6.1f}s] ".format(segment.start, segment.end)
         text_segments.append(ts + segment.text.strip())
-    
+
     elapsed = time.time() - start
 
     # Generate Markdown
     now = datetime.now().strftime("%Y-%m-%d")
     text = "\n".join(text_segments)
-    
+
     markdown = f"""---
 title: {title}
 type: note
@@ -188,7 +188,7 @@ transcriber: faster-whisper-small
 def main():
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} <audio_url_or_path> [output_dir]")
-        print(f"\nExample:")
+        print("\nExample:")
         print(f'  {sys.argv[0]} "https://www.xiaoyuzhoufm.com/episode/xxxxx"')
         print(f'  {sys.argv[0]} "path/to/audio.m4a" ./output')
         sys.exit(1)

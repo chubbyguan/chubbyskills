@@ -278,12 +278,46 @@ def build_markdown(data, url, title, image_refs, transcript=None):
     return "\n".join(lines)
 
 
+def read_fallback_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def build_fallback_data(text, title):
+    return {
+        "text": text,
+        "author": "",
+        "screen_name": "",
+        "created": datetime.now().strftime("%Y-%m-%d"),
+        "likes": "",
+        "replies": "",
+        "tags": re.findall(r"#(\w+)", text),
+        "photos": [],
+        "video_url": None,
+        "note_type": "text",
+        "article_title": title or "",
+    }
+
+
+def save_markdown(data, source_url, output_dir, title=None, image_refs=None, transcript=None):
+    title = title or compute_title(data)
+    base = sanitize(title)
+    os.makedirs(output_dir, exist_ok=True)
+    markdown = build_markdown(data, source_url, title, image_refs or [], transcript)
+    output_path = os.path.join(output_dir, f"{base}.md")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+    return output_path
+
+
 def main():
     parser = argparse.ArgumentParser(description="X(Twitter) 推文采集")
     parser.add_argument("url", help="推文链接（x.com / twitter.com）或纯推文 ID")
     parser.add_argument("--output", "-o", default=".", help="输出目录")
     parser.add_argument("--no-images", action="store_true", help="图文不下载图片，只留链接")
     parser.add_argument("--no-video", action="store_true", help="视频不转录，只留视频链接")
+    parser.add_argument("--fallback-text", help="抓取失败时使用这个 txt/md 文件生成标准 Markdown")
+    parser.add_argument("--fallback-title", help="fallback 模式下指定标题")
     args = parser.parse_args()
 
     tweet_id = extract_tweet_id(args.url)
@@ -292,11 +326,27 @@ def main():
     try:
         tw = fetch_tweet(tweet_id)
     except Exception as e:
+        if args.fallback_text:
+            print(f"  ⚠️  请求失败，改用 fallback 文本：{e}", file=sys.stderr)
+            data = build_fallback_data(read_fallback_text(args.fallback_text), args.fallback_title)
+            output_path = save_markdown(data, source_url, args.output, args.fallback_title)
+            print(f"✅ Saved fallback: {output_path}", file=sys.stderr)
+            print(output_path)
+            return
         print(f"❌ 请求失败：{e}", file=sys.stderr)
         print("   X syndication 端点可能临时不可用，或该推文受限/已删除。", file=sys.stderr)
+        print("   可使用 --fallback-text 手动正文继续生成标准 Markdown。", file=sys.stderr)
         sys.exit(1)
     if not tw or (tw.get("text") is None and not tw.get("mediaDetails")):
+        if args.fallback_text:
+            print("  ⚠️  未取到推文内容，改用 fallback 文本", file=sys.stderr)
+            data = build_fallback_data(read_fallback_text(args.fallback_text), args.fallback_title)
+            output_path = save_markdown(data, source_url, args.output, args.fallback_title)
+            print(f"✅ Saved fallback: {output_path}", file=sys.stderr)
+            print(output_path)
+            return
         print("❌ 未取到推文内容（受限/已删除/端点变化）。", file=sys.stderr)
+        print("   可使用 --fallback-text 手动正文继续生成标准 Markdown。", file=sys.stderr)
         sys.exit(1)
 
     data = parse_tweet(tw)
@@ -321,10 +371,7 @@ def main():
     elif not transcript and data["photos"]:
         image_refs = [("url", u) for u in data["photos"]]
 
-    markdown = build_markdown(data, source_url, title, image_refs, transcript)
-    output_path = os.path.join(args.output, f"{base}.md")
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(markdown)
+    output_path = save_markdown(data, source_url, args.output, title, image_refs, transcript)
 
     local_n = sum(1 for k, _ in image_refs if k == "local")
     kind = "视频(已转录)" if transcript else data["note_type"]

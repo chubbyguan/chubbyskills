@@ -38,8 +38,8 @@ def get_video_info(url: str) -> dict:
 
 def download_audio(url: str, output_dir: str) -> str:
     """Download audio from YouTube."""
-    print(f"  ⬇️  Downloading audio...", file=sys.stderr)
-    
+    print("  ⬇️  Downloading audio...", file=sys.stderr)
+
     audio_path = os.path.join(output_dir, "audio.mp3")
     subprocess.run(
         ["yt-dlp",
@@ -49,7 +49,7 @@ def download_audio(url: str, output_dir: str) -> str:
          url],
         timeout=600, check=True
     )
-    
+
     size_mb = os.path.getsize(audio_path) / (1024 * 1024)
     print(f"  ✅ Audio: {size_mb:.1f} MB", file=sys.stderr)
     return audio_path
@@ -123,7 +123,7 @@ def transcribe_audio(audio_path: str) -> tuple:
 
     print("  🎙️  Transcribing...", file=sys.stderr)
     start = time.time()
-    
+
     # Auto detect language
     result = model.generate(
         input=audio_path,
@@ -139,12 +139,12 @@ def transcribe_audio(audio_path: str) -> tuple:
         for r in result:
             if "text" in r:
                 text += rich_transcription_postprocess(r["text"]) + "\n\n"
-    
+
     # Detect language (simple heuristic)
     chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
     total_chars = len(text.strip())
     language = "zh" if chinese_chars / max(total_chars, 1) > 0.3 else "en"
-    
+
     print(f"  ✅ Transcribed in {elapsed:.1f}s (detected: {language})", file=sys.stderr)
     return text.strip(), language
 
@@ -208,15 +208,14 @@ def translate_text(text: str, api_key: str = None) -> str:
             print(f"  ⚠️  Translation failed: {e}", file=sys.stderr)
             return None
 
-    print(f"  ✅ Translation done", file=sys.stderr)
+    print("  ✅ Translation done", file=sys.stderr)
     return "\n\n".join(translated_chunks)
 
 
 def generate_markdown(title: str, original: str, translated: str, language: str, url: str, transcriber: str = "SenseVoice-Small") -> str:
     """Generate bilingual Markdown."""
     now = datetime.now().strftime("%Y-%m-%d")
-    elapsed_note = ""
-    
+
     if language == "en" and translated:
         return f"""---
 title: {title}
@@ -281,22 +280,22 @@ def main():
     parser.add_argument('--no-translate', action='store_true', help='不翻译')
     parser.add_argument('--no-subtitle', action='store_true', help='跳过字幕，强制音频转录')
     args = parser.parse_args()
-    
+
     # Step 1: Get video info
     print("=" * 50, file=sys.stderr)
     print("Step 1: Getting video info...", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
-    
+
     info = get_video_info(args.url)
     title = info['title']
     print(f"  📺 Title: {title}", file=sys.stderr)
     print(f"  ⏱️  Duration: {info['duration']}", file=sys.stderr)
-    
+
     # Step 2: Get transcript (subtitle-first, fallback to audio)
     print("\n" + "=" * 50, file=sys.stderr)
     print("Step 2: Getting transcript...", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
-    
+
     tmpdir = tempfile.mkdtemp(prefix="youtube-")
     try:
         transcriber = "SenseVoice-Small"
@@ -305,7 +304,7 @@ def main():
             transcriber = "字幕"
         else:
             audio_path = download_audio(args.url, tmpdir)
-        
+
         # Step 3: Transcribe
         print("\n" + "=" * 50, file=sys.stderr)
         print("Step 3: Building transcript...", file=sys.stderr)
@@ -315,7 +314,7 @@ def main():
             text, language = sub
         else:
             text, language = transcribe_audio(audio_path)
-        
+
         # Step 4: Translate if English
         translated = None
         if language == "en" and not args.no_translate:
@@ -323,22 +322,22 @@ def main():
             print("Step 4: Translating...", file=sys.stderr)
             print("=" * 50, file=sys.stderr)
             translated = translate_text(text)
-        
+
         # Step 5: Generate Markdown
         print("\n" + "=" * 50, file=sys.stderr)
         print("Step 5: Generating Markdown...", file=sys.stderr)
         print("=" * 50, file=sys.stderr)
-        
+
         markdown = generate_markdown(title, text, translated, language, args.url, transcriber)
-        
+
         # Save
         safe_title = sanitize_filename(title)
         output_path = os.path.join(args.output, f"{safe_title}.md")
         os.makedirs(args.output, exist_ok=True)
-        
+
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(markdown)
-        
+
         print("\n" + "=" * 50, file=sys.stderr)
         print("✅ Done!", file=sys.stderr)
         print("=" * 50, file=sys.stderr)
@@ -346,9 +345,9 @@ def main():
         print(f"  Language: {language}", file=sys.stderr)
         print(f"  Translated: {'Yes' if translated else 'No'}", file=sys.stderr)
         print(f"  Output: {output_path}", file=sys.stderr)
-        
+
         print(output_path)
-    
+
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

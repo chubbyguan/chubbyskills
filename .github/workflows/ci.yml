@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  syntax-check:
-    name: Python Syntax Check
+  reliability:
+    name: Reliability checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,46 +17,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Check syntax of all Python files
+      - name: Python syntax check
         run: |
-          find . -name "*.py" -type f | while read f; do
-            echo "Checking $f..."
-            python -m py_compile "$f" || exit 1
-          done
-          echo "All syntax checks passed."
+          find . -name "*.py" -type f -not -path "./.git/*" -print0 \
+            | xargs -0 python -m py_compile
 
-  lint:
-    name: Lint (ruff)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Validate example outputs
+        run: python tools/validate_outputs.py examples/outputs
 
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Run ruff check
-        run: ruff check . --select E,F,W --ignore E501,W503 || true
-
-  test-zero-dep-scripts:
-    name: Test zero-dependency scripts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Test scan.py help
+      - name: CLI smoke tests
         run: |
-          cd industry-intelligence-radar/scripts
-          python scan.py --help
+          python tools/check_env.py
+          python tools/chubby_ingest.py --help
+          python tools/validate_outputs.py --help
+          python industry-intelligence-radar/scripts/scan.py --help
+          python knowledge-base-management/scripts/vault_health_check.py --help
 
-      - name: Test vault_health_check.py help
+      - name: Lint
         run: |
-          cd knowledge-base-management/scripts
-          python vault_health_check.py --help || true
+          python -m pip install ruff
+          ruff check . --select E,F,W --ignore E501

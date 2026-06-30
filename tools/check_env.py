@@ -9,7 +9,6 @@ chubbyskills 依赖体检
 """
 
 import os
-import sys
 import shutil
 import importlib.util
 

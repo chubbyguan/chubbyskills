@@ -55,6 +55,12 @@ uv pip install beautifulsoup4 markitdown pymupdf
 python scripts/fetch_article.py "https://mp.weixin.qq.com/s/xxxxx" --output ./output
 ```
 
+链接模式会尽量保留：
+
+- 标题层级：`h1`/`h2`/`h3` 会转成 Markdown 标题
+- 图片：`data-src` / `src` 会转成 Markdown 图片引用
+- 链接：正文里的 `<a>` 会转成 Markdown 链接
+
 ### 单篇处理（PDF）
 
 ```bash
@@ -114,6 +120,7 @@ python scripts/extract.py "path/to/article.pdf" --output ./output
 - 部分公众号文章有防盗链，可能抓取失败
 - 纯图片文章无法提取文字
 - MarkItDown 需要 Python ≥ 3.10
+- PDF 提取质量取决于原文排版；链接模式比 PDF 模式更能保留图片和链接
 - 长文档拆分需要 Agent 判断
 
 ## 参考项目

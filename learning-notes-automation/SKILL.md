@@ -138,6 +138,7 @@ A:
 ---
 title: [概念名]
 type: knowledge-card
+platform: learning
 tags: [学习, AI, ...]
 source: [[视频/播客链接]]
 created: YYYY-MM-DD

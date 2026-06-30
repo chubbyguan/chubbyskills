@@ -37,6 +37,9 @@ pip install funasr modelscope torch torchaudio
 python scripts/transcribe.py "https://www.bilibili.com/video/BV1rrQGBeEen/"
 python scripts/transcribe.py "BV1rrQGBeEen"
 python scripts/transcribe.py "BV1rrQGBeEen" --no-subtitle   # 强制音频转录
+
+# 批量处理：每行一个 B站 URL 或 BV 号
+python scripts/batch_transcribe.py ../../examples/bilibili-urls.txt -o ./output
 ```
 
 ## 流程
@@ -72,6 +75,10 @@ result = model.generate(input=audio_path, language="zh", use_itn=True, batch_siz
 ### Step 3: 生成 Markdown
 
 自动创建带 frontmatter 的 Markdown 文件。
+
+### 批量模式
+
+`scripts/batch_transcribe.py` 会逐条调用单篇转录脚本，默认单条失败后继续处理下一条；需要严格模式时加 `--stop-on-error`。
 
 ## 性能数据
 

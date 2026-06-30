@@ -74,7 +74,7 @@ def download_audio(url: str, output_dir: str) -> str:
             time.sleep(2 * attempt)
         except subprocess.TimeoutExpired as e:
             last_err = e
-            print(f"  ⚠️  下载超时，重试...", file=sys.stderr)
+            print("  ⚠️  下载超时，重试...", file=sys.stderr)
     raise RuntimeError(
         f"{PLATFORM} 下载失败（已重试 {MAX_RETRY} 次）。"
         f"可能原因：链接失效、需要登录 cookie、或地区限制。原始错误：{last_err}"

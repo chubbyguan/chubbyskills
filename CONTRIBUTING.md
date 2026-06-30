@@ -23,6 +23,8 @@ chubbyskills 的每个 skill 都要能**独立 clone 安装**（README 的安装
 - 网络 / 解析失败要**优雅降级**，给用户清晰提示，不要甩 traceback
 - 脚本用 `argparse`；**结果路径打到 stdout、日志打到 stderr**（方便串管道）
 - 提交前跑 `python3 -m py_compile <脚本>` 过语法
+- 若改动输出 Markdown，请跑 `python3 tools/validate_outputs.py examples/outputs` 或用你的真实输出目录替代 `examples/outputs`
+- 若改动公共工具，请跑 `python3 -m unittest discover -s tests -v`
 - 真实跑一遍：采集类 skill 请用**真实链接**验证，造数据测不出字段命名这类坑
 
 ### 提交流程

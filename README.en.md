@@ -35,6 +35,53 @@ Each Skill here is a structured instruction set that Agents can load directly, f
 
 ---
 
+## 🚀 Quick Start
+
+```bash
+git clone https://github.com/chubbyguan/chubbyskills.git
+cd chubbyskills
+python3 tools/check_env.py
+```
+
+Install only what you need:
+
+```bash
+bash setup.sh          # light mode: text/image ingest + knowledge tools
+bash setup.sh video    # ffmpeg + yt-dlp + funasr/torch stack
+bash setup.sh podcast  # faster-whisper stack
+bash setup.sh wechat   # WeChat/PDF extraction stack
+bash setup.sh all      # everything
+```
+
+Run the one-command workflow:
+
+```bash
+python3 tools/chubby_ingest.py "https://www.bilibili.com/video/BVxxxx" -o output/
+python3 tools/chubby_ingest.py "https://x.com/user/status/123" -o output/ --enrich
+python3 tools/chubby_ingest.py "https://mp.weixin.qq.com/s/xxx" --vault ~/Documents/Obsidian/Inbox
+```
+
+Validate generated Markdown:
+
+```bash
+python3 tools/validate_outputs.py examples/outputs
+python3 tools/validate_outputs.py output/
+```
+
+## 🧭 Capability Matrix
+
+| Capability | Scope | Dependencies | Notes |
+|---|---|---|---|
+| Subtitle-first transcription | Bilibili / YouTube | `yt-dlp` | Falls back to audio transcription when no captions exist |
+| Video transcription | Douyin / Bilibili / TikTok / Weibo / Zhihu / YouTube / XHS video / X video | `ffmpeg` + `funasr` + `torch` | Heavy first install; platform anti-bot rules may affect downloads |
+| Podcast transcription | Xiaoyuzhou / Ximalaya / RSS / local audio | `ffmpeg` + `faster-whisper` | Long episodes can take time |
+| Image/text ingest | Xiaohongshu / X / WeChat | light or zero pip deps | XHS works better with `XHS_COOKIE` |
+| Enrichment | Any Markdown output | `DEEPSEEK_API_KEY` | Adds summary, key points, tags |
+| Knowledge base | Obsidian vault | health check is zero-dep; MCP needs `mcp` | Set `VAULT_DIR` for MCP |
+| One-command workflow | common links and local audio/PDF | uses matching skill deps | Override with `--skill` when detection is ambiguous |
+
+---
+
 ## 📋 Table of Contents
 
 ### Video transcription
@@ -71,13 +118,16 @@ Each Skill here is a structured instruction set that Agents can load directly, f
 
 ## 📦 Installation
 
-### Option 1: One-click install (Recommended)
+### Option 1: Staged install (Recommended)
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-bash setup.sh          # Install all dependencies
-bash setup.sh podcast   # Install for a specific skill only
+bash setup.sh          # light mode
+bash setup.sh video    # video transcription stack
+bash setup.sh podcast  # podcast transcription stack
+bash setup.sh wechat   # WeChat/PDF extraction stack
+bash setup.sh all      # everything
 ```
 
 ### Option 2: Manual install

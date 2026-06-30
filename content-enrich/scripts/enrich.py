@@ -84,8 +84,8 @@ def build_summary_block(data):
 def insert_block(body, block):
     """摘要块插在第一个 # 标题之后；没有标题就插在最前。"""
     lines = body.split("\n")
-    for i, l in enumerate(lines):
-        if l.startswith("# "):
+    for i, line in enumerate(lines):
+        if line.startswith("# "):
             return "\n".join(lines[:i + 1]) + "\n\n" + block + "\n" + "\n".join(lines[i + 1:])
     return block + "\n" + body
 

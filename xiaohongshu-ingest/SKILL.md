@@ -43,6 +43,7 @@ python scripts/fetch_note.py "https://www.xiaohongshu.com/explore/xxxx" -o ./out
 python scripts/fetch_note.py "http://xhslink.com/xxxx" -o ./out
 python scripts/fetch_note.py "链接" -o ./out --no-images   # 图文：只留图片链接不下载
 python scripts/fetch_note.py "链接" -o ./out --no-video    # 视频：不转录，只留视频链接
+python scripts/fetch_note.py "链接" -o ./out --fallback-text 手动正文.txt
 
 # 2) 爆款拆解 → 拆解报告 + 5 条衍生选题
 python scripts/analyze_hook.py ./out/某笔记.md -o ./out
@@ -61,7 +62,7 @@ python scripts/analyze_hook.py ./out/某笔记.md -o ./out
 
 1. 优先解析页面内嵌的 `__INITIAL_STATE__` 结构化数据
 2. 失败则回退到 `og:` 元标签
-3. 仍失败时给出明确提示——此时可**手动复制笔记正文**存成 `.txt`，直接走 `analyze_hook.py` 拆解（拆解环节不依赖抓取）
+3. 仍失败时给出明确提示——此时可**手动复制笔记正文**存成 `.txt`，用 `--fallback-text` 继续生成统一 Markdown，或直接走 `analyze_hook.py` 拆解（拆解环节不依赖抓取）
 
 提供 `XHS_COOKIE` 能显著提高采集成功率。页面结构若调整，需更新 `fetch_note.py` 里的选择器。
 
