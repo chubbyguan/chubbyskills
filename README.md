@@ -50,25 +50,31 @@
 
 ## 🚦 当前路线
 
-这个仓库接下来按三个阶段迭代：
+这个仓库已经从「单个 skill 能跑」推进到「个人内容采集管线」：
 
 - **v0.2 reliability**：安装分档、CI、示例输出、统一 frontmatter 校验、失败提示更清晰
 - **v0.3 workflow**：把「识别链接 → 调用 skill → 可选加工 → 入库」串成一个命令
 - **v0.4 platform depth**：补 B站/YouTube 批量、公众号结构保真、小红书/X 手动 fallback
+- **v0.5 core pipeline**：新增 `chubby.yaml`、队列、运行状态、失败重试、每日运行报告、schema v1
+- **v0.6 platform health**：新增平台定义、站点模板、状态页生成器、平台失败 issue form
+- **v0.7 knowledge vault**：新增 vault 模板、SQLite 本地索引、全文检索、recent/read/stats、MCP 检索增强
+- **v0.8 first-run UX**：新增 `quickstart` 首跑验收，离线打通配置、dry-run、schema 校验、平台定义、vault 索引和 MCP 前置检查
 
-当前 README 已覆盖这三阶段的第一批能力；后续会继续补真实平台 smoke test 和更多平台深水区能力。
+下一阶段会继续补更完整的真实平台 smoke test、MCP 工作流和语义检索层。
 
 ---
 
 ## 🚀 推荐开始方式
 
-### 1. 先体检
+### 1. 跑首轮验收
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 tools/check_env.py
+python3 tools/chubby.py quickstart
 ```
+
+`quickstart` 不会抓真实平台内容，会离线完成配置初始化、X 链接 dry-run、示例 Markdown 校验、平台定义校验、临时 vault 索引和 MCP 前置检查。完整说明见 [docs/quickstart.md](./docs/quickstart.md)。
 
 ### 2. 轻量安装（默认推荐）
 
@@ -88,7 +94,35 @@ bash setup.sh wechat    # 公众号/PDF 解析增强
 bash setup.sh all       # 全部依赖
 ```
 
-### 4. 一键采集工作流
+### 4. 个人知识管线（推荐）
+
+```bash
+# 初始化 chubby.yaml、队列、状态和报告目录
+python3 tools/chubby.py init
+
+# 或直接跑 v0.8 首跑验收
+python3 tools/chubby.py quickstart
+
+# 单条采集，会写入 .chubby/runs.jsonl 并生成 runs/YYYY-MM-DD.md
+python3 tools/chubby.py ingest "https://x.com/user/status/123" --dry-run
+
+# 把链接逐行放进 inbox/links.txt 后批量执行
+python3 tools/chubby.py run
+
+# 查看最近状态 / 重试失败项
+python3 tools/chubby.py status --latest
+python3 tools/chubby.py retry --all-failed
+
+# 查看平台健康度和模板覆盖
+python3 tools/platform_health.py --check
+python3 tools/platform_health.py --local --check
+
+# 建立本地知识库索引并检索
+python3 tools/vault_index.py index ~/Documents/ObsidianVault
+python3 tools/vault_index.py search "AI Agent"
+```
+
+### 5. 轻量单条采集
 
 ```bash
 # 自动识别平台并调用对应 skill
@@ -101,14 +135,15 @@ python3 tools/chubby_ingest.py "https://x.com/user/status/123" -o output/ --enri
 python3 tools/chubby_ingest.py "https://mp.weixin.qq.com/s/xxx" --vault ~/Documents/Obsidian/Inbox
 ```
 
-### 5. 校验输出格式
+### 6. 校验输出格式
 
 ```bash
 python3 tools/validate_outputs.py examples/outputs
+python3 tools/validate_outputs.py examples/outputs --schema-v1
 python3 tools/validate_outputs.py output/
 ```
 
-统一输出协议要求每篇 Markdown 至少带这些 frontmatter 字段：`title`、`type`、`platform`、`source`、`created`。
+统一输出协议要求每篇 Markdown 至少带这些 frontmatter 字段：`title`、`type`、`platform`、`source`、`created`。通过 `tools/chubby.py` 进入管线的产物会自动补 `schema_version: 1`、`run_id`、`source_hash`、`captured_at`、`processed_at`、`content_type`、`status`、`assets`。
 
 ---
 
@@ -121,8 +156,10 @@ python3 tools/validate_outputs.py output/
 | 播客转录 | 小宇宙 / 喜马拉雅 / RSS / 本地音频 | `ffmpeg` + `faster-whisper` | 长音频耗时较久 |
 | 图文采集 | 小红书 / X / 公众号 | 轻量或零 pip 依赖 | 小红书建议配置 `XHS_COOKIE` |
 | 内容加工 | 任意 Markdown | `DEEPSEEK_API_KEY` | LLM 费用和上下文长度由用户环境决定 |
-| 知识库管理 | Obsidian vault | 健康检查零依赖；MCP 需 `mcp` | MCP 读取本地 vault，需设置 `VAULT_DIR` |
-| 一键工作流 | 自动识别常见链接 | 复用对应 skill 依赖 | 无法识别时用 `--skill` 指定 |
+| 知识库管理 | Obsidian vault | 健康检查/SQLite 索引零依赖；MCP 需 `mcp` | MCP 读取本地 vault，需设置 `VAULT_DIR` |
+| 个人知识管线 | 自动识别、队列、状态、报告、重试 | 复用对应 skill 依赖 | `tools/chubby.py` 负责编排；无法识别时用 `--skill` 指定 |
+| 平台健康度 | 平台定义 / 站点模板 / 状态页 | 零 pip 依赖 | `tools/platform_health.py` 校验结构；`--local` 检查本地依赖 |
+| 本地知识库索引 | Markdown vault / Obsidian | SQLite 标准库 | `tools/vault_index.py` 支持 index/search/recent/read/stats |
 
 ---
 
@@ -163,7 +200,7 @@ python3 tools/validate_outputs.py output/
 
 | 名字 | 一句话 |
 |---|---|
-| 🧠 [**knowledge-base-management**](#-knowledge-base-management知识库管理) | 知识库全生命周期管理：三层架构、素材入库、健康检查、三件套集成 |
+| 🧠 [**knowledge-base-management**](#-knowledge-base-management知识库管理) | 知识库全生命周期管理：三层架构、素材入库、健康检查、本地索引、MCP 检索 |
 
 ### 工作流
 
@@ -210,7 +247,101 @@ pip install -r podcast-transcribe/requirements.txt   # 单个 skill
 
 ---
 
-## 🔁 一键工作流（v0.3）
+## 🔁 个人知识管线（v0.5）
+
+`tools/chubby.py` 是推荐入口，负责把单条采集升级成可长期运行的队列管线：
+
+```bash
+python3 tools/chubby.py init
+python3 tools/chubby.py doctor
+python3 tools/chubby.py ingest "<链接>" -o output/
+python3 tools/chubby.py run --queue inbox/links.txt
+python3 tools/chubby.py status --latest --limit 20
+python3 tools/chubby.py retry --all-failed
+```
+
+默认配置文件是 `chubby.yaml`，可从 `chubby.example.yaml` 复制，也可以通过 `python3 tools/chubby.py init` 生成：
+
+```yaml
+output_dir: output
+vault_dir:
+state_file: .chubby/runs.jsonl
+report_dir: runs
+queue_file: inbox/links.txt
+enrich: false
+timeout_seconds: 1800
+```
+
+运行后会产生两类本地状态：
+
+- `.chubby/runs.jsonl`：每条 source 的 `run_id`、平台、状态、错误、输出路径
+- `runs/YYYY-MM-DD.md`：当天运行报告，适合给后续 Agent 或自己复盘
+
+`run` 命令会按行读取 `inbox/links.txt`，空行和 `#` 注释会被忽略。单条失败不会中断整批任务，后续可以用 `status --failed` 查看，再用 `retry` 重试。
+
+## 🧭 平台健康度与站点模板（v0.6）
+
+v0.6 把「支持哪些平台、稳定到什么程度、需要哪些依赖、失败时怎么 fallback」变成可检查的声明文件：
+
+- `platforms/*.yaml`：平台 ID、skill 目录、入口脚本、依赖、状态、fallback、样例链接
+- `templates/sites/*.yaml`：URL 匹配、frontmatter 字段、资源保存、后处理流程
+- `docs/platform-status.md`：由工具生成的平台状态页
+- `.github/ISSUE_TEMPLATE/platform_failure.yml`：用户提交平台失败样例的结构化入口
+
+常用命令：
+
+```bash
+# 校验平台定义、脚本路径和模板覆盖；CI 默认跑这个
+python3 tools/platform_health.py --check
+python3 tools/platform_health.py --check-output
+
+# 生成 docs/platform-status.md
+python3 tools/platform_health.py
+
+# 额外检查本机命令、Python 包和环境变量是否就绪
+python3 tools/platform_health.py --local --check
+
+# 输出机器可读 JSON，方便后续做 dashboard 或 MCP 工具
+python3 tools/platform_health.py --json
+```
+
+状态页入口：[docs/platform-status.md](./docs/platform-status.md)。
+
+## 🧠 Knowledge Vault（v0.7）
+
+v0.7 把「Markdown 文件」推进成可被人和 Agent 稳定使用的本地知识库：
+
+- `vault-template/`：Obsidian 友好的 Inbox / Sources / Processed / Dashboards / Assets / Templates 结构
+- `tools/vault_index.py`：SQLite 本地索引，支持全文搜索、按平台/标签过滤、最近笔记、读取笔记、统计
+- `knowledge-base-management/scripts/mcp_server.py`：MCP server 复用同一套索引，支持 search/read/recent/reindex/stats
+
+常用命令：
+
+```bash
+# 建索引，默认写入 .chubby/vault_index.sqlite
+python3 tools/vault_index.py index ~/Documents/ObsidianVault
+
+# 搜索，可按平台或标签过滤
+python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py search "品牌" --platform wechat
+python3 tools/vault_index.py search "选题" --tag 内容
+
+# 最近笔记 / 读取笔记 / 统计
+python3 tools/vault_index.py recent --limit 10
+python3 tools/vault_index.py read "10_Sources/x/example.md" --vault ~/Documents/ObsidianVault
+python3 tools/vault_index.py stats
+```
+
+MCP 使用：
+
+```bash
+pip install mcp
+VAULT_DIR=~/Documents/ObsidianVault python3 knowledge-base-management/scripts/mcp_server.py
+```
+
+MCP 暴露工具：`search_vault`、`read_kb_note`、`list_recent_notes`、`reindex_vault`、`vault_index_stats`。
+
+## 🔁 轻量一键工作流（v0.3）
 
 `tools/chubby_ingest.py` 会自动识别输入链接并调用对应 skill：
 
@@ -388,11 +519,12 @@ X 推文 → 统一 frontmatter Markdown（正文/作者/赞回复/话题）。*
 
 > *"知识库从素材入库到健康检查，一套流程全搞定。"*
 
-Obsidian 知识库全生命周期管理：三层架构（素材库/Wiki/产出）、素材 ABC 分级入库、健康检查与清理、GBrain/GraphRAG/LLM Wiki 三件套集成、目录整理与归档。**附带 MCP Server**（`mcp_server.py`）——把知识库检索暴露给任何 MCP Agent，「采集写入 + MCP 查询」闭环。
+Obsidian 知识库全生命周期管理：三层架构（素材库/Wiki/产出）、素材 ABC 分级入库、健康检查与清理、SQLite 本地索引、MCP 检索、目录整理与归档。**附带 MCP Server**（`mcp_server.py`）——把知识库检索暴露给任何 MCP Agent，「采集写入 + 索引 + MCP 查询」闭环。
 
 **核心能力**：
 - 📥 素材入库：ABC 分级 + 公众号/群聊自动同步
 - 🔍 健康检查：断链修复、frontmatter 补全、去重归档
+- 🧠 本地索引：SQLite search / recent / read / stats，MCP 复用同一套索引
 - 🛠️ 工具集成：GBrain 搜索 + GraphRAG 发现 + LLM Wiki 写作
 - 📂 目录整理：全库审计、批量归档、文件命名规范
 
@@ -545,6 +677,25 @@ export DEEPSEEK_API_KEY=your-key
 | `transcriber` | 转录引擎（仅转录类） | `字幕` / `SenseVoice-Small` / `faster-whisper-small` |
 
 视频/音频类还可能带 `language`、`translated` 字段。`platform` 字段是机器可读的，建议在 Obsidian/Dataview 里用它做按平台聚合的视图。
+
+通过 `tools/chubby.py` 管线处理后的 Markdown 会升级到 schema v1，并补充这些机器字段：
+
+| 字段 | 含义 | 示例 |
+|------|------|------|
+| `schema_version` | 管线 schema 版本 | `1` |
+| `run_id` | 本次采集运行 ID | `20260630T160000-ab12cd34` |
+| `source_hash` | 原始 source 的短 hash，用于去重/重试 | `0123456789abcdef` |
+| `captured_at` | 开始采集时间 | `2026-06-30T16:00:00+08:00` |
+| `processed_at` | 处理完成时间 | `2026-06-30T16:00:03+08:00` |
+| `content_type` | 内容类型 | `video` / `audio` / `article` / `social` / `note` |
+| `status` | 管线状态 | `success` / `failed` / `dry_run` |
+| `assets` | 关联资源目录列表 | `[xiaohongshu-sample.assets]` |
+
+校验 schema v1：
+
+```bash
+python3 tools/validate_outputs.py output/ --schema-v1
+```
 
 ---
 

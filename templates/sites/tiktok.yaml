@@ -1,0 +1,9 @@
+id: tiktok
+platform: tiktok
+name: TikTok video note
+match: [tiktok.com, vm.tiktok.com, vt.tiktok.com]
+capture: video audio transcription
+frontmatter: [title, type, platform, source, author, created, tags, language, transcriber, schema_version, run_id, source_hash, captured_at, processed_at, content_type, status, assets]
+assets: []
+postprocess: [validate_schema_v1, enrich_optional, vault_copy_optional]
+notes: Geo and anti-bot failures should be reported as platform errors.

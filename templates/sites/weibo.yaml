@@ -1,0 +1,9 @@
+id: weibo
+platform: weibo
+name: Weibo video note
+match: [weibo.com, m.weibo.cn]
+capture: video audio transcription
+frontmatter: [title, type, platform, source, author, created, tags, language, transcriber, schema_version, run_id, source_hash, captured_at, processed_at, content_type, status, assets]
+assets: []
+postprocess: [validate_schema_v1, enrich_optional, vault_copy_optional]
+notes: Prefer mobile links for fetch reliability.

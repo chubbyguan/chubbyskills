@@ -1,0 +1,9 @@
+id: wechat
+platform: wechat
+name: WeChat article note
+match: [mp.weixin.qq.com, pdf]
+capture: article markdown extraction
+frontmatter: [title, type, platform, source, author, created, tags, schema_version, run_id, source_hash, captured_at, processed_at, content_type, status, assets]
+assets: [article_images]
+postprocess: [validate_schema_v1, enrich_optional, vault_copy_optional]
+notes: Preserve headings, images, and links when possible.

@@ -10,6 +10,14 @@ summary: "采集、加工、入库可以串成一个命令"
 domain: "知识管理"
 auto_tags: [采集, 知识库, 自动化]
 enriched: true
+schema_version: 1
+run_id: "example-workflow"
+source_hash: "b1c2d3e4f5a60718"
+captured_at: "2026-06-30T16:05:00+08:00"
+processed_at: "2026-06-30T16:05:03+08:00"
+content_type: note
+status: success
+assets: []
 ---
 
 # 一键入库样例

@@ -26,12 +26,28 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Validate example outputs
-        run: python tools/validate_outputs.py examples/outputs
+        run: |
+          python tools/validate_outputs.py examples/outputs
+          python tools/validate_outputs.py examples/outputs --schema-v1
+          python tools/platform_health.py --check
+          python tools/platform_health.py --check-output
+          python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite index examples/outputs
+          python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite search 样例 --limit 2
+          python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite stats
+          rm -f /tmp/chubby-vault-index.sqlite
 
       - name: CLI smoke tests
         run: |
           python tools/check_env.py
+          python tools/chubby.py --help
+          python tools/chubby.py ingest --help
+          python tools/chubby.py run --help
+          python tools/chubby.py status --help
+          python tools/chubby.py retry --help
+          python tools/chubby.py quickstart --ephemeral --no-state
           python tools/chubby_ingest.py --help
+          python tools/platform_health.py --help
+          python tools/vault_index.py --help
           python tools/validate_outputs.py --help
           python industry-intelligence-radar/scripts/scan.py --help
           python knowledge-base-management/scripts/vault_health_check.py --help

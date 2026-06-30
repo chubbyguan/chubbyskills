@@ -5,10 +5,12 @@
 - [ ] 新 skill
 - [ ] 修 bug
 - [ ] 增强现有 skill
+- [ ] 平台定义 / 模板
 - [ ] 文档 / 其它
 
 ## 自测清单
 - [ ] `python3 -m py_compile` 通过
+- [ ] `python3 tools/platform_health.py --check` 通过（改平台定义 / 模板时）
 - [ ] 用**真实链接**跑过（采集类必做）
 - [ ] （新 skill）目录自包含：`SKILL.md` + `scripts/` + `requirements.txt`
 - [ ] （新 skill）`SKILL.md` frontmatter 的 `name` 与目录名一致

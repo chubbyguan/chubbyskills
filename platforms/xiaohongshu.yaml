@@ -1,0 +1,13 @@
+id: xiaohongshu
+name: Xiaohongshu
+skill: xiaohongshu-ingest
+script: scripts/fetch_note.py
+category: social
+status: manual
+source_types: [text, image, video]
+required_deps: []
+optional_deps: [env:XHS_COOKIE, cmd:ffmpeg, python:funasr]
+output_contract: markdown_schema_v1
+fallback: manual text via --fallback-text
+sample_source: https://www.xiaohongshu.com/explore/example
+notes: Cookie improves success rate; fallback text keeps the knowledge pipeline moving.

@@ -2,11 +2,12 @@
 """
 知识库 MCP Server —— 让任何 Agent 都能检索你的 Obsidian 知识库
 
-把本地 vault 的「搜索 / 读取 / 最近笔记」暴露成 MCP 工具。配合采集类 skill
-（采集加工 → 入库）形成「skill 负责写入、MCP 负责被调用查询」的闭环。
+把本地 vault 的「搜索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具。
+配合采集类 skill（采集加工 → 入库 → 索引）形成「skill 负责写入、MCP 负责被调用查询」的闭环。
 
 依赖：pip install mcp        （仅本 server 需要；知识库其它脚本零依赖）
 运行：VAULT_DIR=/path/to/vault python3 mcp_server.py
+可选：VAULT_INDEX_DB=/path/to/vault_index.sqlite
 
 在 Claude Code / 其它支持 MCP 的 Agent 里这样配置：
     {
@@ -20,94 +21,154 @@
     }
 """
 
+import importlib.util
 import os
 import sys
-from datetime import datetime
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = ROOT / "tools"
+VAULT_INDEX_PATH = TOOLS_DIR / "vault_index.py"
+
+
+def load_vault_index():
+    if not VAULT_INDEX_PATH.is_file():
+        return None, f"missing {VAULT_INDEX_PATH}"
+    try:
+        spec = importlib.util.spec_from_file_location("chubby_vault_index", VAULT_INDEX_PATH)
+        if spec is None or spec.loader is None:
+            return None, f"cannot create import spec for {VAULT_INDEX_PATH}"
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module, ""
+    except Exception as exc:
+        return None, str(exc)
+
+
+vault_index, VAULT_INDEX_ERROR = load_vault_index()
 
 
 VAULT = os.environ.get("VAULT_DIR", "")
 MAX_READ_CHARS = 12000
-SNIPPET_CTX = 80
+INDEX_DB = os.environ.get("VAULT_INDEX_DB", "")
 
 
-def _iter_md(vault):
-    for root, dirs, files in os.walk(vault):
-        dirs[:] = [d for d in dirs if not d.startswith(".")]
-        for f in files:
-            if f.endswith(".md"):
-                yield os.path.join(root, f)
+def index_db(vault):
+    if INDEX_DB:
+        return INDEX_DB
+    return str(Path(vault) / ".chubby" / "vault_index.sqlite")
 
 
-def _safe_path(vault, rel):
-    """把相对路径解析到 vault 内，拒绝越界（路径穿越防护）。"""
-    full = os.path.realpath(os.path.join(vault, rel))
-    if not full.startswith(os.path.realpath(vault) + os.sep):
-        raise ValueError("路径越界，拒绝访问")
-    return full
+def unavailable(exc):
+    return f"索引不可用：{exc}"
 
 
-def _snippet(text, q):
-    i = text.lower().find(q.lower())
-    if i == -1:
-        return ""
-    start = max(0, i - SNIPPET_CTX)
-    end = min(len(text), i + len(q) + SNIPPET_CTX)
-    s = text[start:end].replace("\n", " ").strip()
-    return ("…" if start > 0 else "") + s + ("…" if end < len(text) else "")
+def require_vault_index():
+    if vault_index is None:
+        detail = VAULT_INDEX_ERROR or f"missing {VAULT_INDEX_PATH}"
+        raise RuntimeError(
+            f"无法加载 tools/vault_index.py（{detail}）。请从完整 chubbyskills 仓库运行 MCP，或保留 tools/vault_index.py。"
+        )
+    return vault_index
 
 
-def search(vault, query, limit=10):
-    """按关键词搜文件名+正文，返回匹配笔记的相对路径与片段。"""
+def require_vault_dir(vault):
+    if not vault or not os.path.isdir(vault):
+        raise RuntimeError("VAULT_DIR 未设置或不是目录")
+
+
+def ensure_index(vault):
+    require_vault_dir(vault)
+    indexer = require_vault_index()
+    db = index_db(vault)
+    if not os.path.exists(db):
+        indexer.index_vault(vault, db_path=db)
+    return db
+
+
+def format_notes(rows, empty):
+    if not rows:
+        return empty
+    out = []
+    for i, row in enumerate(rows, 1):
+        bits = []
+        if row.get("platform"):
+            bits.append(row["platform"])
+        if row.get("tags"):
+            bits.append(row["tags"])
+        meta = " | ".join(bits)
+        out.append(f"{i}. `{row['path']}` — {row.get('title') or row['path']}")
+        if meta:
+            out.append(f"   {meta}")
+        if row.get("snippet"):
+            out.append(f"   {row['snippet']}")
+    return "\n".join(out)
+
+
+def search(vault, query, limit=10, platform="", tag=""):
+    """按关键词搜索索引，返回匹配笔记的相对路径与片段。"""
     if not query.strip():
         return "请提供搜索关键词。"
-    q = query.lower()
-    hits = []
-    for path in _iter_md(vault):
-        rel = os.path.relpath(path, vault)
-        name_hit = q in os.path.basename(path).lower()
-        try:
-            text = open(path, encoding="utf-8", errors="replace").read()
-        except Exception:
-            text = ""
-        if name_hit or q in text.lower():
-            hits.append((rel, _snippet(text, query) or "(命中标题)"))
-        if len(hits) >= limit:
-            break
-    if not hits:
-        return f"知识库中未找到与「{query}」相关的笔记。"
-    out = [f"找到 {len(hits)} 条与「{query}」相关的笔记：\n"]
-    for i, (rel, snip) in enumerate(hits, 1):
-        out.append(f"{i}. `{rel}`\n   {snip}")
-    return "\n".join(out)
+    try:
+        indexer = require_vault_index()
+        db = ensure_index(vault)
+        rows = indexer.search(
+            db_path=db,
+            query=query,
+            limit=limit,
+            platform=platform or None,
+            tag=tag or None,
+        )
+    except Exception as exc:
+        return unavailable(exc)
+    return format_notes(rows, f"知识库中未找到与「{query}」相关的笔记。")
 
 
 def read_note(vault, path):
     """读取某篇笔记全文（path 相对 vault 根），过长则截断。"""
-    full = _safe_path(vault, path)
-    if not os.path.isfile(full):
-        return f"笔记不存在：{path}"
-    text = open(full, encoding="utf-8", errors="replace").read()
-    if len(text) > MAX_READ_CHARS:
-        text = text[:MAX_READ_CHARS] + f"\n\n…（已截断，全文共 {len(text)} 字）"
-    return f"# {path}\n\n{text}"
+    try:
+        indexer = require_vault_index()
+        require_vault_dir(vault)
+        note = indexer.read_note(vault, path, max_chars=MAX_READ_CHARS)
+    except RuntimeError as exc:
+        return unavailable(exc)
+    except Exception as exc:
+        return f"笔记不存在或不可读：{path} ({exc})"
+    return f"# {path}\n\n{note['text']}"
 
 
-def list_recent(vault, limit=10):
+def list_recent(vault, limit=10, platform=""):
     """列出最近修改的笔记。"""
-    items = []
-    for path in _iter_md(vault):
-        try:
-            items.append((os.path.getmtime(path), os.path.relpath(path, vault)))
-        except Exception:
-            continue
-    items.sort(reverse=True)
-    if not items:
-        return "知识库为空。"
-    out = [f"最近 {min(limit, len(items))} 篇笔记：\n"]
-    for mtime, rel in items[:limit]:
-        day = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-        out.append(f"- `{rel}`  ({day})")
-    return "\n".join(out)
+    try:
+        indexer = require_vault_index()
+        db = ensure_index(vault)
+        rows = indexer.recent(db_path=db, limit=limit, platform=platform or None)
+    except Exception as exc:
+        return unavailable(exc)
+    return format_notes(rows, "知识库为空。")
+
+
+def reindex(vault):
+    try:
+        indexer = require_vault_index()
+        result = indexer.index_vault(vault, db_path=index_db(vault))
+    except Exception as exc:
+        return unavailable(exc)
+    return f"已索引 {result['notes']} 篇笔记：{result['db']} (fts5={result['fts5']})"
+
+
+def vault_stats(vault):
+    try:
+        indexer = require_vault_index()
+        db = ensure_index(vault)
+        result = indexer.stats(db_path=db)
+    except Exception as exc:
+        return unavailable(exc)
+    lines = [f"共 {result['notes']} 篇笔记。"]
+    for platform, count in result["platforms"].items():
+        lines.append(f"- {platform}: {count}")
+    return "\n".join(lines)
 
 
 def main():
@@ -116,9 +177,9 @@ def main():
     mcp = FastMCP("chubby-kb")
 
     @mcp.tool()
-    def search_vault(query: str, limit: int = 10) -> str:
-        """在个人知识库中按关键词搜索笔记，返回匹配的相对路径与上下文片段。"""
-        return search(VAULT, query, limit)
+    def search_vault(query: str, limit: int = 10, platform: str = "", tag: str = "") -> str:
+        """在个人知识库中搜索笔记，可按 platform 或 tag 过滤。"""
+        return search(VAULT, query, limit, platform=platform, tag=tag)
 
     @mcp.tool()
     def read_kb_note(path: str) -> str:
@@ -126,9 +187,19 @@ def main():
         return read_note(VAULT, path)
 
     @mcp.tool()
-    def list_recent_notes(limit: int = 10) -> str:
-        """列出知识库中最近修改的笔记。"""
-        return list_recent(VAULT, limit)
+    def list_recent_notes(limit: int = 10, platform: str = "") -> str:
+        """列出知识库中最近修改的笔记，可按 platform 过滤。"""
+        return list_recent(VAULT, limit, platform=platform)
+
+    @mcp.tool()
+    def reindex_vault() -> str:
+        """重建知识库 SQLite 索引。"""
+        return reindex(VAULT)
+
+    @mcp.tool()
+    def vault_index_stats() -> str:
+        """查看知识库索引统计。"""
+        return vault_stats(VAULT)
 
     mcp.run()
 

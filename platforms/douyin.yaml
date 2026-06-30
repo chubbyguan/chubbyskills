@@ -1,0 +1,13 @@
+id: douyin
+name: Douyin
+skill: douyin-transcribe
+script: scripts/transcribe.py
+category: video
+status: heavy
+source_types: [video]
+required_deps: [cmd:ffmpeg, python:funasr]
+optional_deps: []
+output_contract: markdown_schema_v1
+fallback: audio transcription
+sample_source: https://v.douyin.com/example/
+notes: Platform risk is mainly link expiry and anti-bot behavior.

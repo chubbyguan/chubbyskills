@@ -1,0 +1,13 @@
+id: podcast
+name: Podcast
+skill: podcast-transcribe
+script: scripts/transcribe.py
+category: audio
+status: heavy
+source_types: [audio, rss, local_file]
+required_deps: [cmd:ffmpeg, python:faster_whisper]
+optional_deps: []
+output_contract: markdown_schema_v1
+fallback: local audio file
+sample_source: /path/to/audio.mp3
+notes: Long-form audio is slow but stable when local dependencies are ready.

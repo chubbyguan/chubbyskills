@@ -9,6 +9,14 @@ created: 2026-06-30
 tags: [X, AI]
 likes: 42
 replies: 3
+schema_version: 1
+run_id: "example-x"
+source_hash: "c1d2e3f4a5b60718"
+captured_at: "2026-06-30T16:10:00+08:00"
+processed_at: "2026-06-30T16:10:01+08:00"
+content_type: social
+status: success
+assets: []
 ---
 
 # X 推文样例

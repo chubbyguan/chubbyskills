@@ -1,0 +1,10 @@
+# Chubby Skills pipeline config
+# Copy to chubby.yaml or run: python3 tools/chubby.py init
+# Paths can be absolute or relative to this repository.
+output_dir: output
+vault_dir:
+state_file: .chubby/runs.jsonl
+report_dir: runs
+queue_file: inbox/links.txt
+enrich: false
+timeout_seconds: 1800

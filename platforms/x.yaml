@@ -1,0 +1,13 @@
+id: x
+name: X Twitter
+skill: x-ingest
+script: scripts/fetch_tweet.py
+category: social
+status: manual
+source_types: [text, image, video]
+required_deps: []
+optional_deps: [cmd:ffmpeg, python:funasr]
+output_contract: markdown_schema_v1
+fallback: manual text via --fallback-text
+sample_source: https://x.com/example/status/1234567890
+notes: Embed endpoint works for many public posts; fallback text protects capture flow.

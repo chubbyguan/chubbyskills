@@ -40,8 +40,10 @@ Each Skill here is a structured instruction set that Agents can load directly, f
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 tools/check_env.py
+python3 tools/chubby.py quickstart
 ```
+
+`quickstart` does not fetch real platform content. It runs an offline first-use acceptance flow: config initialization, X-link dry-run, example Markdown validation, platform definition checks, temporary vault indexing, and MCP preflight. See [docs/quickstart.md](./docs/quickstart.md).
 
 Install only what you need:
 
@@ -56,6 +58,16 @@ bash setup.sh all      # everything
 Run the one-command workflow:
 
 ```bash
+python3 tools/chubby.py init
+python3 tools/chubby.py quickstart
+python3 tools/chubby.py ingest "https://x.com/user/status/123" --dry-run
+python3 tools/chubby.py run
+python3 tools/chubby.py status --latest
+python3 tools/chubby.py retry --all-failed
+python3 tools/platform_health.py --check
+python3 tools/vault_index.py index ~/Documents/ObsidianVault
+python3 tools/vault_index.py search "AI Agent"
+
 python3 tools/chubby_ingest.py "https://www.bilibili.com/video/BVxxxx" -o output/
 python3 tools/chubby_ingest.py "https://x.com/user/status/123" -o output/ --enrich
 python3 tools/chubby_ingest.py "https://mp.weixin.qq.com/s/xxx" --vault ~/Documents/Obsidian/Inbox
@@ -65,6 +77,7 @@ Validate generated Markdown:
 
 ```bash
 python3 tools/validate_outputs.py examples/outputs
+python3 tools/validate_outputs.py examples/outputs --schema-v1
 python3 tools/validate_outputs.py output/
 ```
 
@@ -78,7 +91,9 @@ python3 tools/validate_outputs.py output/
 | Image/text ingest | Xiaohongshu / X / WeChat | light or zero pip deps | XHS works better with `XHS_COOKIE` |
 | Enrichment | Any Markdown output | `DEEPSEEK_API_KEY` | Adds summary, key points, tags |
 | Knowledge base | Obsidian vault | health check is zero-dep; MCP needs `mcp` | Set `VAULT_DIR` for MCP |
-| One-command workflow | common links and local audio/PDF | uses matching skill deps | Override with `--skill` when detection is ambiguous |
+| Knowledge pipeline | auto-detect, queue, state, reports, retry | uses matching skill deps | `tools/chubby.py` orchestrates; override with `--skill` when ambiguous |
+| Platform health | platform definitions / site templates / status page | zero pip deps | `tools/platform_health.py` validates structure; `--local` checks local deps |
+| Local vault index | Markdown vault / Obsidian | SQLite stdlib | `tools/vault_index.py` supports index/search/recent/read/stats |
 
 ---
 
@@ -251,6 +266,76 @@ Help me transcribe this bilibili
 
 </td></tr>
 </table>
+
+---
+
+## 🔁 Knowledge Pipeline
+
+`tools/chubby.py` is the recommended v0.5 entry point. It keeps the old one-shot ingest workflow, but adds config, queue runs, persistent state, retries, and daily run reports:
+
+```bash
+python3 tools/chubby.py init
+python3 tools/chubby.py doctor
+python3 tools/chubby.py ingest "<url>" -o output/
+python3 tools/chubby.py run --queue inbox/links.txt
+python3 tools/chubby.py status --latest --limit 20
+python3 tools/chubby.py retry --all-failed
+```
+
+The default config is `chubby.yaml`; generate it with `python3 tools/chubby.py init` or copy `chubby.example.yaml`.
+
+- `.chubby/runs.jsonl` stores per-source run state.
+- `runs/YYYY-MM-DD.md` stores a daily Markdown report.
+- Pipeline outputs get schema v1 fields such as `run_id`, `source_hash`, `captured_at`, `processed_at`, `content_type`, `status`, and `assets`.
+- `timeout_seconds` prevents one stuck platform fetch from blocking a whole queue.
+
+Validate v1 outputs:
+
+```bash
+python3 tools/validate_outputs.py output/ --schema-v1
+```
+
+## 🧭 Platform Health & Site Templates
+
+v0.6 turns platform support into versioned, reviewable metadata:
+
+- `platforms/*.yaml`: platform ID, skill directory, entry script, dependencies, status, fallback, sample source
+- `templates/sites/*.yaml`: URL matching, frontmatter fields, asset behavior, post-processing flow
+- `docs/platform-status.md`: generated platform status page
+- `.github/ISSUE_TEMPLATE/platform_failure.yml`: structured issue form for platform failures
+
+Commands:
+
+```bash
+python3 tools/platform_health.py --check
+python3 tools/platform_health.py --check-output
+python3 tools/platform_health.py
+python3 tools/platform_health.py --local --check
+python3 tools/platform_health.py --json
+```
+
+Status page: [docs/platform-status.md](./docs/platform-status.md).
+
+## 🧠 Knowledge Vault
+
+v0.7 adds a usable local knowledge layer:
+
+- `vault-template/`: Obsidian-friendly Inbox / Sources / Processed / Dashboards / Assets / Templates layout
+- `tools/vault_index.py`: SQLite index with search, platform/tag filters, recent notes, read, and stats
+- `knowledge-base-management/scripts/mcp_server.py`: MCP server backed by the same local index
+
+Commands:
+
+```bash
+python3 tools/vault_index.py index ~/Documents/ObsidianVault
+python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py search "brand" --platform wechat
+python3 tools/vault_index.py recent --limit 10
+python3 tools/vault_index.py read "10_Sources/x/example.md" --vault ~/Documents/ObsidianVault
+python3 tools/vault_index.py stats
+```
+
+MCP tools: `search_vault`, `read_kb_note`, `list_recent_notes`, `reindex_vault`, `vault_index_stats`.
 
 ---
 

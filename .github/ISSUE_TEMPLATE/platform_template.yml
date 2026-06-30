@@ -1,0 +1,49 @@
+name: 新平台模板
+description: 提议新增一个平台定义或站点模板
+title: "[Template] "
+labels: ["platform-template", "enhancement"]
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: 平台 ID
+      description: 使用机器可读小写 ID，例如 bilibili、wechat、xiaohongshu。
+      placeholder: new-platform
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: 典型链接
+      description: 至少给 2-3 个公开样例，方便判断 URL 形态和内容类型。
+      placeholder: |
+        https://example.com/a
+        https://example.com/b
+    validations:
+      required: true
+  - type: dropdown
+    id: content_type
+    attributes:
+      label: 主要内容类型
+      options:
+        - article
+        - social text/image
+        - video
+        - audio/podcast
+        - mixed
+    validations:
+      required: true
+  - type: textarea
+    id: expected_output
+    attributes:
+      label: 期望输出
+      description: 写清楚 Markdown 里应该保留哪些字段、图片、视频或作者信息。
+    validations:
+      required: true
+  - type: textarea
+    id: known_limits
+    attributes:
+      label: 已知限制
+      description: 是否需要 cookie、是否有地区限制、是否有反爬、是否有手动 fallback。
+    validations:
+      required: false

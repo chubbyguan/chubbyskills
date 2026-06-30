@@ -1,0 +1,13 @@
+id: weibo
+name: Weibo
+skill: weibo-transcribe
+script: scripts/transcribe.py
+category: video
+status: beta
+source_types: [video]
+required_deps: [cmd:yt-dlp, cmd:ffmpeg, python:funasr]
+optional_deps: []
+output_contract: markdown_schema_v1
+fallback: audio transcription after yt-dlp download
+sample_source: https://m.weibo.cn/status/example
+notes: Mobile links are usually more reliable than desktop links.

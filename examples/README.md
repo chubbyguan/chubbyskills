@@ -12,4 +12,5 @@
 
 ```bash
 python3 tools/validate_outputs.py examples/outputs
+python3 tools/validate_outputs.py examples/outputs --schema-v1
 ```

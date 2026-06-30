@@ -1,0 +1,13 @@
+id: wechat
+name: WeChat Official Account
+skill: wechat-article-ingest
+script: scripts/fetch_article.py
+category: article
+status: beta
+source_types: [article, pdf]
+required_deps: [python:bs4]
+optional_deps: [python:markitdown, python:fitz]
+output_contract: markdown_schema_v1
+fallback: pdf or saved HTML
+sample_source: https://mp.weixin.qq.com/s/example
+notes: HTML structure changes frequently; PDF fallback keeps useful coverage.

@@ -165,9 +165,25 @@ summary: 已被 [[新位置/新文件名|新版本]] 取代。
 
 ## 3. 工具集成 (Tools)
 
+### 🧠 本地索引（本仓库提供，零依赖）
+
+`tools/vault_index.py` 会把 Markdown vault 建成 SQLite 索引，支持关键词搜索、平台/标签过滤、最近笔记、读取笔记和统计。SQLite FTS5 可用时自动启用；不可用时降级为 LIKE 搜索，中文内容也能命中。
+
+```bash
+# 在仓库根目录运行
+python3 tools/vault_index.py index "$VAULT_DIR"
+python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py search "品牌" --platform wechat
+python3 tools/vault_index.py recent --limit 10
+python3 tools/vault_index.py read "10_Sources/x/example.md" --vault "$VAULT_DIR"
+python3 tools/vault_index.py stats
+```
+
+默认索引位置：`.chubby/vault_index.sqlite`。也可以用 `--db /path/to/index.sqlite` 指定。
+
 ### 🔌 MCP Server（本仓库提供，推荐）
 
-`scripts/mcp_server.py` 把知识库的「搜索 / 读取 / 最近笔记」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
+`scripts/mcp_server.py` 把知识库的「搜索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
 
 ```bash
 pip install mcp
@@ -188,7 +204,7 @@ VAULT_DIR=/path/to/your-vault python3 scripts/mcp_server.py
 }
 ```
 
-暴露的工具：`search_vault(query, limit)`、`read_kb_note(path)`、`list_recent_notes(limit)`。
+暴露的工具：`search_vault(query, limit, platform, tag)`、`read_kb_note(path)`、`list_recent_notes(limit, platform)`、`reindex_vault()`、`vault_index_stats()`。
 内置路径穿越防护，只能读 `VAULT_DIR` 范围内的笔记。
 
 ---

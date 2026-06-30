@@ -20,6 +20,10 @@ build/
 
 # Output files
 output/
+runs/
+inbox/
+.chubby/
+chubby.yaml
 *.md.bak
 *.assets/
 *.jpg

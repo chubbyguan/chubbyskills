@@ -1,0 +1,13 @@
+id: youtube
+name: YouTube
+skill: youtube-transcribe
+script: scripts/transcribe.py
+category: video
+status: stable
+source_types: [video, subtitle]
+required_deps: [cmd:yt-dlp]
+optional_deps: [cmd:ffmpeg, python:funasr]
+output_contract: markdown_schema_v1
+fallback: subtitle-first then audio transcription
+sample_source: https://www.youtube.com/watch?v=example
+notes: Captions provide the fastest path; audio transcription remains available.

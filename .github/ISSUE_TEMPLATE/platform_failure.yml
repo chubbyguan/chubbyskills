@@ -1,0 +1,53 @@
+name: 平台健康失败
+description: 某个平台抓取失败、状态页不准确、模板字段不够用
+title: "[Platform] "
+labels: ["platform-health"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - bilibili
+        - douyin
+        - podcast
+        - tiktok
+        - wechat
+        - weibo
+        - x
+        - xiaohongshu
+        - youtube
+        - zhihu
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 典型链接或输入
+      description: 可公开则贴真实链接；涉及隐私可贴脱敏结构。
+      placeholder: https://...
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: 复现命令
+      render: bash
+      placeholder: python3 tools/chubby.py ingest "链接" --skill x
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: 错误输出或异常结果
+      description: 贴 stderr 关键部分、生成的 Markdown 片段或状态页截图描述。
+    validations:
+      required: true
+  - type: checkboxes
+    id: local_check
+    attributes:
+      label: 本地检查
+      options:
+        - label: 我跑过 `python3 tools/platform_health.py --local`
+        - label: 我确认这个链接可以在浏览器中正常打开
+        - label: 如果平台需要 cookie，我只使用了自己的账号授权信息

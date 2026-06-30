@@ -1,6 +1,7 @@
 # 知识库管理
 #
 # 健康检查（vault_health_check.py）：零依赖（仅 Python 标准库）
+# 本地索引（tools/vault_index.py）：零依赖（sqlite3 标准库）
 #
 # MCP server（mcp_server.py）才需要：
 #   pip install mcp

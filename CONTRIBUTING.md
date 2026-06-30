@@ -17,6 +17,17 @@ chubbyskills 的每个 skill 都要能**独立 clone 安装**（README 的安装
 4. **采集类 skill 必须带「合规声明」**（见现有 skill 末尾）
 5. **产出 Markdown** 遵循[统一 frontmatter 约定](README.md#-统一-frontmatter-约定)，带 `platform` 字段，便于知识库聚合
 
+### 提交平台定义 / 站点模板
+
+v0.6 之后，每个平台除了 skill 本身，还需要声明健康检查和知识库模板：
+
+1. 在 `platforms/<platform>.yaml` 里声明平台 ID、skill 目录、入口脚本、依赖、fallback 和样例链接
+2. 在 `templates/sites/<platform>.yaml` 里声明 URL 匹配、frontmatter 字段、资源保存和后处理流程
+3. 跑 `python3 tools/platform_health.py --check`，确认定义和模板能通过校验
+4. 如果修改了平台状态说明，跑 `python3 tools/platform_health.py` 更新 `docs/platform-status.md`
+
+平台状态页只做结构和本地依赖检查，不会在 CI 里访问真实平台。真实链接 smoke test 请在 PR 描述里贴命令和结果。
+
 ### 代码规范
 
 - 优先**零依赖**（仅标准库）；重依赖（`funasr` / `torch` 等）只在必要路径**延迟 import**，别让纯文本功能也被迫装 GPU 栈
@@ -24,6 +35,7 @@ chubbyskills 的每个 skill 都要能**独立 clone 安装**（README 的安装
 - 脚本用 `argparse`；**结果路径打到 stdout、日志打到 stderr**（方便串管道）
 - 提交前跑 `python3 -m py_compile <脚本>` 过语法
 - 若改动输出 Markdown，请跑 `python3 tools/validate_outputs.py examples/outputs` 或用你的真实输出目录替代 `examples/outputs`
+- 若改动平台定义 / 模板，请跑 `python3 tools/platform_health.py --check`
 - 若改动公共工具，请跑 `python3 -m unittest discover -s tests -v`
 - 真实跑一遍：采集类 skill 请用**真实链接**验证，造数据测不出字段命名这类坑
 

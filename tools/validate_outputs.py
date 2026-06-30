@@ -21,6 +21,17 @@ from datetime import datetime
 
 
 REQUIRED_KEYS = ("title", "type", "platform", "source", "created")
+SCHEMA_V1_REQUIRED_KEYS = (
+    "schema_version",
+    "run_id",
+    "source_hash",
+    "captured_at",
+    "processed_at",
+    "content_type",
+    "status",
+    "assets",
+)
+VALID_STATUSES = {"success", "failed", "dry_run"}
 KNOWN_PLATFORMS = {
     "bilibili",
     "content",
@@ -75,7 +86,21 @@ def validate_created(value):
         return False
 
 
-def validate_file(path):
+def validate_iso_datetime(value):
+    value = clean_scalar(value)
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
+
+
+def is_inline_list(value):
+    value = clean_scalar(value)
+    return value.startswith("[") and value.endswith("]")
+
+
+def validate_file(path, require_schema_v1=False):
     problems = []
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
@@ -97,8 +122,37 @@ def validate_file(path):
     if created and not validate_created(created):
         problems.append({"level": "error", "message": f"created must be YYYY-MM-DD: {created}"})
 
+    schema_version = clean_scalar(fields.get("schema_version", ""))
+    should_validate_schema_v1 = require_schema_v1 or bool(schema_version)
+    if require_schema_v1 and schema_version != "1":
+        problems.append({"level": "error", "message": "schema_version must be 1"})
+    if schema_version and schema_version != "1":
+        problems.append({"level": "error", "message": f"unsupported schema_version: {schema_version}"})
+
+    if should_validate_schema_v1 and schema_version == "1":
+        for key in SCHEMA_V1_REQUIRED_KEYS:
+            if key not in fields or not clean_scalar(fields[key]):
+                problems.append({"level": "error", "message": f"missing schema v1 field: {key}"})
+
+        for key in ("captured_at", "processed_at"):
+            value = fields.get(key, "")
+            if value and not validate_iso_datetime(value):
+                problems.append({"level": "error", "message": f"{key} must be ISO datetime: {value}"})
+
+        status = clean_scalar(fields.get("status", ""))
+        if status and status not in VALID_STATUSES:
+            problems.append({"level": "error", "message": f"invalid status: {status}"})
+
+        source_hash = clean_scalar(fields.get("source_hash", ""))
+        if source_hash and not re.match(r"^[0-9a-f]{12,64}$", source_hash):
+            problems.append({"level": "error", "message": "source_hash should be lowercase hex"})
+
+        assets = clean_scalar(fields.get("assets", ""))
+        if assets and not is_inline_list(assets):
+            problems.append({"level": "error", "message": "assets should use inline list form"})
+
     tags = fields.get("tags")
-    if tags and not tags.startswith("["):
+    if tags and not is_inline_list(tags):
         problems.append({"level": "warning", "message": "tags should use inline list form, e.g. [B站]"})
 
     if not re.search(r"^#\s+\S+", body, re.MULTILINE):
@@ -127,6 +181,7 @@ def main():
     parser = argparse.ArgumentParser(description="Validate chubbyskills Markdown outputs")
     parser.add_argument("paths", nargs="+", help="Markdown files or directories")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    parser.add_argument("--schema-v1", action="store_true", help="Require pipeline schema v1 fields")
     args = parser.parse_args()
 
     files = sorted(set(iter_markdown(args.paths)))
@@ -135,7 +190,7 @@ def main():
     warning_count = 0
 
     for path in files:
-        problems = validate_file(path)
+        problems = validate_file(path, require_schema_v1=args.schema_v1)
         for problem in problems:
             if problem["level"] == "error":
                 error_count += 1

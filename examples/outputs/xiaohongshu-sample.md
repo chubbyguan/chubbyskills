@@ -10,6 +10,14 @@ tags: [小红书, 选题]
 likes: 128
 collects: 32
 comments: 9
+schema_version: 1
+run_id: "example-xhs"
+source_hash: "e1f2a3b4c5d60718"
+captured_at: "2026-06-30T16:20:00+08:00"
+processed_at: "2026-06-30T16:20:02+08:00"
+content_type: social
+status: success
+assets: [xiaohongshu-sample.assets]
 ---
 
 # 小红书图文样例

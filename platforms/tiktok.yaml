@@ -1,0 +1,13 @@
+id: tiktok
+name: TikTok
+skill: tiktok-transcribe
+script: scripts/transcribe.py
+category: video
+status: beta
+source_types: [video]
+required_deps: [cmd:yt-dlp, cmd:ffmpeg, python:funasr]
+optional_deps: []
+output_contract: markdown_schema_v1
+fallback: audio transcription after yt-dlp download
+sample_source: https://www.tiktok.com/@user/video/1234567890
+notes: Region limits and anti-bot behavior may affect downloads.
