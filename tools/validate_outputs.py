@@ -20,6 +20,7 @@ import sys
 from datetime import datetime
 
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REQUIRED_KEYS = ("title", "type", "platform", "source", "created")
 SCHEMA_V1_REQUIRED_KEYS = (
     "schema_version",
@@ -48,6 +49,40 @@ KNOWN_PLATFORMS = {
     "youtube",
     "zhihu",
 }
+
+
+def platform_ids_from_dir(directory):
+    platforms = set()
+    if not directory or not os.path.isdir(directory):
+        return platforms
+    for name in os.listdir(directory):
+        if not name.endswith(".yaml"):
+            continue
+        path = os.path.join(directory, name)
+        try:
+            fields = parse_frontmatter_like_yaml(path)
+        except OSError:
+            continue
+        platform_id = clean_scalar(fields.get("id", ""))
+        if platform_id:
+            platforms.add(platform_id)
+    return platforms
+
+
+def parse_frontmatter_like_yaml(path):
+    data = {}
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if not line.strip() or line.lstrip().startswith("#") or ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            data[key.strip()] = value.strip()
+    return data
+
+
+def known_platforms(platform_dir=None):
+    directory = platform_dir or os.environ.get("CHUBBY_PLATFORM_DIR") or os.path.join(ROOT, "platforms")
+    return set(KNOWN_PLATFORMS) | platform_ids_from_dir(directory)
 
 
 def split_frontmatter(text):
@@ -100,7 +135,7 @@ def is_inline_list(value):
     return value.startswith("[") and value.endswith("]")
 
 
-def validate_file(path, require_schema_v1=False):
+def validate_file(path, require_schema_v1=False, allowed_platforms=None):
     problems = []
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
@@ -115,7 +150,8 @@ def validate_file(path, require_schema_v1=False):
             problems.append({"level": "error", "message": f"missing required field: {key}"})
 
     platform = clean_scalar(fields.get("platform", ""))
-    if platform and platform not in KNOWN_PLATFORMS:
+    platform_set = allowed_platforms or known_platforms()
+    if platform and platform not in platform_set:
         problems.append({"level": "error", "message": f"unknown platform: {platform}"})
 
     created = fields.get("created", "")
@@ -182,6 +218,7 @@ def main():
     parser.add_argument("paths", nargs="+", help="Markdown files or directories")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     parser.add_argument("--schema-v1", action="store_true", help="Require pipeline schema v1 fields")
+    parser.add_argument("--platform-dir", help="Directory with platform YAML files; defaults to platforms/")
     args = parser.parse_args()
 
     files = sorted(set(iter_markdown(args.paths)))
@@ -189,8 +226,9 @@ def main():
     error_count = 0
     warning_count = 0
 
+    platform_set = known_platforms(args.platform_dir)
     for path in files:
-        problems = validate_file(path, require_schema_v1=args.schema_v1)
+        problems = validate_file(path, require_schema_v1=args.schema_v1, allowed_platforms=platform_set)
         for problem in problems:
             if problem["level"] == "error":
                 error_count += 1

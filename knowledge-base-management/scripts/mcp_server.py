@@ -2,7 +2,7 @@
 """
 知识库 MCP Server —— 让任何 Agent 都能检索你的 Obsidian 知识库
 
-把本地 vault 的「搜索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具。
+把本地 vault 的「搜索 / 语义检索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具。
 配合采集类 skill（采集加工 → 入库 → 索引）形成「skill 负责写入、MCP 负责被调用查询」的闭环。
 
 依赖：pip install mcp        （仅本 server 需要；知识库其它脚本零依赖）
@@ -125,6 +125,25 @@ def search(vault, query, limit=10, platform="", tag=""):
     return format_notes(rows, f"知识库中未找到与「{query}」相关的笔记。")
 
 
+def semantic_search(vault, query, limit=10, platform="", tag=""):
+    """按 semantic-lite 排序搜索索引，适合概念查询。"""
+    if not query.strip():
+        return "请提供搜索关键词。"
+    try:
+        indexer = require_vault_index()
+        db = ensure_index(vault)
+        rows = indexer.semantic_search(
+            db_path=db,
+            query=query,
+            limit=limit,
+            platform=platform or None,
+            tag=tag or None,
+        )
+    except Exception as exc:
+        return unavailable(exc)
+    return format_notes(rows, f"知识库中未找到与「{query}」语义相关的笔记。")
+
+
 def read_note(vault, path):
     """读取某篇笔记全文（path 相对 vault 根），过长则截断。"""
     try:
@@ -180,6 +199,11 @@ def main():
     def search_vault(query: str, limit: int = 10, platform: str = "", tag: str = "") -> str:
         """在个人知识库中搜索笔记，可按 platform 或 tag 过滤。"""
         return search(VAULT, query, limit, platform=platform, tag=tag)
+
+    @mcp.tool()
+    def semantic_search_vault(query: str, limit: int = 10, platform: str = "", tag: str = "") -> str:
+        """在个人知识库中做 semantic-lite 概念检索，可按 platform 或 tag 过滤。"""
+        return semantic_search(VAULT, query, limit, platform=platform, tag=tag)
 
     @mcp.tool()
     def read_kb_note(path: str) -> str:

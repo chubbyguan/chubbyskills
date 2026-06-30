@@ -8,11 +8,13 @@ Chinese notes still work on default SQLite tokenizers.
 """
 
 import argparse
+import math
 import json
 import os
 import re
 import sqlite3
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / ".chubby" / "vault_index.sqlite"
 MAX_READ_CHARS = 12000
 SNIPPET_CTX = 80
+CJK_RE = re.compile(r"[\u4e00-\u9fff]+")
+WORD_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
 def split_frontmatter(text):
@@ -211,6 +215,88 @@ def snippet(text, query):
     return ("..." if start else "") + value + ("..." if end < len(text) else "")
 
 
+def semantic_terms(text):
+    text = str(text or "").lower()
+    terms = WORD_RE.findall(text)
+    for block in CJK_RE.findall(text):
+        terms.append(block)
+        if len(block) > 1:
+            terms.extend(block[i : i + 2] for i in range(len(block) - 1))
+        if len(block) > 2:
+            terms.extend(block[i : i + 3] for i in range(len(block) - 2))
+    return [term for term in terms if term]
+
+
+def semantic_vector(*parts):
+    return Counter(term for part in parts for term in semantic_terms(part))
+
+
+def cosine_score(query_vector, doc_vector):
+    if not query_vector or not doc_vector:
+        return 0.0
+    overlap = set(query_vector) & set(doc_vector)
+    dot = sum(query_vector[term] * doc_vector[term] for term in overlap)
+    if not dot:
+        return 0.0
+    q_norm = math.sqrt(sum(value * value for value in query_vector.values()))
+    d_norm = math.sqrt(sum(value * value for value in doc_vector.values()))
+    return dot / (q_norm * d_norm)
+
+
+def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=None):
+    require_db(db_path)
+    query_vector = semantic_vector(query)
+    if not query_vector:
+        return []
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        params = []
+        where = []
+        if platform:
+            where.append("platform = ?")
+            params.append(platform)
+        if tag:
+            where.append("LOWER(tags) LIKE ?")
+            params.append(f"%{tag.lower()}%")
+        sql = "SELECT path, title, platform, tags, summary, modified, body FROM notes"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        rows = []
+        for row in conn.execute(sql, params).fetchall():
+            doc_vector = semantic_vector(
+                row[1],
+                row[3],
+                row[4],
+                row[6],
+                row[1],
+                row[1],
+                row[3],
+            )
+            score = cosine_score(query_vector, doc_vector)
+            lower_blob = " ".join(str(part or "").lower() for part in (row[1], row[3], row[4], row[6]))
+            if query.lower() in lower_blob:
+                score += 0.15
+            if score <= 0:
+                continue
+            rows.append(
+                {
+                    "path": row[0],
+                    "title": row[1],
+                    "platform": row[2],
+                    "tags": row[3],
+                    "summary": row[4],
+                    "modified": row[5],
+                    "snippet": snippet(row[6] or row[4] or "", query),
+                    "score": round(score, 4),
+                }
+            )
+        rows.sort(key=lambda item: (item["score"], item.get("modified") or 0), reverse=True)
+        return rows[:limit]
+    finally:
+        conn.close()
+
+
 def like_query(conn, query, limit=10, platform=None, tag=None):
     params = []
     where = []
@@ -340,7 +426,8 @@ def print_rows(rows):
         return
     for idx, row in enumerate(rows, 1):
         day = datetime.fromtimestamp(row["modified"]).strftime("%Y-%m-%d") if row.get("modified") else "-"
-        print(f"{idx}. {row.get('title') or row['path']} [{row.get('platform') or '-'}] {day}")
+        score = f" score={row['score']}" if "score" in row else ""
+        print(f"{idx}. {row.get('title') or row['path']} [{row.get('platform') or '-'}] {day}{score}")
         print(f"   {row['path']}")
         if row.get("snippet"):
             print(f"   {row['snippet']}")
@@ -368,6 +455,13 @@ def build_parser():
     search_cmd.add_argument("--platform")
     search_cmd.add_argument("--tag")
     search_cmd.add_argument("--json", action="store_true")
+
+    semantic_cmd = sub.add_parser("semantic", help="Semantic-lite search over indexed notes")
+    semantic_cmd.add_argument("query", help="Search query")
+    semantic_cmd.add_argument("--limit", type=int, default=10)
+    semantic_cmd.add_argument("--platform")
+    semantic_cmd.add_argument("--tag")
+    semantic_cmd.add_argument("--json", action="store_true")
 
     recent_cmd = sub.add_parser("recent", help="List recent notes")
     recent_cmd.add_argument("--limit", type=int, default=10)
@@ -407,6 +501,14 @@ def run_command(args, db_path):
 
     if args.command == "search":
         rows = search(db_path=db_path, query=args.query, limit=args.limit, platform=args.platform, tag=args.tag)
+        if args.json:
+            print(json.dumps({"notes": rows}, ensure_ascii=False, indent=2))
+        else:
+            print_rows(rows)
+        return 0
+
+    if args.command == "semantic":
+        rows = semantic_search(db_path=db_path, query=args.query, limit=args.limit, platform=args.platform, tag=args.tag)
         if args.json:
             print(json.dumps({"notes": rows}, ensure_ascii=False, indent=2))
         else:

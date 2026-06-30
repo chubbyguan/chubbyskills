@@ -1,5 +1,7 @@
 import os
 import shutil
+import subprocess
+import sys
 import types
 import importlib.util
 import tempfile
@@ -7,8 +9,10 @@ import unittest
 
 from tools import chubby
 from tools import chubby_ingest
+from tools import platform_adapter
 from tools import platform_health
 from tools import validate_outputs
+from tools import vault_curator
 from tools import vault_index
 
 
@@ -309,7 +313,7 @@ class PlatformHealthTest(unittest.TestCase):
             platform_health.DEFAULT_TEMPLATE_DIR,
             platform_health.ROOT,
         )
-        self.assertEqual(len(results), 10)
+        self.assertGreaterEqual(len(results), 10)
         self.assertFalse(platform_health.has_errors(results))
 
     def test_simple_yaml_parser_reads_inline_lists(self):
@@ -476,6 +480,10 @@ class VaultIndexTest(unittest.TestCase):
 
             note = vault_index.read_note(vault, "10_Sources/x/agent.md")
             self.assertIn("AI Agent workflow", note["text"])
+
+            semantic_rows = vault_index.semantic_search(db_path=db, query="内容策略")
+            self.assertEqual(semantic_rows[0]["path"], "10_Sources/wechat/brand.md")
+            self.assertGreater(semantic_rows[0]["score"], 0)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -519,6 +527,7 @@ class KnowledgeBaseMcpTest(unittest.TestCase):
                 )
             module = self.load_mcp_server()
             self.assertIn("10_Sources/x/agent.md", module.search(vault, "Agent", platform="x"))
+            self.assertIn("10_Sources/x/agent.md", module.semantic_search(vault, "retrieval", platform="x"))
             self.assertIn("10_Sources/x/agent.md", module.list_recent(vault, limit=5, platform="x"))
             self.assertIn("x: 1", module.vault_stats(vault))
         finally:
@@ -550,6 +559,113 @@ class KnowledgeBaseMcpTest(unittest.TestCase):
         result = module.read_note("", "README.md")
         self.assertIn("索引不可用", result)
         self.assertIn("VAULT_DIR", result)
+
+
+class VaultCuratorTest(unittest.TestCase):
+    def write_inbox_note(self, vault, name="note.md", extra_frontmatter="", body=""):
+        inbox = os.path.join(vault, "00_Inbox")
+        os.makedirs(inbox, exist_ok=True)
+        path = os.path.join(inbox, name)
+        body_text = body or "- Build a repeatable capture loop.\n- Review useful ideas weekly.\n"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(
+                "---\n"
+                "title: Strategy Note\n"
+                "type: note\n"
+                "platform: wechat\n"
+                "source: https://example.com/a\n"
+                "created: 2026-06-30\n"
+                "tags: [strategy]\n"
+                f"{extra_frontmatter}"
+                "---\n\n"
+                "# Strategy Note\n\n"
+                f"{body_text}"
+            )
+        return path
+
+    def test_archive_moves_inbox_note_to_source_folder(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            vault = os.path.join(tmpdir, "vault")
+            self.write_inbox_note(vault)
+            actions = vault_curator.archive_vault(vault, dry_run=False)
+            self.assertEqual(actions[0]["target"], "10_Sources/wechat/note.md")
+            target = os.path.join(vault, "10_Sources", "wechat", "note.md")
+            self.assertTrue(os.path.exists(target))
+            with open(target, encoding="utf-8") as f:
+                text = f.read()
+            self.assertIn("archived_from", text)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_generate_card_writes_knowledge_card(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            vault = os.path.join(tmpdir, "vault")
+            self.write_inbox_note(vault, body="This note explains a durable content strategy.\n\n- Capture signals.\n- Distill cards.")
+            action = vault_curator.generate_card(vault, "00_Inbox/note.md", dry_run=False)
+            self.assertEqual(action["status"], "written")
+            target = os.path.join(vault, action["target"])
+            self.assertTrue(os.path.exists(target))
+            with open(target, encoding="utf-8") as f:
+                text = f.read()
+            self.assertIn("type: knowledge_card", text)
+            self.assertIn("Capture signals", text)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class PlatformAdapterTest(unittest.TestCase):
+    def test_scaffold_platform_creates_valid_definition(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            args = types.SimpleNamespace(
+                id="demo-news",
+                name="Demo News",
+                skill="demo-news-ingest",
+                script="scripts/fetch_demo_news.py",
+                category="article",
+                status="experimental",
+                source_types="article",
+                required_deps="",
+                optional_deps="",
+                fallback="manual",
+                sample_source="https://demo.example/news/1",
+                match="demo.example",
+                notes="test scaffold",
+                force=False,
+            )
+            files = platform_adapter.scaffold_platform(args, repo_root=tmpdir)
+            self.assertEqual(len(files), 4)
+            results = platform_health.run_checks(
+                platform_health.Path(tmpdir) / "platforms",
+                platform_health.Path(tmpdir) / "templates" / "sites",
+                platform_health.Path(tmpdir),
+            )
+            self.assertFalse(platform_health.has_errors(results))
+
+            output = os.path.join(tmpdir, "output")
+            script = os.path.join(tmpdir, "demo-news-ingest", "scripts", "fetch_demo_news.py")
+            subprocess.run(
+                [sys.executable, script, args.sample_source, "--output", output],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            sample = os.path.join(output, "demo-news-sample.md")
+            platform_set = validate_outputs.known_platforms(os.path.join(tmpdir, "platforms"))
+            errors = [
+                problem
+                for problem in validate_outputs.validate_file(
+                    sample,
+                    require_schema_v1=True,
+                    allowed_platforms=platform_set,
+                )
+                if problem["level"] == "error"
+            ]
+            self.assertEqual(errors, [])
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -21,12 +21,21 @@ chubbyskills 的每个 skill 都要能**独立 clone 安装**（README 的安装
 
 v0.6 之后，每个平台除了 skill 本身，还需要声明健康检查和知识库模板：
 
+推荐先用 scaffold：
+
+```bash
+python3 tools/platform_adapter.py new <platform-id> \
+  --name "<平台名>" \
+  --sample-source "https://example.com/item/1" \
+  --match "example.com"
+```
+
 1. 在 `platforms/<platform>.yaml` 里声明平台 ID、skill 目录、入口脚本、依赖、fallback 和样例链接
 2. 在 `templates/sites/<platform>.yaml` 里声明 URL 匹配、frontmatter 字段、资源保存和后处理流程
 3. 跑 `python3 tools/platform_health.py --check`，确认定义和模板能通过校验
 4. 如果修改了平台状态说明，跑 `python3 tools/platform_health.py` 更新 `docs/platform-status.md`
 
-平台状态页只做结构和本地依赖检查，不会在 CI 里访问真实平台。真实链接 smoke test 请在 PR 描述里贴命令和结果。
+平台状态页只做结构和本地依赖检查，不会在 CI 里访问真实平台。真实链接 smoke test 请在 PR 描述里贴命令和结果。更完整的规则见 [docs/contributor-platform-adapter.md](docs/contributor-platform-adapter.md)。
 
 ### 代码规范
 

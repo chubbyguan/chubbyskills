@@ -340,6 +340,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Validate platforms and generate docs/platform-status.md")
     parser.add_argument("--platform-dir", default=str(DEFAULT_PLATFORM_DIR), help="Directory with platform YAML files")
     parser.add_argument("--template-dir", default=str(DEFAULT_TEMPLATE_DIR), help="Directory with site template YAML files")
+    parser.add_argument("--repo-root", default=str(ROOT), help="Repository root used to resolve skill scripts")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Markdown output path")
     parser.add_argument("--local", action="store_true", help="Check local commands, Python packages, and env vars")
     parser.add_argument("--check", action="store_true", help="Validate only; do not write Markdown")
@@ -349,7 +350,8 @@ def main(argv=None):
 
     platform_dir = Path(args.platform_dir)
     template_dir = Path(args.template_dir)
-    results = run_checks(platform_dir, template_dir, ROOT, local=args.local)
+    repo_root = Path(args.repo_root)
+    results = run_checks(platform_dir, template_dir, repo_root, local=args.local)
 
     if args.json:
         print(json.dumps({"platforms": results}, ensure_ascii=False, indent=2))

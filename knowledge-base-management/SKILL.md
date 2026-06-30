@@ -167,12 +167,13 @@ summary: 已被 [[新位置/新文件名|新版本]] 取代。
 
 ### 🧠 本地索引（本仓库提供，零依赖）
 
-`tools/vault_index.py` 会把 Markdown vault 建成 SQLite 索引，支持关键词搜索、平台/标签过滤、最近笔记、读取笔记和统计。SQLite FTS5 可用时自动启用；不可用时降级为 LIKE 搜索，中文内容也能命中。
+`tools/vault_index.py` 会把 Markdown vault 建成 SQLite 索引，支持关键词搜索、semantic-lite 检索、平台/标签过滤、最近笔记、读取笔记和统计。SQLite FTS5 可用时自动启用；不可用时降级为 LIKE 搜索，中文内容也能命中。
 
 ```bash
 # 在仓库根目录运行
 python3 tools/vault_index.py index "$VAULT_DIR"
 python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py semantic "内容策略"
 python3 tools/vault_index.py search "品牌" --platform wechat
 python3 tools/vault_index.py recent --limit 10
 python3 tools/vault_index.py read "10_Sources/x/example.md" --vault "$VAULT_DIR"
@@ -181,9 +182,22 @@ python3 tools/vault_index.py stats
 
 默认索引位置：`.chubby/vault_index.sqlite`。也可以用 `--db /path/to/index.sqlite` 指定。
 
+### 🗂️ 自动归档与知识卡片（本仓库提供，零依赖）
+
+`tools/vault_curator.py` 默认 dry-run，适合先看会移动/生成什么：
+
+```bash
+python3 tools/vault_curator.py archive "$VAULT_DIR"
+python3 tools/vault_curator.py archive "$VAULT_DIR" --apply
+python3 tools/vault_curator.py card "$VAULT_DIR" "10_Sources/x/example.md" --apply
+```
+
+- `archive` 只处理 `00_Inbox/**/*.md`，按 `platform`、`summary`、processed 标签归入 `10_Sources/<platform>/` 或 `20_Processed/`。
+- `card` 从单篇笔记生成 `20_Processed/Cards/*.md`，保留来源、摘要、要点和 tags。
+
 ### 🔌 MCP Server（本仓库提供，推荐）
 
-`scripts/mcp_server.py` 把知识库的「搜索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
+`scripts/mcp_server.py` 把知识库的「搜索 / 语义检索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
 
 ```bash
 pip install mcp
@@ -204,7 +218,7 @@ VAULT_DIR=/path/to/your-vault python3 scripts/mcp_server.py
 }
 ```
 
-暴露的工具：`search_vault(query, limit, platform, tag)`、`read_kb_note(path)`、`list_recent_notes(limit, platform)`、`reindex_vault()`、`vault_index_stats()`。
+暴露的工具：`search_vault(query, limit, platform, tag)`、`semantic_search_vault(query, limit, platform, tag)`、`read_kb_note(path)`、`list_recent_notes(limit, platform)`、`reindex_vault()`、`vault_index_stats()`。
 内置路径穿越防护，只能读 `VAULT_DIR` 范围内的笔记。
 
 ---

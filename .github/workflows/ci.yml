@@ -31,8 +31,13 @@ jobs:
           python tools/validate_outputs.py examples/outputs --schema-v1
           python tools/platform_health.py --check
           python tools/platform_health.py --check-output
+          tmp_adapter="$(mktemp -d)"
+          python tools/platform_adapter.py new demo-news --name "Demo News" --sample-source "https://demo.example/news/1" --match demo.example --repo-root "$tmp_adapter"
+          python tools/platform_health.py --platform-dir "$tmp_adapter/platforms" --template-dir "$tmp_adapter/templates/sites" --repo-root "$tmp_adapter" --check
+          rm -rf "$tmp_adapter"
           python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite index examples/outputs
           python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite search 样例 --limit 2
+          python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite semantic 内容策略 --limit 2
           python tools/vault_index.py --db /tmp/chubby-vault-index.sqlite stats
           rm -f /tmp/chubby-vault-index.sqlite
 
@@ -47,6 +52,8 @@ jobs:
           python tools/chubby.py quickstart --ephemeral --no-state
           python tools/chubby_ingest.py --help
           python tools/platform_health.py --help
+          python tools/platform_adapter.py --help
+          python tools/vault_curator.py --help
           python tools/vault_index.py --help
           python tools/validate_outputs.py --help
           python industry-intelligence-radar/scripts/scan.py --help

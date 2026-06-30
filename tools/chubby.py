@@ -666,11 +666,14 @@ def check_example_vault_index():
         db = Path(tmpdir) / "quickstart-vault.sqlite"
         result = vault_index.index_vault(ROOT / "examples" / "outputs", db_path=db)
         rows = vault_index.search(db_path=db, query="样例", limit=2)
+        semantic_rows = vault_index.semantic_search(db_path=db, query="内容策略", limit=2)
         stats = vault_index.stats(db_path=db)
     if result["notes"] < 1:
         raise RuntimeError("examples/outputs has no notes to index")
     if not rows:
         raise RuntimeError("sample search returned no notes")
+    if not semantic_rows:
+        raise RuntimeError("sample semantic search returned no notes")
     return result, stats
 
 
@@ -832,7 +835,7 @@ def run_quickstart(args, config):
             quickstart_step(
                 "知识库索引",
                 "ok",
-                f"示例 vault 索引 {index_result['notes']} 篇，平台 {len(index_stats['platforms'])} 类",
+                f"示例 vault 索引 {index_result['notes']} 篇，平台 {len(index_stats['platforms'])} 类，semantic-lite 可用",
             )
         )
     except Exception as exc:

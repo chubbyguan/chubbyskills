@@ -94,6 +94,8 @@ python3 tools/validate_outputs.py output/
 | Knowledge pipeline | auto-detect, queue, state, reports, retry | uses matching skill deps | `tools/chubby.py` orchestrates; override with `--skill` when ambiguous |
 | Platform health | platform definitions / site templates / status page | zero pip deps | `tools/platform_health.py` validates structure; `--local` checks local deps |
 | Local vault index | Markdown vault / Obsidian | SQLite stdlib | `tools/vault_index.py` supports index/search/recent/read/stats |
+| Knowledge automation | semantic-lite / archive / cards | SQLite + stdlib | `tools/vault_curator.py` defaults to dry-run before moving files |
+| Contributor platform adapters | platform definition / template / skill scaffold | zero pip deps | `tools/platform_adapter.py new ...` creates a reviewable scaffold |
 
 ---
 
@@ -318,10 +320,11 @@ Status page: [docs/platform-status.md](./docs/platform-status.md).
 
 ## 🧠 Knowledge Vault
 
-v0.7 adds a usable local knowledge layer:
+v0.7/v0.9 add a usable local knowledge layer:
 
 - `vault-template/`: Obsidian-friendly Inbox / Sources / Processed / Dashboards / Assets / Templates layout
-- `tools/vault_index.py`: SQLite index with search, platform/tag filters, recent notes, read, and stats
+- `tools/vault_index.py`: SQLite index with keyword search, semantic-lite search, platform/tag filters, recent notes, read, and stats
+- `tools/vault_curator.py`: dry-run-first auto archive and knowledge card generation
 - `knowledge-base-management/scripts/mcp_server.py`: MCP server backed by the same local index
 
 Commands:
@@ -329,13 +332,30 @@ Commands:
 ```bash
 python3 tools/vault_index.py index ~/Documents/ObsidianVault
 python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py semantic "content strategy"
 python3 tools/vault_index.py search "brand" --platform wechat
 python3 tools/vault_index.py recent --limit 10
 python3 tools/vault_index.py read "10_Sources/x/example.md" --vault ~/Documents/ObsidianVault
 python3 tools/vault_index.py stats
+python3 tools/vault_curator.py archive ~/Documents/ObsidianVault
+python3 tools/vault_curator.py card ~/Documents/ObsidianVault "10_Sources/x/example.md" --apply
 ```
 
-MCP tools: `search_vault`, `read_kb_note`, `list_recent_notes`, `reindex_vault`, `vault_index_stats`.
+MCP tools: `search_vault`, `semantic_search_vault`, `read_kb_note`, `list_recent_notes`, `reindex_vault`, `vault_index_stats`.
+
+Knowledge automation docs: [docs/knowledge-automation.md](./docs/knowledge-automation.md).
+
+Contributor platform scaffold:
+
+```bash
+python3 tools/platform_adapter.py new hacker-news \
+  --name "Hacker News" \
+  --sample-source "https://news.ycombinator.com/item?id=123" \
+  --match "news.ycombinator.com"
+python3 tools/platform_health.py --check
+```
+
+Contributor docs: [docs/contributor-platform-adapter.md](./docs/contributor-platform-adapter.md).
 
 ---
 

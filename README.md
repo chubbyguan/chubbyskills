@@ -59,8 +59,9 @@
 - **v0.6 platform health**：新增平台定义、站点模板、状态页生成器、平台失败 issue form
 - **v0.7 knowledge vault**：新增 vault 模板、SQLite 本地索引、全文检索、recent/read/stats、MCP 检索增强
 - **v0.8 first-run UX**：新增 `quickstart` 首跑验收，离线打通配置、dry-run、schema 校验、平台定义、vault 索引和 MCP 前置检查
+- **v0.9 knowledge automation**：新增 semantic-lite 检索、自动归档、知识卡片生成、贡献者平台 scaffold
 
-下一阶段会继续补更完整的真实平台 smoke test、MCP 工作流和语义检索层。
+下一阶段会继续补更完整的真实平台 smoke test、embedding provider 和 MCP 工作流。
 
 ---
 
@@ -160,6 +161,8 @@ python3 tools/validate_outputs.py output/
 | 个人知识管线 | 自动识别、队列、状态、报告、重试 | 复用对应 skill 依赖 | `tools/chubby.py` 负责编排；无法识别时用 `--skill` 指定 |
 | 平台健康度 | 平台定义 / 站点模板 / 状态页 | 零 pip 依赖 | `tools/platform_health.py` 校验结构；`--local` 检查本地依赖 |
 | 本地知识库索引 | Markdown vault / Obsidian | SQLite 标准库 | `tools/vault_index.py` 支持 index/search/recent/read/stats |
+| 知识库自动化 | semantic-lite / 归档 / 卡片 | SQLite + 标准库 | `tools/vault_curator.py` 默认 dry-run，避免误移动 |
+| 贡献者平台适配 | 新平台定义 / 模板 / skill 骨架 | 零 pip 依赖 | `tools/platform_adapter.py new ...` 生成可校验 scaffold |
 
 ---
 
@@ -323,6 +326,7 @@ python3 tools/vault_index.py index ~/Documents/ObsidianVault
 
 # 搜索，可按平台或标签过滤
 python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py semantic "内容策略"
 python3 tools/vault_index.py search "品牌" --platform wechat
 python3 tools/vault_index.py search "选题" --tag 内容
 
@@ -332,6 +336,16 @@ python3 tools/vault_index.py read "10_Sources/x/example.md" --vault ~/Documents/
 python3 tools/vault_index.py stats
 ```
 
+自动归档和知识卡片：
+
+```bash
+python3 tools/vault_curator.py archive ~/Documents/ObsidianVault
+python3 tools/vault_curator.py archive ~/Documents/ObsidianVault --apply
+python3 tools/vault_curator.py card ~/Documents/ObsidianVault "10_Sources/x/example.md" --apply
+```
+
+详情见 [docs/knowledge-automation.md](./docs/knowledge-automation.md)。
+
 MCP 使用：
 
 ```bash
@@ -339,7 +353,21 @@ pip install mcp
 VAULT_DIR=~/Documents/ObsidianVault python3 knowledge-base-management/scripts/mcp_server.py
 ```
 
-MCP 暴露工具：`search_vault`、`read_kb_note`、`list_recent_notes`、`reindex_vault`、`vault_index_stats`。
+MCP 暴露工具：`search_vault`、`semantic_search_vault`、`read_kb_note`、`list_recent_notes`、`reindex_vault`、`vault_index_stats`。
+
+## 🧩 贡献者平台适配（v0.9）
+
+新增平台先用 scaffold 生成骨架：
+
+```bash
+python3 tools/platform_adapter.py new hacker-news \
+  --name "Hacker News" \
+  --sample-source "https://news.ycombinator.com/item?id=123" \
+  --match "news.ycombinator.com"
+python3 tools/platform_health.py --check
+```
+
+详情见 [docs/contributor-platform-adapter.md](./docs/contributor-platform-adapter.md)。
 
 ## 🔁 轻量一键工作流（v0.3）
 

@@ -14,7 +14,7 @@ python3 tools/chubby.py quickstart
 - 对一条 X 链接跑 dry-run，确认自动平台识别和命令编排可用。
 - 校验 `examples/outputs` 的基础 frontmatter 和 schema v1。
 - 校验 `platforms/*.yaml` 与 `templates/sites/*.yaml` 的平台定义。
-- 对 `examples/outputs` 建立临时 SQLite 索引，并执行一次示例搜索。
+- 对 `examples/outputs` 建立临时 SQLite 索引，并执行关键词与 semantic-lite 示例搜索。
 - 检查 MCP server 依赖是否安装；未安装只给 warning，不影响 CLI。
 
 运行结束后会生成：
