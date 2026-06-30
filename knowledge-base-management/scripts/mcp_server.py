@@ -52,6 +52,8 @@ vault_index, VAULT_INDEX_ERROR = load_vault_index()
 VAULT = os.environ.get("VAULT_DIR", "")
 MAX_READ_CHARS = 12000
 INDEX_DB = os.environ.get("VAULT_INDEX_DB", "")
+SEMANTIC_PROVIDER = os.environ.get("CHUBBY_EMBEDDING_PROVIDER", "lite")
+SEMANTIC_MODEL = os.environ.get("CHUBBY_EMBEDDING_MODEL", "")
 
 
 def index_db(vault):
@@ -138,6 +140,8 @@ def semantic_search(vault, query, limit=10, platform="", tag=""):
             limit=limit,
             platform=platform or None,
             tag=tag or None,
+            provider=SEMANTIC_PROVIDER,
+            model=SEMANTIC_MODEL or None,
         )
     except Exception as exc:
         return unavailable(exc)

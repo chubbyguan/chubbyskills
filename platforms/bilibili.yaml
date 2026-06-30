@@ -9,5 +9,7 @@ required_deps: [cmd:yt-dlp]
 optional_deps: [cmd:ffmpeg, python:funasr]
 output_contract: markdown_schema_v1
 fallback: subtitle-first then audio transcription
+failure_modes: [missing_yt_dlp, no_subtitle, ffmpeg_or_funasr_missing, region_or_login_limit]
+fallback_command: python3 tools/chubby.py ingest "<bilibili-url>" --skill bilibili -- --prefer-audio
 sample_source: https://www.bilibili.com/video/BVxxxxxx/
 notes: Subtitle-first path keeps the default install light.

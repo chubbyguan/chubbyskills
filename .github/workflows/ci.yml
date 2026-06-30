@@ -29,8 +29,10 @@ jobs:
         run: |
           python tools/validate_outputs.py examples/outputs
           python tools/validate_outputs.py examples/outputs --schema-v1
+          python tools/golden_outputs.py examples/outputs
           python tools/platform_health.py --check
           python tools/platform_health.py --check-output
+          python tools/platform_smoke.py --mode all --check
           tmp_adapter="$(mktemp -d)"
           python tools/platform_adapter.py new demo-news --name "Demo News" --sample-source "https://demo.example/news/1" --match demo.example --repo-root "$tmp_adapter"
           python tools/platform_health.py --platform-dir "$tmp_adapter/platforms" --template-dir "$tmp_adapter/templates/sites" --repo-root "$tmp_adapter" --check
@@ -56,6 +58,9 @@ jobs:
           python tools/vault_curator.py --help
           python tools/vault_index.py --help
           python tools/validate_outputs.py --help
+          python tools/golden_outputs.py --help
+          python tools/platform_smoke.py --help
+          python tools/mcp_workflow_demo.py --help
           python industry-intelligence-radar/scripts/scan.py --help
           python knowledge-base-management/scripts/vault_health_check.py --help
 

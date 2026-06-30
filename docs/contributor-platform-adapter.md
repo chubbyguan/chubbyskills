@@ -31,9 +31,21 @@ python3 tools/validate_outputs.py output --schema-v1 --platform-dir platforms
 贡献新平台时，PR 至少要包含：
 
 - `platforms/<id>.yaml`：状态、依赖、fallback、sample source 清楚。
+- `failure_modes` 和 `fallback_command`：写清楚依赖缺失、登录/cookie、风控、链接失效、结构变化时怎么处理。
 - `templates/sites/<id>.yaml`：URL match、frontmatter、postprocess 清楚。
 - `<skill>/SKILL.md`：说明使用方式、依赖和限制。
 - `<skill>/scripts/...`：能输出符合 schema v1 的 Markdown。
 - 一个失败 fallback 说明：平台风控、登录、cookie 或手动输入路径。
 
 新平台默认用 `status: experimental`。只有有稳定样例、CI 或维护者确认后，再提升为 `beta` 或 `stable`。
+
+## Smoke
+
+新平台合并前至少要通过：
+
+```bash
+python3 tools/platform_health.py --check
+python3 tools/platform_smoke.py --mode offline --check
+```
+
+如果平台支持手动 fallback，建议补 deterministic fallback smoke；如果需要真实平台验收，用 `CHUBBY_SMOKE_<PLATFORM>_SOURCE` 跑 live smoke，并把关键输出贴到 PR。

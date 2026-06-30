@@ -9,8 +9,11 @@ import unittest
 
 from tools import chubby
 from tools import chubby_ingest
+from tools import golden_outputs
+from tools import mcp_workflow_demo
 from tools import platform_adapter
 from tools import platform_health
+from tools import platform_smoke
 from tools import validate_outputs
 from tools import vault_curator
 from tools import vault_index
@@ -104,6 +107,13 @@ class OutputValidatorTest(unittest.TestCase):
             problems = validate_outputs.validate_file(f.name, require_schema_v1=True)
         messages = [p["message"] for p in problems]
         self.assertIn("assets should use inline list form", messages)
+
+    def test_golden_snapshot_matches_examples(self):
+        examples = os.path.join(ROOT, "examples", "outputs")
+        golden = os.path.join(ROOT, "fixtures", "golden", "examples_outputs.json")
+        actual = golden_outputs.build_snapshot([examples])
+        expected = golden_outputs.load_json(golden)
+        self.assertEqual(golden_outputs.compare_snapshots(actual, expected), [])
 
 
 class WorkflowCopyTest(unittest.TestCase):
@@ -425,6 +435,23 @@ class PlatformHealthTest(unittest.TestCase):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+class PlatformSmokeTest(unittest.TestCase):
+    def test_offline_smoke_checks_all_platform_routes(self):
+        results = platform_smoke.run_matrix(mode="offline")
+        self.assertGreaterEqual(len(results), 10)
+        self.assertFalse(platform_smoke.has_failures(results))
+
+    def test_fallback_smoke_generates_schema_v1_for_manual_platforms(self):
+        results = platform_smoke.run_matrix(mode="fallback")
+        manual_results = [
+            item for item in results
+            if item["platform"] in {"x", "xiaohongshu"}
+        ]
+        self.assertEqual(len(manual_results), 2)
+        self.assertFalse(platform_smoke.has_failures(manual_results))
+        self.assertTrue(all(item["status"] == "passed" for item in manual_results))
+
+
 class VaultIndexTest(unittest.TestCase):
     def write_note(self, root, rel, title, platform, tags, body):
         path = os.path.join(root, rel)
@@ -484,6 +511,48 @@ class VaultIndexTest(unittest.TestCase):
             semantic_rows = vault_index.semantic_search(db_path=db, query="内容策略")
             self.assertEqual(semantic_rows[0]["path"], "10_Sources/wechat/brand.md")
             self.assertGreater(semantic_rows[0]["score"], 0)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_embedding_provider_search_uses_persisted_vectors(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            vault = os.path.join(tmpdir, "vault")
+            db = os.path.join(tmpdir, "index.sqlite")
+            self.write_note(vault, "10_Sources/x/agent.md", "Agent Note", "x", "AI, Agent", "AI Agent workflow")
+            self.write_note(vault, "10_Sources/wechat/brand.md", "Brand Note", "wechat", "Brand", "品牌 内容 策略")
+
+            original_embed_texts = vault_index.embed_texts
+
+            def fake_embed_texts(texts, provider, model):
+                vectors = []
+                for text in texts:
+                    if "内容" in text or "策略" in text or "品牌" in text:
+                        vectors.append([1.0, 0.0])
+                    else:
+                        vectors.append([0.0, 1.0])
+                return vectors
+
+            vault_index.embed_texts = fake_embed_texts
+            try:
+                result = vault_index.embed_vault(
+                    vault,
+                    db_path=db,
+                    provider="openai",
+                    model="test-embedding",
+                )
+                self.assertEqual(result["notes"], 2)
+                rows = vault_index.semantic_search(
+                    db_path=db,
+                    query="内容策略",
+                    provider="openai",
+                    model="test-embedding",
+                )
+            finally:
+                vault_index.embed_texts = original_embed_texts
+
+            self.assertEqual(rows[0]["path"], "10_Sources/wechat/brand.md")
+            self.assertEqual(rows[0]["provider"], "openai")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -559,6 +628,17 @@ class KnowledgeBaseMcpTest(unittest.TestCase):
         result = module.read_note("", "README.md")
         self.assertIn("索引不可用", result)
         self.assertIn("VAULT_DIR", result)
+
+    def test_mcp_workflow_demo_uses_vault_sources(self):
+        vault = os.path.join(ROOT, "fixtures", "mcp-vault")
+        result = mcp_workflow_demo.run_workflow(
+            vault,
+            "给我一个内容复盘建议",
+            "Agent vault 内容策略复盘",
+        )
+        self.assertGreaterEqual(len(result["notes"]), 1)
+        self.assertIn("source:", result["answer"])
+        self.assertIn("10_Sources", result["answer"])
 
 
 class VaultCuratorTest(unittest.TestCase):

@@ -9,5 +9,7 @@ required_deps: [cmd:yt-dlp, cmd:ffmpeg, python:funasr]
 optional_deps: []
 output_contract: markdown_schema_v1
 fallback: audio transcription after yt-dlp download
+failure_modes: [embedded_video_unavailable, anti_bot, missing_yt_dlp, ffmpeg_or_funasr_missing, download_blocked]
+fallback_command: download video locally, then run python3 zhihu-transcribe/scripts/transcribe.py "<local-video>" --output output
 sample_source: https://www.zhihu.com/video/1234567890
 notes: Supports standalone video links and embedded answer/article videos.

@@ -11,6 +11,8 @@
 ## 自测清单
 - [ ] `python3 -m py_compile` 通过
 - [ ] `python3 tools/platform_health.py --check` 通过（改平台定义 / 模板时）
+- [ ] `python3 tools/platform_smoke.py --mode all --check` 通过（改平台/管线时）
+- [ ] `python3 tools/golden_outputs.py examples/outputs` 通过（改示例输出时）
 - [ ] 用**真实链接**跑过（采集类必做）
 - [ ] （新 skill）目录自包含：`SKILL.md` + `scripts/` + `requirements.txt`
 - [ ] （新 skill）`SKILL.md` frontmatter 的 `name` 与目录名一致

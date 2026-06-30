@@ -59,6 +59,8 @@ def platform_yaml(args):
             f"optional_deps: {inline_list(split_values(args.optional_deps))}",
             "output_contract: markdown_schema_v1",
             f"fallback: {args.fallback}",
+            f"failure_modes: {inline_list(split_values(args.failure_modes))}",
+            f"fallback_command: {args.fallback_command}",
             f"sample_source: {args.sample_source}",
             f"notes: {args.notes}",
             "",
@@ -156,6 +158,10 @@ def default_args(args):
         args.script = f"scripts/fetch_{args.id.replace('-', '_')}.py"
     if not args.match:
         args.match = args.sample_source.split("//", 1)[-1].split("/", 1)[0]
+    if not getattr(args, "failure_modes", ""):
+        args.failure_modes = "missing_dependency, auth_or_cookie, structure_changed"
+    if not getattr(args, "fallback_command", ""):
+        args.fallback_command = 'python3 tools/chubby.py ingest "<source>" --skill <platform> -- --fallback-text note.md'
     return args
 
 
@@ -186,6 +192,8 @@ def build_parser():
     new.add_argument("--required-deps", default="")
     new.add_argument("--optional-deps", default="")
     new.add_argument("--fallback", default="manual")
+    new.add_argument("--failure-modes", default="missing_dependency, auth_or_cookie, structure_changed")
+    new.add_argument("--fallback-command", default='python3 tools/chubby.py ingest "<source>" --skill <platform> -- --fallback-text note.md')
     new.add_argument("--sample-source", required=True)
     new.add_argument("--match", default="")
     new.add_argument("--notes", default="Contributor scaffold; replace stub fetch logic before marking stable.")

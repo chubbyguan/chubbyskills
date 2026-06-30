@@ -22,6 +22,37 @@ python3 tools/vault_index.py semantic "选题" --tag strategy --json
 
 MCP server 也暴露 `semantic_search_vault`，Agent 可以直接用概念查询检索 vault。
 
+## Real Embedding Providers
+
+v0.10 起，`vault_index.py` 支持把真实 embedding 写入 SQLite。默认仍然是 `semantic-lite`，不会要求 API key 或模型下载。
+
+OpenAI provider：
+
+```bash
+export OPENAI_API_KEY="..."
+python3 tools/vault_index.py embed /path/to/vault --provider openai
+python3 tools/vault_index.py semantic "内容策略" --provider openai
+```
+
+可选环境变量：
+
+- `OPENAI_EMBEDDING_MODEL`：默认 `text-embedding-3-small`。
+- `OPENAI_BASE_URL`：兼容代理或网关。
+
+本地模型 provider：
+
+```bash
+python3 -m pip install sentence-transformers
+python3 tools/vault_index.py embed /path/to/vault --provider local
+python3 tools/vault_index.py semantic "内容策略" --provider local
+```
+
+可选环境变量：
+
+- `CHUBBY_LOCAL_EMBEDDING_MODEL`：默认 `paraphrase-multilingual-MiniLM-L12-v2`。
+
+MCP server 会读取 `CHUBBY_EMBEDDING_PROVIDER`。未设置时继续使用零依赖 `lite`。
+
 ## Auto Archive
 
 默认 dry-run：

@@ -9,5 +9,7 @@ required_deps: [python:bs4]
 optional_deps: [python:markitdown, python:fitz]
 output_contract: markdown_schema_v1
 fallback: pdf or saved HTML
+failure_modes: [wechat_client_only, html_structure_changed, beautifulsoup_missing, pdf_parser_missing, content_too_short]
+fallback_command: export article as PDF, then run python3 tools/chubby.py ingest "<article.pdf>" --skill wechat
 sample_source: https://mp.weixin.qq.com/s/example
 notes: HTML structure changes frequently; PDF fallback keeps useful coverage.

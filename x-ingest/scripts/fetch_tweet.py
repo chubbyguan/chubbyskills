@@ -318,7 +318,17 @@ def main():
     parser.add_argument("--no-video", action="store_true", help="视频不转录，只留视频链接")
     parser.add_argument("--fallback-text", help="抓取失败时使用这个 txt/md 文件生成标准 Markdown")
     parser.add_argument("--fallback-title", help="fallback 模式下指定标题")
+    parser.add_argument("--fallback-only", action="store_true", help="不访问网络，直接使用 fallback 文本")
     args = parser.parse_args()
+
+    if args.fallback_only:
+        if not args.fallback_text:
+            parser.error("--fallback-only requires --fallback-text")
+        data = build_fallback_data(read_fallback_text(args.fallback_text), args.fallback_title)
+        output_path = save_markdown(data, args.url, args.output, args.fallback_title)
+        print(f"✅ Saved fallback: {output_path}", file=sys.stderr)
+        print(output_path)
+        return
 
     tweet_id = extract_tweet_id(args.url)
     source_url = args.url if not args.url.isdigit() else f"https://x.com/i/status/{tweet_id}"

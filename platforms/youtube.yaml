@@ -9,5 +9,7 @@ required_deps: [cmd:yt-dlp]
 optional_deps: [cmd:ffmpeg, python:funasr]
 output_contract: markdown_schema_v1
 fallback: subtitle-first then audio transcription
+failure_modes: [missing_yt_dlp, no_caption, age_or_region_limit, ffmpeg_or_funasr_missing]
+fallback_command: python3 tools/chubby.py ingest "<youtube-url>" --skill youtube -- --prefer-audio
 sample_source: https://www.youtube.com/watch?v=example
 notes: Captions provide the fastest path; audio transcription remains available.

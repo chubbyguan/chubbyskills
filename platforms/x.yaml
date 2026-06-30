@@ -9,5 +9,7 @@ required_deps: []
 optional_deps: [cmd:ffmpeg, python:funasr]
 output_contract: markdown_schema_v1
 fallback: manual text via --fallback-text
+failure_modes: [syndication_unavailable, protected_or_deleted_post, media_download_failed, ffmpeg_or_funasr_missing]
+fallback_command: python3 tools/chubby.py ingest "<x-url>" --skill x -- --fallback-text note.md
 sample_source: https://x.com/example/status/1234567890
 notes: Embed endpoint works for many public posts; fallback text protects capture flow.

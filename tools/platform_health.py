@@ -177,6 +177,8 @@ def check_platform(platform, repo_root, template_dir, local=False):
         "missing_required": missing_required,
         "missing_optional": missing_optional,
         "fallback": platform.get("fallback", ""),
+        "failure_modes": ensure_list(platform.get("failure_modes")),
+        "fallback_command": platform.get("fallback_command", ""),
         "output_contract": platform.get("output_contract", ""),
         "sample_source": platform.get("sample_source", ""),
         "notes": platform.get("notes", ""),
@@ -224,8 +226,8 @@ def build_markdown(results, local=False, generated_at=None):
         "",
         f"Local dependency check: `{'on' if local else 'off'}`",
         "",
-        "| platform | skill | status | content | fallback | template | notes |",
-        "|---|---|---|---|---|---|---|",
+        "| platform | skill | status | content | failure modes | fallback | template | notes |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for item in sorted(results, key=lambda record: record["id"]):
         template_state = "yes" if item["template_exists"] else "missing"
@@ -247,6 +249,7 @@ def build_markdown(results, local=False, generated_at=None):
                     escape_cell(item["skill"]),
                     escape_cell(status_badge(item["health"])),
                     escape_cell(format_list(item["source_types"])),
+                    escape_cell(format_list(item.get("failure_modes"))),
                     escape_cell(item["fallback"]),
                     escape_cell(template_state),
                     escape_cell(notes),
@@ -298,6 +301,8 @@ def run_checks(platform_dir, template_dir, repo_root, local=False):
                 "missing_required": [],
                 "missing_optional": [],
                 "fallback": "",
+                "failure_modes": [],
+                "fallback_command": "",
                 "output_contract": "",
                 "sample_source": "",
                 "notes": "",

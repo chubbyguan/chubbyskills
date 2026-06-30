@@ -60,8 +60,9 @@
 - **v0.7 knowledge vault**：新增 vault 模板、SQLite 本地索引、全文检索、recent/read/stats、MCP 检索增强
 - **v0.8 first-run UX**：新增 `quickstart` 首跑验收，离线打通配置、dry-run、schema 校验、平台定义、vault 索引和 MCP 前置检查
 - **v0.9 knowledge automation**：新增 semantic-lite 检索、自动归档、知识卡片生成、贡献者平台 scaffold
+- **v0.10 release hardening**：新增真实平台 smoke matrix、失败分型/fallback 指南、golden outputs、OpenAI/本地 embedding provider、MCP workflow demo
 
-下一阶段会继续补更完整的真实平台 smoke test、embedding provider 和 MCP 工作流。
+下一阶段会继续把 live smoke 样例扩展到更多公开链接，并沉淀贡献者实测记录。
 
 ---
 
@@ -76,6 +77,17 @@ python3 tools/chubby.py quickstart
 ```
 
 `quickstart` 不会抓真实平台内容，会离线完成配置初始化、X 链接 dry-run、示例 Markdown 校验、平台定义校验、临时 vault 索引和 MCP 前置检查。完整说明见 [docs/quickstart.md](./docs/quickstart.md)。
+
+### 1.1 跑发布级验收
+
+```bash
+python3 tools/chubby.py --version
+python3 tools/platform_smoke.py --mode all --check
+python3 tools/golden_outputs.py examples/outputs
+python3 tools/mcp_workflow_demo.py
+```
+
+`platform_smoke` 默认跑可复现的 offline/fallback 层；真实平台 live smoke 通过 `CHUBBY_SMOKE_<PLATFORM>_SOURCE` 显式开启。发布门禁见 [docs/release.md](./docs/release.md)。
 
 ### 2. 轻量安装（默认推荐）
 
@@ -121,6 +133,11 @@ python3 tools/platform_health.py --local --check
 # 建立本地知识库索引并检索
 python3 tools/vault_index.py index ~/Documents/ObsidianVault
 python3 tools/vault_index.py search "AI Agent"
+python3 tools/vault_index.py semantic "内容策略"
+
+# 可选：接入真实 embedding provider
+OPENAI_API_KEY=... python3 tools/vault_index.py embed ~/Documents/ObsidianVault --provider openai
+python3 tools/vault_index.py semantic "内容策略" --provider openai
 ```
 
 ### 5. 轻量单条采集
@@ -160,8 +177,10 @@ python3 tools/validate_outputs.py output/
 | 知识库管理 | Obsidian vault | 健康检查/SQLite 索引零依赖；MCP 需 `mcp` | MCP 读取本地 vault，需设置 `VAULT_DIR` |
 | 个人知识管线 | 自动识别、队列、状态、报告、重试 | 复用对应 skill 依赖 | `tools/chubby.py` 负责编排；无法识别时用 `--skill` 指定 |
 | 平台健康度 | 平台定义 / 站点模板 / 状态页 | 零 pip 依赖 | `tools/platform_health.py` 校验结构；`--local` 检查本地依赖 |
+| 平台 smoke matrix | offline / fallback / live | 零依赖；live 取决于平台 | `tools/platform_smoke.py` 分层验证路由、fallback 和可选真实链接 |
 | 本地知识库索引 | Markdown vault / Obsidian | SQLite 标准库 | `tools/vault_index.py` 支持 index/search/recent/read/stats |
-| 知识库自动化 | semantic-lite / 归档 / 卡片 | SQLite + 标准库 | `tools/vault_curator.py` 默认 dry-run，避免误移动 |
+| 语义检索 | semantic-lite / OpenAI / 本地模型 | 默认零依赖；OpenAI 需 API key；本地需 sentence-transformers | `tools/vault_index.py embed ... --provider openai/local` |
+| 知识库自动化 | semantic-lite / embedding / 归档 / 卡片 | SQLite + 标准库 | `tools/vault_curator.py` 默认 dry-run，避免误移动 |
 | 贡献者平台适配 | 新平台定义 / 模板 / skill 骨架 | 零 pip 依赖 | `tools/platform_adapter.py new ...` 生成可校验 scaffold |
 
 ---

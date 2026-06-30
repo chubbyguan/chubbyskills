@@ -9,5 +9,7 @@ required_deps: []
 optional_deps: [env:XHS_COOKIE, cmd:ffmpeg, python:funasr]
 output_contract: markdown_schema_v1
 fallback: manual text via --fallback-text
+failure_modes: [missing_cookie, anti_bot, html_structure_changed, image_download_failed, ffmpeg_or_funasr_missing]
+fallback_command: python3 tools/chubby.py ingest "<xhs-url>" --skill xiaohongshu -- --fallback-text note.md
 sample_source: https://www.xiaohongshu.com/explore/example
 notes: Cookie improves success rate; fallback text keeps the knowledge pipeline moving.

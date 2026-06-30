@@ -1,0 +1,99 @@
+{
+  "files": [
+    {
+      "body_sha256": "accc4e288f17f607d21876382c5ad2596ad8f6bd1c7bca3856256aba57e00d48",
+      "fields": {
+        "assets": "[]",
+        "content_type": "video",
+        "created": "2026-06-30",
+        "platform": "bilibili",
+        "schema_version": "1",
+        "source": "https://www.bilibili.com/video/BVxxxxxx/",
+        "status": "success",
+        "title": "B站视频样例",
+        "type": "note"
+      },
+      "headings": [
+        "B站视频样例",
+        "原始转录"
+      ],
+      "path": "examples/outputs/bilibili-sample.md"
+    },
+    {
+      "body_sha256": "2e8bf948b732bbbebce8f4ddac14985cce71bc71f7693504c52c8c14c58cc1d5",
+      "fields": {
+        "assets": "[]",
+        "content_type": "article",
+        "created": "2026-06-30",
+        "platform": "wechat",
+        "schema_version": "1",
+        "source": "https://mp.weixin.qq.com/s/example",
+        "status": "success",
+        "title": "公众号文章样例",
+        "type": "note"
+      },
+      "headings": [
+        "公众号文章样例",
+        "小标题"
+      ],
+      "path": "examples/outputs/wechat-sample.md"
+    },
+    {
+      "body_sha256": "9338b02e76350116018aeb9b420dbc4393adf857585eb23886044472edb4e868",
+      "fields": {
+        "assets": "[]",
+        "content_type": "note",
+        "created": "2026-06-30",
+        "platform": "content",
+        "schema_version": "1",
+        "source": "examples/outputs/bilibili-sample.md",
+        "status": "success",
+        "title": "一键入库样例",
+        "type": "note"
+      },
+      "headings": [
+        "一键入库样例",
+        "📝 摘要"
+      ],
+      "path": "examples/outputs/workflow-sample.md"
+    },
+    {
+      "body_sha256": "47cdbe7a8ea33454081169bc9ca9572a77a6d9b954e910bfc82b3d35fea04636",
+      "fields": {
+        "assets": "[]",
+        "content_type": "social",
+        "created": "2026-06-30",
+        "platform": "x",
+        "schema_version": "1",
+        "source": "https://x.com/example/status/1234567890",
+        "status": "success",
+        "title": "X 推文样例",
+        "type": "note"
+      },
+      "headings": [
+        "X 推文样例"
+      ],
+      "path": "examples/outputs/x-sample.md"
+    },
+    {
+      "body_sha256": "12738845b2fa0bffffad4a2a2c394e0a3e608704ead00a182d9fefd7df519395",
+      "fields": {
+        "assets": "[xiaohongshu-sample.assets]",
+        "content_type": "social",
+        "created": "2026-06-30",
+        "platform": "xiaohongshu",
+        "schema_version": "1",
+        "source": "https://www.xiaohongshu.com/explore/example",
+        "status": "success",
+        "title": "小红书图文样例",
+        "type": "note"
+      },
+      "headings": [
+        "小红书图文样例",
+        "图片"
+      ],
+      "path": "examples/outputs/xiaohongshu-sample.md"
+    }
+  ],
+  "schema": "chubbyskills.golden_outputs.v1"
+}

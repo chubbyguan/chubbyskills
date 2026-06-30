@@ -9,5 +9,7 @@ required_deps: [cmd:ffmpeg, python:faster_whisper]
 optional_deps: []
 output_contract: markdown_schema_v1
 fallback: local audio file
+failure_modes: [rss_unreachable, audio_download_failed, ffmpeg_missing, faster_whisper_missing, long_audio_timeout]
+fallback_command: download audio locally, then run python3 tools/chubby.py ingest "<local-audio>" --skill podcast
 sample_source: /path/to/audio.mp3
 notes: Long-form audio is slow but stable when local dependencies are ready.

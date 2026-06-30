@@ -53,6 +53,13 @@ VALID_STATUSES = {"success", "failed", "dry_run"}
 QUICKSTART_SOURCE = "https://x.com/example/status/123456"
 
 
+def read_version():
+    version_path = ROOT / "VERSION"
+    if version_path.exists():
+        return version_path.read_text(encoding="utf-8").strip()
+    return "0.0.0"
+
+
 def now_iso():
     return datetime.now().astimezone().replace(microsecond=0).isoformat()
 
@@ -895,6 +902,7 @@ def add_ingest_options(parser):
 def build_parser():
     parser = argparse.ArgumentParser(description="Chubby Skills pipeline CLI")
     parser.add_argument("--config", help="Path to chubby.yaml")
+    parser.add_argument("--version", action="version", version=f"chubbyskills {read_version()}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init", help="Create chubby.yaml and runtime directories")

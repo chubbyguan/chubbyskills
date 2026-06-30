@@ -9,5 +9,7 @@ required_deps: [cmd:ffmpeg, python:funasr]
 optional_deps: []
 output_contract: markdown_schema_v1
 fallback: audio transcription
+failure_modes: [expired_short_link, anti_bot, ffmpeg_or_funasr_missing, download_blocked]
+fallback_command: save video locally, then run python3 douyin-transcribe/scripts/transcribe.py "<local-video>" output
 sample_source: https://v.douyin.com/example/
 notes: Platform risk is mainly link expiry and anti-bot behavior.
