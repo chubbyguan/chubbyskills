@@ -34,7 +34,7 @@ python3 tools/platform_smoke.py --mode live --check
 | TikTok | `region_limit`, `anti_bot`, `download_blocked` | 本地视频转录 |
 | WeChat | `wechat_client_only`, `html_structure_changed`, `content_too_short` | 导出 PDF 或保存 HTML 后入库 |
 | Weibo | `mobile_link_required`, `anti_bot`, `download_blocked` | 优先用 `m.weibo.cn` 链接或本地视频 |
-| X | `syndication_unavailable`, `protected_or_deleted_post`, `media_download_failed` | `--fallback-text` 手动正文 |
+| X | `syndication_unavailable`, `protected_or_deleted_post`, `media_download_failed` | `--fallback-text` 手动正文或 `--fallback-json` 结构化推文 |
 | Xiaohongshu | `missing_cookie`, `anti_bot`, `html_structure_changed` | 配置 `XHS_COOKIE` 或 `--fallback-text` |
 | YouTube | `missing_yt_dlp`, `no_caption`, `age_or_region_limit` | 字幕优先；无字幕时走音频转录 |
 | Zhihu | `embedded_video_unavailable`, `anti_bot`, `download_blocked` | 下载本地视频后转录 |
