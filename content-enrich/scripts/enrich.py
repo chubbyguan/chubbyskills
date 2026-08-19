@@ -23,6 +23,12 @@ import json
 import argparse
 import urllib.request
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from chubby_common import llm
+
 
 SYSTEM_PROMPT = """你是知识管理助手。把一篇采集来的内容提炼成可快速消化的元信息。
 只输出一个 JSON 对象，不要 markdown 代码块、不要多余解释：
@@ -126,10 +132,7 @@ def call_deepseek(content, api_key):
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read())
     raw = data["choices"][0]["message"]["content"].strip()
-    m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw, re.DOTALL)
-    if m:
-        raw = m.group(1)
-    return json.loads(raw)
+    return llm.parse_json_response(raw)
 
 
 def enrich_file(path, api_key, out_dir, force):

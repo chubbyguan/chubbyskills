@@ -7,7 +7,7 @@
 #### 信息流会忘，知识库会记 —— 把全渠道好内容采集进你的第二大脑
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.10.0-10B981?style=for-the-badge)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.11.0-10B981?style=for-the-badge)](./CHANGELOG.md)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -41,7 +41,7 @@ Chubby Skills 是一套面向个人知识库和 AI Agent 的内容采集、整�
 
 ## 现在有什么
 
-当前版本：`0.10.0`
+当前版本：`0.11.0`
 
 | 模块 | 能力 | 入口 |
 |---|---|---|
@@ -365,6 +365,7 @@ python3 tools/validate_outputs.py output/ --schema-v1
 .
 ├── platforms/                 # 平台定义：状态、依赖、fallback、样例 source
 ├── templates/sites/           # 站点模板：URL match、frontmatter、postprocess
+├── chubby_common/             # 公共模块：yt-dlp / SenseVoice 封装、依赖体检、Markdown 生成
 ├── tools/                     # 管线、索引、smoke、golden、归档、适配工具
 ├── examples/outputs/          # 示例 Markdown 输出
 ├── fixtures/                  # golden outputs、platform smoke、MCP demo vault

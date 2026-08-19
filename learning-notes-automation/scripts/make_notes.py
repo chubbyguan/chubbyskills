@@ -25,6 +25,12 @@ import argparse
 import urllib.request
 from datetime import datetime
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from chubby_common import llm
+
 
 SYSTEM_PROMPT = """你是学习教练，擅长把内容提炼成可记忆的知识卡片。
 只输出一个 JSON 对象，不要 markdown 代码块，不要额外解释。结构如下：
@@ -79,12 +85,13 @@ def call_deepseek(content: str, max_cards: int, api_key: str) -> dict:
 
 
 def _parse_json(raw: str) -> dict:
-    """容错解析：去掉可能的代码块包裹。"""
-    raw = raw.strip()
-    m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw, re.DOTALL)
-    if m:
-        raw = m.group(1)
-    return json.loads(raw)
+    """容错解析：去掉代码块包裹，非法 JSON 时尝试提取最外层对象。"""
+    return llm.parse_json_response(raw)
+
+
+def safe_int(value, default: int = 3) -> int:
+    """LLM 输出的整数可能不是数字，兜底到默认值。"""
+    return llm.safe_int(value, default)
 
 
 def strip_frontmatter(text: str) -> str:
@@ -127,7 +134,7 @@ def build_notes_md(data: dict, source_name: str) -> str:
         "",
     ]
     for i, n in enumerate(notes, 1):
-        stars = "⭐" * int(n.get("importance", 3))
+        stars = "⭐" * safe_int(n.get("importance"), 3)
         lines.append(f"### {i}. {n.get('point', '')}")
         lines.append(f"- 摘要：{n.get('summary', '')}")
         lines.append(f"- 重要性：{stars}")
@@ -192,7 +199,12 @@ def main():
         content = content[:12000]
 
     print("🧠 调用 DeepSeek 提取知识点...", file=sys.stderr)
-    data = call_deepseek(content, args.max_cards, api_key)
+    try:
+        data = call_deepseek(content, args.max_cards, api_key)
+    except Exception as exc:
+        print(f"❌ 提取失败：{exc}", file=sys.stderr)
+        print("   请检查 DEEPSEEK_API_KEY 是否有效、网络是否可达，然后重试。", file=sys.stderr)
+        sys.exit(1)
 
     source_name = os.path.basename(args.input)
     base = sanitize(data.get("title") or os.path.splitext(source_name)[0])

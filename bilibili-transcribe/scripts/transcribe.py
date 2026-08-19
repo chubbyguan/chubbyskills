@@ -11,24 +11,32 @@ B 站视频一键转录工具（字幕优先）
     python transcribe.py "BV1rrQGBeEen" --no-subtitle   # 强制走音频转录
 """
 
-import sys
+import argparse
 import os
 import re
-import glob
-import argparse
-import subprocess
-import tempfile
 import shutil
-from datetime import datetime
+import sys
+import tempfile
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
-MOBILE_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-REFERER = "https://www.bilibili.com"
+from chubby_common.config import PlatformConfig
+from chubby_common import funasr, markdown, vtt, ytdlp
+
 # 字幕语言优先级（中文优先）
 SUB_LANGS = "zh-Hans,zh-CN,zh,zh-Hant,ai-zh,en,en-US"
+SUB_PRIORITY = ("zh-hans", "zh-cn", "zh", "zh-hant", "ai-zh", "en")
+
+CFG = PlatformConfig(
+    id="bilibili",
+    name="Bilibili",
+    tag="B站",
+    default_title="B站视频",
+    language="zh",
+    referer="https://www.bilibili.com",
+)
 
 
 def extract_bvid(url: str) -> str:
@@ -38,17 +46,14 @@ def extract_bvid(url: str) -> str:
     raise ValueError(f"无法从输入中提取 BV 号：{url}")
 
 
-def ydl_base():
-    return ["yt-dlp", "--no-check-certificates",
-            "--user-agent", MOBILE_UA, "--referer", REFERER]
-
-
 def get_info(url: str, bvid: str) -> tuple:
     """返回 (title, uploader)。失败时回退到 bvid。"""
     try:
-        r = subprocess.run(
-            ydl_base() + ["--print", "%(title)s|||%(uploader)s", "--skip-download", url],
-            capture_output=True, text=True, timeout=40,
+        r = ytdlp.run_ydl(
+            CFG,
+            ["--print", "%(title)s|||%(uploader)s", "--skip-download", url],
+            timeout=CFG.info_timeout,
+            capture=True,
         )
         line = r.stdout.strip().split("\n")[0]
         title, _, uploader = line.partition("|||")
@@ -60,49 +65,34 @@ def get_info(url: str, bvid: str) -> tuple:
         return bvid, ""
 
 
-def parse_vtt(path: str) -> str:
-    """把 vtt 字幕解析成纯文本，去时间轴、去标签、去连续重复行。"""
-    with open(path, encoding="utf-8", errors="replace") as f:
-        lines = f.read().splitlines()
-    out = []
-    for line in lines:
-        line = line.strip()
-        if not line or line == "WEBVTT" or "-->" in line:
-            continue
-        if line.isdigit() or line.startswith(("Kind:", "Language:", "NOTE")):
-            continue
-        line = re.sub(r"<[^>]+>", "", line).replace("&nbsp;", " ").strip()
-        if not line or (out and out[-1] == line):
-            continue
-        out.append(line)
-    return "\n".join(out)
-
-
 def try_subtitles(url: str, tmpdir: str):
     """尝试下载字幕。返回 (text, lang) 或 None。"""
     print("  💬 尝试抓取字幕...", file=sys.stderr)
     try:
-        subprocess.run(
-            ydl_base() + ["--skip-download", "--write-subs", "--write-auto-subs",
-                          "--sub-langs", SUB_LANGS, "--sub-format", "vtt",
-                          "-o", os.path.join(tmpdir, "sub.%(ext)s"), url],
-            capture_output=True, text=True, timeout=120,
+        ytdlp.run_ydl(
+            CFG,
+            [
+                "--skip-download",
+                "--write-subs",
+                "--write-auto-subs",
+                "--sub-langs",
+                SUB_LANGS,
+                "--sub-format",
+                "vtt",
+                "-o",
+                os.path.join(tmpdir, "sub.%(ext)s"),
+                url,
+            ],
+            timeout=CFG.subtitle_timeout,
         )
     except Exception:
         return None
-    files = glob.glob(os.path.join(tmpdir, "*.vtt"))
+    files = vtt.find_vtt_files(tmpdir)
     if not files:
         print("  💬 无字幕，回退音频转录", file=sys.stderr)
         return None
-    # 按语言优先级挑文件：中文优先
-    def rank(p):
-        name = os.path.basename(p).lower()
-        for i, tag in enumerate(["zh-hans", "zh-cn", "zh", "zh-hant", "ai-zh", "en"]):
-            if tag in name:
-                return i
-        return 99
-    chosen = sorted(files, key=rank)[0]
-    text = parse_vtt(chosen)
+    chosen = vtt.pick_subtitle(files, SUB_PRIORITY)
+    text = vtt.parse_vtt(chosen)
     if len(text) < 50:
         return None
     lang = "zh" if re.search(r"[一-鿿]", text) else "en"
@@ -111,55 +101,33 @@ def try_subtitles(url: str, tmpdir: str):
 
 
 def download_audio(url: str, output_dir: str, title: str) -> str:
-    safe = "".join(c for c in title if c.isalnum() or c in "-_ 《》").strip()[:50]
-    audio_path = os.path.join(output_dir, f"{safe or 'audio'}.mp3")
+    safe = markdown.sanitize_filename(title, "audio")
     print(f"  ⬇️  下载音频：{title[:50]}...", file=sys.stderr)
-    subprocess.run(
-        ydl_base() + ["--extract-audio", "--audio-format", "mp3",
-                      "--audio-quality", "128K", "-o", audio_path, url],
-        timeout=600, check=True,
-    )
-    size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+    path = ytdlp.download_audio(CFG, url, output_dir, filename=f"{safe}.mp3")
+    size_mb = os.path.getsize(path) / (1024 * 1024)
     print(f"  ✅ 音频：{size_mb:.1f} MB", file=sys.stderr)
-    return audio_path
+    return path
 
 
 def transcribe_audio(audio_path: str) -> str:
-    from funasr import AutoModel
-    from funasr.utils.postprocess_utils import rich_transcription_postprocess
-
-    print("  🎙️  加载 SenseVoice-Small...", file=sys.stderr)
-    model = AutoModel(
-        model="iic/SenseVoiceSmall", trust_remote_code=True,
-        vad_model="fsmn-vad", vad_kwargs={"max_single_segment_time": 30000},
-        device="cpu",
-    )
-    print("  🎙️  转录中...", file=sys.stderr)
-    result = model.generate(input=audio_path, language="zh", use_itn=True, batch_size_s=60)
-    text = ""
-    for r in (result or []):
-        if "text" in r:
-            text += rich_transcription_postprocess(r["text"]) + "\n\n"
-    return text.strip()
+    text, _ = funasr.transcribe(audio_path, language=CFG.language)
+    return text
 
 
 def build_markdown(title, text, url, uploader, transcriber, lang):
-    now = datetime.now().strftime("%Y-%m-%d")
-    return f"""---
-title: {title}
-type: note
-platform: bilibili
-source: {url}
-author: {uploader}
-created: {now}
-tags: [B站]
-language: {lang}
-transcriber: {transcriber}
----
-
-# {title}
-
-{text}"""
+    return markdown.note_markdown(
+        title,
+        text,
+        {
+            "type": "note",
+            "platform": "bilibili",
+            "source": url,
+            "author": uploader or "",
+            "tags": "[B站]",
+            "language": lang,
+            "transcriber": transcriber,
+        },
+    )
 
 
 def main():
@@ -200,12 +168,12 @@ def main():
             audio_path = download_audio(url, tmpdir, title)
             text = transcribe_audio(audio_path)
 
-        markdown = build_markdown(title, text, url, uploader, transcriber, lang)
-        safe = "".join(c for c in title if c.isalnum() or c in "-_ 《》").strip()[:50]
-        output_path = os.path.join(output_dir, f"{safe or bvid}.md")
+        body = build_markdown(title, text, url, uploader, transcriber, lang)
+        safe = markdown.sanitize_filename(title, bvid)
+        output_path = os.path.join(output_dir, f"{safe}.md")
         os.makedirs(output_dir, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write(markdown)
+            f.write(body)
 
         print("\n✅ Done!", file=sys.stderr)
         print(f"  来源：{transcriber} | 字数：{len(text)}", file=sys.stderr)

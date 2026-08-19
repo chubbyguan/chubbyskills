@@ -20,7 +20,8 @@ from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SKILL_COMMANDS = {
+# 静态映射作为兜底：正常情况下从 platforms/*.yaml 动态构建（见 load_skill_commands）
+STATIC_SKILL_COMMANDS = {
     "bilibili": ["bilibili-transcribe", "scripts", "transcribe.py"],
     "douyin": ["douyin-transcribe", "scripts", "transcribe.py"],
     "tiktok": ["tiktok-transcribe", "scripts", "transcribe.py"],
@@ -32,6 +33,34 @@ SKILL_COMMANDS = {
     "zhihu": ["zhihu-transcribe", "scripts", "transcribe.py"],
     "podcast": ["podcast-transcribe", "scripts", "transcribe.py"],
 }
+
+
+def load_skill_commands(platform_dir=None):
+    """从 platforms/*.yaml 构建 {id: [skill_dir, script_parts...]}，消除双事实来源。
+
+    新增平台只需写一份 platforms/<id>.yaml，路由自动生效；
+    解析失败时回退到静态映射，保证旧环境可用。
+    """
+    commands = {}
+    try:
+        from tools import platform_health
+    except ImportError:
+        platform_health = None
+    if platform_health is not None:
+        try:
+            directory = platform_dir or platform_health.DEFAULT_PLATFORM_DIR
+            for platform in platform_health.load_records(directory):
+                pid = platform.get("id")
+                skill = platform.get("skill")
+                script = platform.get("script")
+                if pid and skill and script:
+                    commands[pid] = [skill] + str(script).split("/")
+        except Exception:
+            commands = {}
+    return commands or dict(STATIC_SKILL_COMMANDS)
+
+
+SKILL_COMMANDS = load_skill_commands()
 
 
 def detect_skill(source):

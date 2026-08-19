@@ -7,79 +7,54 @@
     python transcribe.py "https://www.douyin.com/video/1234567890"
 """
 
-import sys
 import os
-import time
-import tempfile
 import shutil
-from datetime import datetime
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from chubby_common import funasr, markdown
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from download_douyin_audio import extract_video_id, download_audio
 
 
+def clean_title(title: str) -> str:
+    """清理标题：去掉重复的《》后缀。"""
+    clean = title.split("《")[0] if "《" in title and title.count("《") > 1 else title
+    if clean.count("《") > 1:
+        first_end = clean.find("》")
+        if first_end > 0:
+            clean = clean[: first_end + 1]
+    return clean
+
+
 def transcribe(audio_path: str, output_path: str, title: str, source: str = ""):
     """Transcribe audio using SenseVoice-Small and save as Markdown."""
-    from funasr import AutoModel
-    from funasr.utils.postprocess_utils import rich_transcription_postprocess
+    clean = clean_title(title)
+    text, elapsed = funasr.transcribe(audio_path, language="zh")
 
-    print("Loading SenseVoice-Small model...", file=sys.stderr)
-    model = AutoModel(
-        model="iic/SenseVoiceSmall",
-        trust_remote_code=True,
-        vad_model="fsmn-vad",
-        vad_kwargs={"max_single_segment_time": 30000},
-        device="cpu",
+    body = markdown.note_markdown(
+        clean,
+        f"> 转录引擎：SenseVoice-Small | 耗时：{elapsed:.0f}秒\n\n{text}",
+        {
+            "type": "note",
+            "platform": "douyin",
+            "tags": "[抖音]",
+            "source": source,
+            "author": "",
+            "transcriber": "SenseVoice-Small",
+        },
     )
-    print("Model loaded. Transcribing...", file=sys.stderr)
-
-    start = time.time()
-    result = model.generate(
-        input=audio_path,
-        language="zh",
-        use_itn=True,
-        batch_size_s=60
-    )
-    elapsed = time.time() - start
-
-    # Extract text
-    text = ""
-    if result and len(result) > 0:
-        for r in result:
-            if "text" in r:
-                text += rich_transcription_postprocess(r["text"]) + "\n\n"
-
-    # Clean title (remove duplicate suffix)
-    clean_title = title.split("《")[0] if "《" in title and title.count("《") > 1 else title
-    if clean_title.count("《") > 1:
-        first_end = clean_title.find("》")
-        if first_end > 0:
-            clean_title = clean_title[:first_end + 1]
-
-    # Generate Markdown
-    now = datetime.now().strftime("%Y-%m-%d")
-    markdown = f"""---
-title: {clean_title}
-type: note
-platform: douyin
-tags: [抖音]
-created: {now}
-source: {source}
-author:
-transcriber: SenseVoice-Small
----
-
-# {clean_title}
-
-> 转录引擎：SenseVoice-Small | 耗时：{elapsed:.0f}秒
-
-{text}"""
 
     # Save to file
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(markdown)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(body)
 
     return elapsed, len(text)
 
@@ -100,10 +75,11 @@ def main():
     print("Step 1: Downloading audio...", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
-    video_id = extract_video_id(url)
-    tmpdir = tempfile.mkdtemp(prefix="dyt-")
-
+    tmpdir = None
     try:
+        video_id = extract_video_id(url)
+        tmpdir = tempfile.mkdtemp(prefix="dyt-")
+
         audio_path, title = download_audio(video_id, tmpdir)
 
         # Step 2: Transcribe
@@ -112,8 +88,7 @@ def main():
         print("=" * 50, file=sys.stderr)
 
         # Generate output filename
-        safe_title = "".join(c for c in title if c.isalnum() or c in "《》-_ ").strip()
-        safe_title = safe_title[:50]  # Limit length
+        safe_title = markdown.sanitize_filename(title, "抖音视频")
         output_filename = f"{safe_title}.md"
         output_path = os.path.join(output_dir, output_filename)
 
@@ -130,9 +105,13 @@ def main():
         # Print output path to stdout for scripting
         print(output_path)
 
+    except (RuntimeError, ValueError) as e:
+        print(f"\n❌ {e}", file=sys.stderr)
+        sys.exit(1)
     finally:
         # Cleanup
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

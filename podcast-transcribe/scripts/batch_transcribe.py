@@ -31,14 +31,12 @@ def parse_rss(rss_url: str):
 
     episodes = []
     for item in items:
-        title = item.find('title').text or ''
-        pub_date = item.find('pubDate').text or ''
-        duration = item.find('itunes:duration', NS)
-        duration = duration.text if duration is not None else ''
+        title = item.findtext('title') or ''
+        pub_date = item.findtext('pubDate') or ''
+        duration = item.findtext('itunes:duration', default='', namespaces=NS) or ''
         enclosure = item.find('enclosure')
         audio_url = enclosure.get('url') if enclosure is not None else ''
-        ep_num = item.find('itunes:episode', NS)
-        ep_num = ep_num.text if ep_num is not None else ''
+        ep_num = item.findtext('itunes:episode', default='', namespaces=NS) or ''
 
         # Parse pubDate
         try:

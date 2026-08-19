@@ -63,8 +63,15 @@ jobs:
           python tools/mcp_workflow_demo.py --help
           python industry-intelligence-radar/scripts/scan.py --help
           python knowledge-base-management/scripts/vault_health_check.py --help
+          python tiktok-transcribe/scripts/transcribe.py --help
+          python weibo-transcribe/scripts/transcribe.py --help
+          python zhihu-transcribe/scripts/transcribe.py --help
+          python bilibili-transcribe/scripts/transcribe.py --help
+          python youtube-transcribe/scripts/transcribe.py --help
+          python douyin-transcribe/scripts/transcribe.py 2>&1 | grep -q "Usage"
+          python douyin-transcribe/scripts/download_douyin_audio.py 2>&1 | grep -q "Usage"
 
       - name: Lint
         run: |
           python -m pip install ruff
-          ruff check . --select E,F,W --ignore E501
+          ruff check . --select E,F,W --ignore E402,E501
