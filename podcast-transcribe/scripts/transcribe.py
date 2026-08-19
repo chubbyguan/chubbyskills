@@ -8,6 +8,7 @@
     python transcribe.py "path/to/audio.m4a"
 """
 
+import argparse
 import sys
 import os
 import time
@@ -16,6 +17,8 @@ import tempfile
 import shutil
 import re
 from datetime import datetime
+
+from atlas_transcribe import DEFAULT_MODEL, transcribe_file
 
 
 def download_audio(url: str, output_dir: str) -> tuple:
@@ -132,7 +135,43 @@ def download_audio(url: str, output_dir: str) -> tuple:
     return audio_path, title
 
 
-def transcribe_audio(audio_path: str, output_path: str, title: str, source: str = ""):
+def write_transcript_markdown(
+    output_path: str,
+    title: str,
+    source: str,
+    text_segments: list,
+    elapsed: float,
+    transcriber: str,
+):
+    """Write transcript segments using the skill's Markdown contract."""
+    now = datetime.now().strftime("%Y-%m-%d")
+    text = "\n".join(text_segments)
+
+    markdown = f"""---
+title: {title}
+type: note
+platform: podcast
+tags: [播客]
+created: {now}
+source: {source}
+author:
+transcriber: {transcriber}
+---
+
+# {title}
+
+> 转录引擎：{transcriber} | 耗时：{elapsed:.0f}秒 | 段数：{len(text_segments)}
+
+{text}"""
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as output_file:
+        output_file.write(markdown)
+
+    return elapsed, len(text_segments)
+
+
+def transcribe_audio_local(audio_path: str, output_path: str, title: str, source: str = ""):
     """Transcribe audio using faster-whisper and save as Markdown."""
     from faster_whisper import WhisperModel
 
@@ -141,7 +180,7 @@ def transcribe_audio(audio_path: str, output_path: str, title: str, source: str 
     print("Model loaded. Transcribing...", file=sys.stderr)
 
     start = time.time()
-    segments, info = model.transcribe(
+    segments, _info = model.transcribe(
         audio_path,
         language='zh',
         beam_size=5,
@@ -156,45 +195,80 @@ def transcribe_audio(audio_path: str, output_path: str, title: str, source: str 
 
     elapsed = time.time() - start
 
-    # Generate Markdown
-    now = datetime.now().strftime("%Y-%m-%d")
-    text = "\n".join(text_segments)
+    return write_transcript_markdown(
+        output_path,
+        title,
+        source,
+        text_segments,
+        elapsed,
+        "faster-whisper small",
+    )
 
-    markdown = f"""---
-title: {title}
-type: note
-platform: podcast
-tags: [播客]
-created: {now}
-source: {source}
-author:
-transcriber: faster-whisper-small
----
 
-# {title}
+def transcribe_audio_atlas(
+    audio_path: str,
+    output_path: str,
+    title: str,
+    source: str,
+    api_key: str,
+    language: str,
+    timeout: float,
+):
+    """Transcribe audio through the optional Atlas Cloud provider."""
+    with tempfile.TemporaryDirectory(prefix="podcast-atlas-") as temp_dir:
+        extension = os.path.splitext(audio_path)[1].lower()
+        if extension in {".mp3", ".wav", ".ogg", ".raw"}:
+            upload_path = audio_path
+        else:
+            upload_path = os.path.join(temp_dir, "audio.mp3")
+            print("Converting audio to MP3 for Atlas Cloud...", file=sys.stderr)
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", audio_path, "-vn",
+                    "-acodec", "libmp3lame", upload_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3600,
+                check=True,
+            )
 
-> 转录引擎：faster-whisper small | 耗时：{elapsed:.0f}秒 | 段数：{len(text_segments)}
+        print(f"Submitting one Atlas Cloud transcription ({DEFAULT_MODEL})...", file=sys.stderr)
+        start = time.time()
+        text = transcribe_file(
+            audio_path=upload_path,
+            api_key=api_key,
+            language=language,
+            timeout=timeout,
+        )
+        elapsed = time.time() - start
 
-{text}"""
-
-    # Save to file
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(markdown)
-
-    return elapsed, len(text_segments)
+    return write_transcript_markdown(
+        output_path,
+        title,
+        source,
+        [text],
+        elapsed,
+        f"Atlas Cloud ({DEFAULT_MODEL})",
+    )
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <audio_url_or_path> [output_dir]")
-        print("\nExample:")
-        print(f'  {sys.argv[0]} "https://www.xiaoyuzhoufm.com/episode/xxxxx"')
-        print(f'  {sys.argv[0]} "path/to/audio.m4a" ./output')
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="播客单集转录工具")
+    parser.add_argument("source", help="播客页面、音频 URL 或本地音频路径")
+    parser.add_argument("output_dir", nargs="?", default=".", help="输出目录")
+    parser.add_argument(
+        "--provider",
+        choices=("local", "atlas"),
+        default=os.environ.get("PODCAST_TRANSCRIBE_PROVIDER", "local"),
+        help="转录提供商，默认 local",
+    )
+    parser.add_argument("--language", default="", help="可选语言代码，例如 zh-CN")
+    parser.add_argument("--atlas-timeout", type=float, default=1800, help="Atlas 轮询超时秒数")
+    args = parser.parse_args()
 
-    source = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "."
+    source = args.source
+    output_dir = args.output_dir
 
     # Step 1: Get audio
     print("=" * 50, file=sys.stderr)
@@ -223,7 +297,21 @@ def main():
         output_filename = f"{safe_title}.md"
         output_path = os.path.join(output_dir, output_filename)
 
-        elapsed, seg_count = transcribe_audio(audio_path, output_path, title, source)
+        if args.provider == "atlas":
+            api_key = os.environ.get("ATLASCLOUD_API_KEY", "").strip()
+            if not api_key:
+                raise RuntimeError("ATLASCLOUD_API_KEY is required for --provider atlas")
+            elapsed, seg_count = transcribe_audio_atlas(
+                audio_path,
+                output_path,
+                title,
+                source,
+                api_key,
+                args.language,
+                args.atlas_timeout,
+            )
+        else:
+            elapsed, seg_count = transcribe_audio_local(audio_path, output_path, title, source)
 
         print("\n" + "=" * 50, file=sys.stderr)
         print("✅ Done!", file=sys.stderr)
@@ -236,10 +324,16 @@ def main():
         # Print output path to stdout for scripting
         print(output_path)
 
+    except Exception as exc:
+        print(f"\n❌ 转录失败：{exc}", file=sys.stderr)
+        return 1
+
     finally:
         # Cleanup
         shutil.rmtree(tmpdir, ignore_errors=True)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

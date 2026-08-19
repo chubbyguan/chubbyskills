@@ -126,7 +126,7 @@ Gitee 镜像：https://gitee.com/chubbyguan/chubbyskills
 | TikTok | [`tiktok-transcribe`](./tiktok-transcribe/SKILL.md) | 视频转文字稿 | `yt-dlp` + `ffmpeg` + `funasr` | 本地视频转录 |
 | 微博 | [`weibo-transcribe`](./weibo-transcribe/SKILL.md) | 微博视频转文字稿 | `yt-dlp` + `ffmpeg` + `funasr` | 优先移动端链接或本地视频 |
 | 知乎 | [`zhihu-transcribe`](./zhihu-transcribe/SKILL.md) | 知乎视频转文字稿 | `yt-dlp` + `ffmpeg` + `funasr` | 本地视频转录 |
-| 播客 | [`podcast-transcribe`](./podcast-transcribe/SKILL.md) | 小宇宙 / 喜马拉雅 / RSS / 本地音频转录 | `ffmpeg` + `faster-whisper` | 本地音频转录 |
+| 播客 | [`podcast-transcribe`](./podcast-transcribe/SKILL.md) | 小宇宙 / 喜马拉雅 / RSS / 本地音频转录 | `ffmpeg` + `faster-whisper`；可选 Atlas Cloud | 本地或远程音频转录 |
 | 微信公众号 | [`wechat-article-ingest`](./wechat-article-ingest/SKILL.md) | 公众号文章 / PDF 转 Markdown | `beautifulsoup4`，PDF 增强需 `markitdown` / `pymupdf` | PDF 或保存 HTML |
 | 小红书 | [`xiaohongshu-ingest`](./xiaohongshu-ingest/SKILL.md) | 图文存图、视频转录、爆款拆解、衍生选题 | 图文零依赖，建议 `XHS_COOKIE` | `--fallback-text` 手动正文 |
 | X / Twitter | [`x-ingest`](./x-ingest/SKILL.md) | 推文正文、图片、视频转录，免 API Key | 图文零依赖，视频需 `ffmpeg` + `funasr` | `--fallback-text` 手动正文 |
@@ -417,6 +417,8 @@ python3 tools/platform_smoke.py --mode offline --check
 | `OPENAI_BASE_URL` | OpenAI 兼容代理或网关 |
 | `CHUBBY_EMBEDDING_PROVIDER` | MCP / semantic 使用 `lite`、`openai` 或 `local` |
 | `CHUBBY_LOCAL_EMBEDDING_MODEL` | 本地 embedding 模型 |
+| `ATLASCLOUD_API_KEY` | `podcast-transcribe --provider atlas` 的远程转录凭据 |
+| `PODCAST_TRANSCRIBE_PROVIDER` | 播客转录使用 `local`（默认）或 `atlas` |
 | `CHUBBY_SMOKE_<PLATFORM>_SOURCE` | 指定某个平台的 live smoke 链接 |
 
 ## 合规与免责

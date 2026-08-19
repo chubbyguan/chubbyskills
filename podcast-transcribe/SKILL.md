@@ -32,12 +32,23 @@ pip install faster-whisper
 # Ubuntu: sudo apt install ffmpeg
 ```
 
+默认继续使用本地 `faster-whisper`。如果不想安装本地模型，也可以选择 Atlas Cloud 远程转录：
+
+```bash
+export ATLASCLOUD_API_KEY="your-api-key"
+python scripts/transcribe.py "path/to/audio.m4a" --provider atlas
+```
+
+远程模式使用 `bytedance/seed-asr-2.0` 的固定请求 schema；提交请求只发送
+一次，随后仅轮询 prediction 状态。
+
 ## 使用方法
 
 ### 单集转录
 
 ```bash
 python scripts/transcribe.py "https://www.xiaoyuzhoufm.com/episode/xxxxx"
+python scripts/transcribe.py "path/to/audio.m4a" --provider atlas
 ```
 
 ### 批量转录（RSS）
@@ -60,6 +71,8 @@ python scripts/batch_transcribe.py --rss-url "http://www.ximalaya.com/album/xxxx
 
 ### Step 2: faster-whisper 转录
 
+默认在本地使用 `faster-whisper`：
+
 ```python
 from faster_whisper import WhisperModel
 
@@ -71,6 +84,10 @@ segments, info = model.transcribe(
     vad_filter=True,
 )
 ```
+
+使用 `--provider atlas` 时，脚本会把不受 API 直接支持的容器先转成 MP3，
+再通过 Atlas Cloud `generateAudio` 接口提交一次任务，并有界轮询结果。Atlas
+Cloud 是可选路径，不改变本地默认行为。
 
 ### Step 3: 生成 Markdown
 
@@ -90,6 +107,7 @@ segments, info = model.transcribe(
 - 中文准确率约 85-90%，需要人工校对
 - 首次运行会下载模型（small: ~461MB）
 - 不支持说话人分离
+- Atlas Cloud 模式需要 API key，远程转录可能产生费用
 
 ## 参考项目
 
