@@ -56,6 +56,10 @@ def download_audio(cfg, url: str, output_dir: str, filename: str = "audio.mp3") 
                 ],
                 timeout=cfg.download_timeout,
             )
+            if not os.path.exists(audio_path):
+                raise RuntimeError(
+                    f"yt-dlp 退出成功但未产出音频文件：{audio_path}，链接可能已失效"
+                )
             size_mb = os.path.getsize(audio_path) / (1024 * 1024)
             print(f"  ✅ Audio: {size_mb:.1f} MB", file=sys.stderr)
             return audio_path
