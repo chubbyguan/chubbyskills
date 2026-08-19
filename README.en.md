@@ -4,7 +4,11 @@
 
 # 🧰 Chubby Skills
 
-#### Your feed forgets. Your knowledge base doesn't. — pull content from everywhere into your second brain
+#### Your feed forgets. Your knowledge base remembers — and your agents put it to work.
+
+<h3 align="center"><strong>The de facto standard for Chinese content ingestion into AI agents</strong></h3>
+
+<p align="center"><em>A content creator's knowledge asset pipeline — turn what you scroll, watch, and read into a reusable, searchable idea bank your agents can query.</em></p>
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#-skills)
@@ -19,9 +23,28 @@
 
 </div>
 
-These are AI Skills I've been using in my own projects. They've proven useful, so I'm open-sourcing them.
+---
 
-Each Skill here is a structured instruction set that Agents can load directly, following the [Agent Skills](https://agentskills.io) open standard. Works with Claude Code, Codex, OpenCode, OpenClaw, and Hermes.
+## Why not just another skill collection
+
+The Agent Skills ecosystem has grown past **1.4M published skills**, but the vast majority are generic development skills. **No de facto standard exists in the vertical of Chinese content ingestion → knowledge base.** That is the position Chubby Skills aims to own.
+
+| Dimension | **Chubby Skills** | feedgrab | RSSHub | Commercial tools (Readwise / ima / NotebookLM) |
+|---|---|---|---|---|
+| Full Chinese-platform ingest | ✅ 10 platforms | ⚠️ 7 platforms | ⚠️ RSS feeds only | ⚠️ Limited / paid |
+| Video / podcast transcription | ✅ Subtitle-first, no GPU | ❌ | ❌ | ⚠️ Partial |
+| Knowledge base + semantic search + MCP | ✅ Full loop | ❌ Fetch only | ❌ | ⚠️ Closed ecosystem |
+| Local-first / privacy | ✅ Fully local | ✅ Local | ✅ | ❌ Cloud |
+| Agent-orchestrated (open standard) | ✅ | ✅ | ❌ | ❌ |
+| Free / zero API cost | ✅ Zero-dep tier | ✅ | ✅ | ❌ Subscription |
+
+> There are many ingest tools, and many knowledge base tools. **But the complete loop — Chinese omnichannel ingest → unified format → knowledge base → agent query — fully local and portable, is only Chubby Skills.**
+
+Full comparison and ecosystem positioning: [docs/comparison.md](./docs/comparison.md)
+
+Chubby Skills follows the [Agent Skills](https://agentskills.io) open standard and runs on Claude Code, Codex, OpenCode, OpenClaw, and Hermes.
+
+---
 
 ## ✨ What it does for you
 

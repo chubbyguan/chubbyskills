@@ -4,7 +4,11 @@
 
 # 🧰 Chubby Skills
 
-#### 信息流会忘，知识库会记 —— 把全渠道好内容采集进你的第二大脑
+#### 信息流会忘，知识库会记，Agent 会用。
+
+<h3 align="center"><strong>中文 Agent 内容采集的事实标准</strong></h3>
+
+<p align="center"><em>内容创作者的知识资产管道 —— 把你每天刷到、听到、读到的好内容，变成可复用、可检索、可被 Agent 调用的选题库与知识资产。</em></p>
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.11.0-10B981?style=for-the-badge)](./CHANGELOG.md)
@@ -18,6 +22,27 @@
 ![Hermes](https://img.shields.io/badge/Hermes-Skill-EC4899?style=flat-square)
 
 </div>
+
+---
+
+## 生态定位：为什么不是又一个 skill 集合
+
+Agent Skills 生态已有 140 万+ 技能包，但绝大多数是泛化开发技能；**垂直领域（中文内容采集 → 知识库）至今没有事实标准**。Chubby Skills 要占据的，就是这个位置。
+
+| 维度 | **Chubby Skills** | feedgrab | RSSHub | 商业工具（Readwise / ima / NotebookLM） |
+|---|---|---|---|---|
+| 中文平台全渠道采集 | ✅ 10 平台 | ⚠️ 7 平台 | ⚠️ 订阅源（非正文采集） | ⚠️ 覆盖差 / 收费 |
+| 视频 / 播客转录（字幕优先免 GPU） | ✅ | ❌ | ❌ | ⚠️ 部分 |
+| 知识库 + 语义检索 + MCP 闭环 | ✅ 完整 | ❌ 只抓不存 | ❌ | ⚠️ 封闭生态 |
+| 本地运行 / 隐私 | ✅ 完全本地 | ✅ 本地 | ✅ | ❌ 云端 |
+| 可被 Agent 编排（开放标准） | ✅ | ✅ | ❌ | ❌ |
+| 免费 / 零 API 费用 | ✅ 零依赖档位可用 | ✅ | ✅ | ❌ 订阅制 |
+
+> 采集工具有很多，知识库工具也有很多。**但「中文全渠道采集 → 统一格式 → 知识库 → Agent 调用」的完整闭环、且完全本地可迁移的，只有 Chubby Skills。**
+
+完整对比与生态定位图见 [docs/comparison.md](./docs/comparison.md)。
+
+---
 
 ## 这是什么
 
