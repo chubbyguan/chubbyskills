@@ -9,7 +9,7 @@ triggers:
   - "帮我转录这个播客"
   - "下载播客"
   - "批量转录播客"
-version: 1.0.0
+version: 1.1.0
 tags: [media, audio, podcast, transcription, xiaoyuzhou]
 ---
 
@@ -30,6 +30,9 @@ pip install faster-whisper
 # 系统依赖
 # macOS: brew install ffmpeg
 # Ubuntu: sudo apt install ffmpeg
+
+# 可选：使用 MuAPI 托管转录后端时设置
+export MUAPI_API_KEY="your-api-key"
 ```
 
 ## 使用方法
@@ -40,10 +43,27 @@ pip install faster-whisper
 python scripts/transcribe.py "https://www.xiaoyuzhoufm.com/episode/xxxxx"
 ```
 
+默认使用本地 `faster-whisper`。如需使用 MuAPI 托管的 `openai-whisper`，设置
+`MUAPI_API_KEY`（也支持 `MU_API_KEY`）后运行：
+
+```bash
+python scripts/transcribe.py "path/to/audio.m4a" ./output --provider muapi
+```
+
+MuAPI 后端会执行上传、提交、轮询和 Markdown 输出的完整流程；返回的媒体地址只接受
+HTTPS，API key 不会发送到结果下载地址。音频文件需小于 25 MB；更长或更大的音频请继续使用本地后端。
+
 ### 批量转录（RSS）
 
 ```bash
 python scripts/batch_transcribe.py --rss-url "http://www.ximalaya.com/album/xxxxx.xml" --count 10
+```
+
+批量流程也支持 MuAPI 后端：
+
+```bash
+python scripts/batch_transcribe.py --rss-url "http://www.ximalaya.com/album/xxxxx.xml" \
+  --count 10 --provider muapi
 ```
 
 ## 流程
@@ -72,6 +92,18 @@ segments, info = model.transcribe(
 )
 ```
 
+### 可选：MuAPI 托管转录
+
+MuAPI 后端通过 `openai-whisper` 提供异步转录，支持 `--language` 指定语言代码，省去本地模型下载和推理环境配置：
+
+```bash
+python scripts/transcribe.py "path/to/audio.m4a" ./output \
+  --provider muapi --language zh
+```
+
+API key 与访问地址见 [MuAPI access keys](https://muapi.ai/access-keys)；能力说明见
+[MuAPI speech-to-text API](https://muapi.ai/speech-to-text)。默认本地流程和原有参数保持不变。
+
 ### Step 3: 生成 Markdown
 
 自动创建带 frontmatter 的 Markdown 文件。
@@ -90,6 +122,8 @@ segments, info = model.transcribe(
 - 中文准确率约 85-90%，需要人工校对
 - 首次运行会下载模型（small: ~461MB）
 - 不支持说话人分离
+- MuAPI 后端需要网络连接和 API key，单个上传音频需小于 25 MB
+- MuAPI 后端按异步任务轮询，长音频可能需要等待更久并产生 API 用量
 
 ## 参考项目
 

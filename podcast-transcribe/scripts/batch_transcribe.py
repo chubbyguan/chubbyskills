@@ -104,8 +104,10 @@ def download_episode(ep: dict, audio_dir: str) -> str:
     return fpath
 
 
-def transcribe_episode(audio_path: str, output_dir: str, ep: dict) -> str:
-    """Transcribe single episode using faster-whisper."""
+def transcribe_episode(
+    audio_path: str, output_dir: str, ep: dict, provider: str = "local"
+) -> str:
+    """Transcribe a single episode with the selected backend."""
     safe_name = sanitize_filename(ep['title'])
     txt_name = f"EP{ep['num']:03d}-{safe_name}.md"
     txt_path = os.path.join(output_dir, txt_name)
@@ -120,8 +122,12 @@ def transcribe_episode(audio_path: str, output_dir: str, ep: dict) -> str:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     transcribe_script = os.path.join(script_dir, 'transcribe.py')
 
+    command = [sys.executable, transcribe_script, audio_path, output_dir]
+    if provider != "local":
+        command.extend(["--provider", provider])
+
     result = subprocess.run(
-        [sys.executable, transcribe_script, audio_path, output_dir],
+        command,
         capture_output=True, text=True, timeout=7200,
     )
 
@@ -141,6 +147,12 @@ def main():
     parser.add_argument('--start', type=int, default=1, help='起始序号')
     parser.add_argument('--download-only', action='store_true', help='仅下载')
     parser.add_argument('--transcribe-only', action='store_true', help='仅转录')
+    parser.add_argument(
+        '--provider',
+        choices=('local', 'muapi'),
+        default=os.environ.get('PODCAST_TRANSCRIBE_PROVIDER', 'local'),
+        help='转录后端，默认使用本地 faster-whisper',
+    )
     args = parser.parse_args()
 
     # Create directories
@@ -176,7 +188,7 @@ def main():
                 print(f"EP{ep['num']:03d}: ⚠️ 音频不存在，跳过")
                 continue
 
-            transcribe_episode(fpath, args.output, ep)
+            transcribe_episode(fpath, args.output, ep, provider=args.provider)
 
     print("\n🏁 批次完成")
 
