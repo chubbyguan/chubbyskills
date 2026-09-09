@@ -143,7 +143,7 @@ Gitee 镜像：https://gitee.com/chubbyguan/chubbyskills
 
 ### 可另行安装的可选 skill：cue-omni-reader（不属于本仓库）
 
-本仓库专注中文平台采集。如果还需要把其他 HTTP(S) 网页或已授权的本地文档、音频、视频解析成 Markdown（例如扫描件、播客之外的本地音视频），可以另行安装外部的 **cue-omni-reader**——它是一层纯指令的 agent skill，驱动官方 Cue Omni Reader MCP 完成解析，不含自研解析器。
+本仓库专注中文平台采集。如果还需要把其他 HTTP(S) 网页或已授权的本地文档、音频、视频解析成 Markdown（例如播客之外的本地音视频），可以另行安装外部的 **cue-omni-reader**——它是一层纯指令的 agent skill，驱动官方 Cue Omni Reader MCP 完成解析，不含自研解析器。
 
 - 上游：https://github.com/sensedeal/cue-skills/tree/main/cue-omni-reader（MIT）
 - 安装：`npx skills add sensedeal/cue-skills --skill cue-omni-reader`

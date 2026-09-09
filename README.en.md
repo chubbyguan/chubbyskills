@@ -187,6 +187,15 @@ In any Agent that supports Skills (Claude Code, Codex, OpenClaw, Hermes, etc.), 
 Install this skill: https://github.com/chubbyguan/chubbyskills/tree/main/<skill-name>
 ```
 
+### Optional external skill: cue-omni-reader (not part of this repo)
+
+This repo focuses on Chinese-platform ingestion. If you also need to parse other HTTP(S) pages or authorized local documents, audio, or video into Markdown (e.g. local audio/video beyond podcasts), you can additionally install the external **cue-omni-reader** — an instruction-only agent skill that drives the official Cue Omni Reader MCP to do the parsing; it ships no parser of its own.
+
+- Upstream: https://github.com/sensedeal/cue-skills/tree/main/cue-omni-reader (MIT)
+- Install: `npx skills add sensedeal/cue-skills --skill cue-omni-reader`
+
+This repo does **not** bundle or maintain that skill; install and usage follow the upstream docs. Note that `parse` is not read-only — a single parse may bill; parsing local files requires installing the Bridge and authorizing a minimal directory.
+
 ---
 
 ## ✨ Skills
