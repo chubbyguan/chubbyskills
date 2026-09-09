@@ -187,6 +187,16 @@ In any Agent that supports Skills (Claude Code, Codex, OpenClaw, Hermes, etc.), 
 Install this skill: https://github.com/chubbyguan/chubbyskills/tree/main/<skill-name>
 ```
 
+### Off-platform pages and local files: cue-omni-reader
+
+The skills above cover in-platform sources (Bilibili, Douyin, podcasts, …). Users still show up with a PDF, a meeting recording, or a local video. [cue-omni-reader](https://github.com/sensedeal/cue-skills/tree/main/cue-omni-reader) (MIT) turns those pages and authorized local documents/audio/video into Markdown so your existing transcribe/ingest skills can take over.
+
+```
+npx skills add sensedeal/cue-skills --skill cue-omni-reader
+```
+
+Not a dependency of this repo. Parsing may bill; local files need a user-authorized directory.
+
 ---
 
 ## ✨ Skills

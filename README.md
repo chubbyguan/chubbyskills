@@ -141,6 +141,16 @@ pip install -r podcast-transcribe/requirements.txt
 
 Gitee 镜像：https://gitee.com/chubbyguan/chubbyskills
 
+### 站外网页 / 本地文件：cue-omni-reader
+
+上面的 skill 管的是 B 站、抖音、播客等**平台内**内容。用户常另外丢来官网 PDF、纪要录音、本地视频——那些不在采集列表里。 [cue-omni-reader](https://github.com/sensedeal/cue-skills/tree/main/cue-omni-reader)（MIT）把网页和已授权的本地文档/音频/视频收成 Markdown，再交给你们现有的转写/整理流程。
+
+```
+npx skills add sensedeal/cue-skills --skill cue-omni-reader
+```
+
+不进本仓库依赖。解析可能计费；读本地文件需用户授权目录。
+
 ## 平台能力
 
 | 平台 / 内容 | Skill | 能力 | 默认依赖 | 失败 fallback |
