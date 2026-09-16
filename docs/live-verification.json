@@ -1,0 +1,66 @@
+{
+  "version": "0.11.1",
+  "sample_policy": "One distinct public source per platform; debug retries are not additional samples. Latest result shown.",
+  "results": [
+    {
+      "platform": "bilibili",
+      "mode": "live",
+      "status": "failed",
+      "source": "https://www.bilibili.com/video/BV1mw4m1r7Su/",
+      "checked_at": "2026-09-16T16:58:16+08:00",
+      "runtime": {
+        "python": "3.12.13",
+        "system": "Darwin",
+        "yt-dlp": "2026.8.19",
+        "beautifulsoup4": "4.15.0",
+        "mcp": "1.30.0"
+      },
+      "project_version": "0.11.1",
+      "failure_kind": "missing_dependency",
+      "human_verified": false,
+      "detail": "No subtitle found; audio downloaded, then local transcription blocked by missing funasr."
+    },
+    {
+      "platform": "x",
+      "mode": "live",
+      "status": "passed",
+      "source": "https://x.com/OpenAI/status/1663696190960173056",
+      "checked_at": "2026-09-16T17:00:58+08:00",
+      "runtime": {
+        "python": "3.12.13",
+        "system": "Darwin",
+        "yt-dlp": "2026.8.19",
+        "beautifulsoup4": "4.15.0",
+        "mcp": "1.30.0"
+      },
+      "project_version": "0.11.1",
+      "output_sha256": "a05795d060200d27d2bc1158f0363b787b2dab90e2885db0e1f2500ea2fc12ae",
+      "output_bytes": 656,
+      "body_chars": 194,
+      "failure_kind": "",
+      "human_verified": false,
+      "review": "Agent inspected title, source, YAML parsing and beginning of body; no full transcript accuracy assessment."
+    },
+    {
+      "platform": "youtube",
+      "mode": "live",
+      "status": "passed",
+      "source": "https://www.youtube.com/watch?v=aircAruvnKk",
+      "checked_at": "2026-09-16T17:01:08+08:00",
+      "runtime": {
+        "python": "3.12.13",
+        "system": "Darwin",
+        "yt-dlp": "2026.8.19",
+        "beautifulsoup4": "4.15.0",
+        "mcp": "1.30.0"
+      },
+      "project_version": "0.11.1",
+      "output_sha256": "bd4baa22c51aff3037cd421a0792d7b5ca7232228ae88df86a6a7ce1d7802546",
+      "output_bytes": 19066,
+      "body_chars": 18602,
+      "failure_kind": "",
+      "human_verified": false,
+      "review": "Agent inspected title, source, YAML parsing and beginning of body; no full transcript accuracy assessment."
+    }
+  ]
+}

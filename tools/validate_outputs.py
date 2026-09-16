@@ -107,6 +107,13 @@ def parse_frontmatter(block):
 
 def clean_scalar(value):
     value = value.strip()
+    if value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+            if isinstance(decoded, str):
+                return decoded
+        except ValueError:
+            pass
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1].strip()
     return value

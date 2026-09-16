@@ -9,12 +9,16 @@ The matrix has three layers:
 """
 
 import argparse
+import hashlib
+import importlib.metadata
 import json
 import os
+import platform as runtime_platform
 import re
 import subprocess
 import sys
 import tempfile
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 
@@ -45,11 +49,12 @@ FALLBACK_PLATFORMS = {
 }
 
 FAILURE_PATTERNS = (
-    ("missing_dependency", ("No module named", "ModuleNotFoundError", "not found", "No such file", "ffmpeg", "yt-dlp")),
     ("auth_or_cookie", ("cookie", "login", "登录", "XHS_COOKIE", "unauthorized", "forbidden", "403")),
     ("anti_bot_or_rate_limit", ("blocked", "风控", "verify", "captcha", "rate limit", "429", "环境异常")),
-    ("expired_or_invalid_source", ("404", "not found", "无法识别", "Invalid input", "受限", "已删除")),
     ("network", ("timed out", "timeout", "Temporary failure", "Connection", "Name or service")),
+    ("missing_dependency", ("No module named", "ModuleNotFoundError", "command not found", "No such file or directory",
+                            "缺少 Python 依赖", "未找到系统命令", "ffmpeg not found", "yt-dlp not found")),
+    ("expired_or_invalid_source", ("404", "not found", "无法识别", "Invalid input", "受限", "已删除")),
 )
 
 
@@ -92,6 +97,7 @@ def result(platform, mode, status, detail="", command=None, output_path="", fail
         "output_path": output_path,
         "failure_kind": failure_kind,
         "fallback": fallback or platform.get("fallback", ""),
+        "checked_at": datetime.now().astimezone().replace(microsecond=0).isoformat(),
     }
 
 
@@ -161,8 +167,40 @@ def validate_generated_output(output_dir):
     return True, "generated schema v1 Markdown", str(latest)
 
 
-def pipeline_smoke(platform, source, extra, mode):
-    with tempfile.TemporaryDirectory() as tmpdir:
+def save_evidence(item, source, directory):
+    """Keep local evidence; captured content and logs are not publication-safe."""
+    item["source"] = source
+    item["human_verified"] = False
+    item["runtime"] = {"python": runtime_platform.python_version(), "system": runtime_platform.system()}
+    for package in ("yt-dlp", "beautifulsoup4", "faster-whisper", "mcp"):
+        try:
+            item["runtime"][package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            pass
+    item["project_version"] = (ROOT / "VERSION").read_text().strip()
+    output = item.get("output_path")
+    if output and Path(output).is_file():
+        data = Path(output).read_bytes()
+        _, body = validate_outputs.split_frontmatter(data.decode("utf-8"))
+        item["output_sha256"] = hashlib.sha256(data).hexdigest()
+        item["output_bytes"] = len(data)
+        item["body_chars"] = len(body.strip())
+    evidence = Path(directory) / "evidence.json"
+    item["evidence_path"] = str(evidence)
+    evidence.write_text(json.dumps(item, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return item
+
+
+def pipeline_smoke(platform, source, extra, mode, artifacts_dir=None):
+    if artifacts_dir:
+        if not re.fullmatch(r"[a-z0-9-]+", platform["id"]):
+            raise ValueError("invalid platform id for evidence path")
+        base = Path(artifacts_dir).expanduser().resolve()
+        base.mkdir(parents=True, exist_ok=True)
+        context = nullcontext(tempfile.mkdtemp(prefix=platform["id"] + "-", dir=base))
+    else:
+        context = tempfile.TemporaryDirectory()
+    with context as tmpdir:
         output_dir = Path(tmpdir) / "output"
         config = write_temp_config(tmpdir)
         cmd = [
@@ -180,16 +218,24 @@ def pipeline_smoke(platform, source, extra, mode):
         try:
             proc = run_process(cmd, timeout=150)
         except Exception as exc:
-            return result(platform, mode, "failed", str(exc), cmd, failure_kind=classify_failure(str(exc)))
+            item = result(platform, mode, "failed", str(exc), cmd, failure_kind=classify_failure(str(exc)))
+            if artifacts_dir:
+                logs = []
+                for value in (getattr(exc, "stdout", ""), getattr(exc, "stderr", ""), str(exc)):
+                    logs.append(value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value or ""))
+                Path(tmpdir, "process.log").write_text("\n".join(logs), encoding="utf-8")
+            return save_evidence(item, source, tmpdir) if artifacts_dir else item
 
         combined = "\n".join(part for part in (proc.stderr, proc.stdout) if part)
+        if artifacts_dir:
+            Path(tmpdir, "process.log").write_text(combined, encoding="utf-8")
         if proc.returncode != 0:
-            return result(platform, mode, "failed", combined, cmd, failure_kind=classify_failure(combined))
-
-        ok, detail, output_path = validate_generated_output(output_dir)
-        if ok:
-            return result(platform, mode, "passed", detail, cmd, output_path=output_path)
-        return result(platform, mode, "failed", detail, cmd, output_path=output_path, failure_kind=classify_failure(detail))
+            item = result(platform, mode, "failed", combined, cmd, failure_kind=classify_failure(combined))
+        else:
+            ok, detail, output_path = validate_generated_output(output_dir)
+            item = result(platform, mode, "passed" if ok else "failed", detail, cmd,
+                          output_path=output_path, failure_kind="" if ok else classify_failure(detail))
+        return save_evidence(item, source, tmpdir) if artifacts_dir else item
 
 
 def fallback_smoke(platform):
@@ -206,7 +252,7 @@ def fallback_smoke(platform):
     return pipeline_smoke(platform, spec["source"], extra, "fallback")
 
 
-def live_smoke(platform, use_sample_sources=False):
+def live_smoke(platform, use_sample_sources=False, artifacts_dir=None):
     source = os.environ.get(env_name(platform["id"]))
     source_from_env = bool(source)
     if not source and use_sample_sources:
@@ -223,11 +269,18 @@ def live_smoke(platform, use_sample_sources=False):
             "skipped",
             f"set {env_name(platform['id'])} to run a live smoke",
         )
-    return pipeline_smoke(platform, source, [], "live")
+    return pipeline_smoke(platform, source, [], "live", artifacts_dir=artifacts_dir)
 
 
-def run_matrix(platform_dir=platform_health.DEFAULT_PLATFORM_DIR, mode="offline", use_sample_sources=False):
+def run_matrix(platform_dir=platform_health.DEFAULT_PLATFORM_DIR, mode="offline", use_sample_sources=False,
+               platform_ids=None, artifacts_dir=None):
     platforms = load_platforms(platform_dir)
+    if platform_ids:
+        selected = set(platform_ids)
+        unknown = selected - {item["id"] for item in platforms}
+        if unknown:
+            raise ValueError("unknown platforms: " + ", ".join(sorted(unknown)))
+        platforms = [item for item in platforms if item["id"] in selected]
     all_results = []
     with tempfile.TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir) / "dry-run-output"
@@ -237,11 +290,14 @@ def run_matrix(platform_dir=platform_health.DEFAULT_PLATFORM_DIR, mode="offline"
             if mode in {"fallback", "all"}:
                 all_results.append(fallback_smoke(platform))
             if mode in {"live", "all"}:
-                all_results.append(live_smoke(platform, use_sample_sources=use_sample_sources))
+                all_results.append(live_smoke(platform, use_sample_sources=use_sample_sources,
+                                              artifacts_dir=artifacts_dir))
     return all_results
 
 
 def has_failures(results, require_live=False):
+    if require_live and not any(item["mode"] == "live" for item in results):
+        return True
     for item in results:
         if item["status"] == "failed":
             return True
@@ -277,6 +333,7 @@ def build_markdown(results, generated_at=None):
         f"Generated at: `{generated_at}`",
         "",
         "This matrix separates deterministic CI checks from optional live platform checks.",
+        "A skipped live check is unverified. A passed check validates output structure, not transcript accuracy.",
         "",
         "- `offline`: verifies platform routing without network access.",
         "- `fallback`: verifies manual fallback can still produce schema v1 Markdown.",
@@ -321,13 +378,21 @@ def main(argv=None):
     parser.add_argument("--mode", choices=["offline", "fallback", "live", "all"], default="offline")
     parser.add_argument("--use-sample-sources", action="store_true", help="Allow live mode to use sample_source values")
     parser.add_argument("--require-live", action="store_true", help="Treat skipped live checks as failures")
+    parser.add_argument("--platform", action="append", dest="platform_ids", help="Select a platform ID; repeat for multiple")
+    parser.add_argument("--artifacts-dir", help="Retain live outputs/logs/evidence locally; inspect before sharing")
     parser.add_argument("--check", action="store_true", help="Exit non-zero on failures")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Markdown matrix output")
     parser.add_argument("--write", action="store_true", help="Write Markdown matrix output")
     args = parser.parse_args(argv)
 
-    results = run_matrix(args.platform_dir, mode=args.mode, use_sample_sources=args.use_sample_sources)
+    if args.require_live and args.mode not in {"live", "all"}:
+        parser.error("--require-live requires --mode live or all")
+    try:
+        results = run_matrix(args.platform_dir, mode=args.mode, use_sample_sources=args.use_sample_sources,
+                             platform_ids=args.platform_ids, artifacts_dir=args.artifacts_dir)
+    except ValueError as exc:
+        parser.error(str(exc))
     failed = has_failures(results, require_live=args.require_live)
 
     if args.json:

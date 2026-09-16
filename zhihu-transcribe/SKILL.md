@@ -3,13 +3,11 @@ name: zhihu-transcribe
 description: >
   知乎视频 → 下载 → 转录 → 存为 Markdown。
   支持知乎视频链接，无需登录。
-category: media
-triggers:
-  - 用户发送知乎视频链接
-  - "把这个知乎视频转成文字"
-  - "帮我转录这个知乎"
-version: 1.0.0
-tags: [media, video, transcription, zhihu]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送知乎视频链接\", \"把这个知乎视频转成文字\", \"帮我转录这个知乎\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"video\", \"transcription\", \"zhihu\"]"
 ---
 
 # 知乎视频转录 Skill

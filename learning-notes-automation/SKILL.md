@@ -1,16 +1,11 @@
 ---
 name: learning-notes-automation
 description: "学习笔记自动化：视频/播客转录 → 知识点提取 → 闪卡生成 → 知识图谱更新。触发词：学习笔记、闪卡、Anki、知识提取、视频学习"
-triggers:
-  - "学习笔记"
-  - "闪卡"
-  - "Anki"
-  - "知识提取"
-  - "视频学习"
-  - "提取知识点"
-version: 1.0
-created: 2026-06-02
-tags: [learning, notes, anki, knowledge-extraction]
+metadata:
+  triggers: "[\"学习笔记\", \"闪卡\", \"Anki\", \"知识提取\", \"视频学习\", \"提取知识点\"]"
+  version: "1.0"
+  created: "2026-06-02"
+  tags: "[\"learning\", \"notes\", \"anki\", \"knowledge-extraction\"]"
 ---
 
 # 学习笔记自动化

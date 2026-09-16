@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.1 - 2026-09-16
+
+- Added a portable skill installer that bundles local dependencies, refuses to overwrite existing skills, and supports all 14 skills. Runtime setup now accepts every full skill directory name.
+- Standardized all 14 skill frontmatters; custom fields live in string-valued `metadata` and are checked for Agent Skill compatibility.
+- Fixed MCP fresh installs by pinning the optional SDK to `mcp==1.30.0`; added actionable startup errors and a real stdio handshake/search/read check, including portable knowledge-base installs.
+- Fixed shared Markdown serialization for colons, quotes, line breaks, control characters and typed metadata; indexing preserves escaped text and JSON list values.
+- Fixed YouTube empty titles when metadata extraction encounters unavailable formats. Pipeline success now requires valid output files and schema v1 metadata; error summaries retain the final failure reason.
+- Added selected-platform live checks with persistent local logs, output hashes and timestamps. Empty/skipped live evidence cannot pass `--require-live --check`.
+- Added Linux/Python 3.11 and macOS/Python 3.12 CI plus a manual text/subtitle workflow. Offline checks, real-source observations and user evidence are documented separately.
+- Replaced unsupported positioning claims with a creator workflow, real-source verification notes, community triage and a ten-person pilot template with no claimed participants.
+- Installation clarification was informed by [PR #1](https://github.com/chubbyguan/chubbyskills/pull/1). MCP compatibility addresses [Issue #4](https://github.com/chubbyguan/chubbyskills/issues/4).
+
 ## 0.11.0 - 2026-08-19
 
 - Added `chubby_common/` shared module: platform config, yt-dlp wrapper (with retry and dependency checks), SenseVoice transcription wrapper, unified Markdown generation, VTT subtitle parsing, and LLM JSON tolerance helpers.

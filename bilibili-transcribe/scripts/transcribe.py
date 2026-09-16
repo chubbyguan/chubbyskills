@@ -18,7 +18,8 @@ import shutil
 import sys
 import tempfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = SKILL_ROOT if os.path.isdir(os.path.join(SKILL_ROOT, "chubby_common")) else os.path.dirname(SKILL_ROOT)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -123,7 +124,7 @@ def build_markdown(title, text, url, uploader, transcriber, lang):
             "platform": "bilibili",
             "source": url,
             "author": uploader or "",
-            "tags": "[B站]",
+            "tags": ["B站"],
             "language": lang,
             "transcriber": transcriber,
         },

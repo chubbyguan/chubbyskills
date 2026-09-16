@@ -4,7 +4,7 @@
 # 本地索引（tools/vault_index.py）：零依赖（sqlite3 标准库）
 #
 # MCP server（mcp_server.py）才需要：
-#   pip install mcp
+#   python3 -m pip install -r requirements-mcp.txt
 # 运行：VAULT_DIR=/path/to/vault python3 scripts/mcp_server.py
 #
 # GBrain / GraphRAG / LLM Wiki 等为可选第三方工具，详见 SKILL.md。

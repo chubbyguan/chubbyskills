@@ -290,15 +290,30 @@ def stamp_pipeline_metadata(record):
 
 def candidate_output_paths(stdout, stderr):
     candidates = []
-    for text in (stdout or "", stderr or ""):
+    output_prefixes = ("📥 已入库：", "✅ Saved fallback:", "✅ Saved:", "Output:")
+    for text, is_stdout in ((stdout or "", True), (stderr or "", False)):
         for raw_line in text.splitlines():
             line = raw_line.strip()
             if not line:
                 continue
-            if line.startswith("📥 已入库："):
-                line = line.split("：", 1)[1].strip()
-            if line.endswith(".md"):
-                candidates.append(line)
+            declared_output = is_stdout
+            for prefix in output_prefixes:
+                if line.startswith(prefix):
+                    line = line[len(prefix):].strip()
+                    declared_output = True
+                    break
+            # stderr also contains progress messages that happen to end in .md.
+            # Only declared outputs or an existing bare path belong to the contract.
+            if not line.endswith(".md"):
+                continue
+            if not declared_output:
+                try:
+                    if not resolve_path(line).is_file():
+                        continue
+                except OSError:
+                    # Arbitrary log text can exceed the filesystem's filename limit.
+                    continue
+            candidates.append(line)
     deduped = []
     seen = set()
     for item in candidates:
@@ -366,9 +381,10 @@ def last_stdout_line(stdout):
 
 
 def compact_error(stdout, stderr):
-    text = "\n".join(part.strip() for part in (stderr, stdout) if part and part.strip())
+    # Tracebacks and actionable dependency errors usually finish stderr.
+    text = "\n".join(part.strip() for part in (stdout, stderr) if part and part.strip())
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:800]
+    return text if len(text) <= 800 else "...[truncated]... " + text[-782:]
 
 
 def compact_log(value, limit=4000):
@@ -437,7 +453,36 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
             record["output_paths"].append(record["output_path"])
         add_inferred_working_output(record)
         if record["status"] == "success":
-            record["stamped_paths"] = stamp_all_outputs(record)
+            validation_errors = []
+            paths = record["output_paths"]
+            if not paths:
+                validation_errors.append("no Markdown output reported")
+            for output_path in paths:
+                path = resolve_path(output_path)
+                if path.suffix != ".md":
+                    validation_errors.append(f"expected Markdown output: {output_path}")
+                    continue
+                try:
+                    if not path.is_file():
+                        validation_errors.append(f"missing output file: {output_path}")
+                        continue
+                    item = dict(record, output_path=output_path)
+                    if stamp_pipeline_metadata(item):
+                        record["stamped_paths"].append(output_path)
+                    for problem in validate_outputs.validate_file(path, require_schema_v1=True):
+                        if problem["level"] == "error":
+                            validation_errors.append(f"{output_path}: {problem['message']}")
+                except OSError as exc:
+                    validation_errors.append(f"cannot validate output {output_path}: {exc}")
+            if validation_errors:
+                record["status"] = "failed"
+                # Invalidate both the working file and any already-written vault copy.
+                for output_path in record["stamped_paths"]:
+                    try:
+                        stamp_pipeline_metadata(dict(record, output_path=output_path))
+                    except OSError as exc:
+                        validation_errors.append(f"cannot mark output failed {output_path}: {exc}")
+                record["error"] = "output validation failed: " + "; ".join(validation_errors)
     else:
         record["error"] = compact_error(process.stdout, process.stderr)
 
@@ -685,7 +730,10 @@ def check_example_vault_index():
 
 
 def mcp_ready():
-    return importlib.util.find_spec("mcp") is not None
+    try:
+        return importlib.util.find_spec("mcp.server.fastmcp") is not None
+    except (ModuleNotFoundError, ImportError, ValueError):
+        return False
 
 
 def quickstart_report_lines(steps):
@@ -856,14 +904,14 @@ def run_quickstart(args, config):
         )
 
     if mcp_ready():
-        steps.append(quickstart_step("MCP 依赖", "ok", "已安装 mcp，可直接启动知识库 MCP server"))
+        steps.append(quickstart_step("MCP 依赖", "ok", "兼容 SDK 可导入；真实握手请运行 python3 tools/mcp_smoke.py"))
     else:
         steps.append(
             quickstart_step(
                 "MCP 依赖",
                 "warn",
-                "未安装 mcp；不影响 CLI 和索引，只有 MCP server 需要",
-                "pip install mcp",
+                "缺少兼容 MCP SDK；不影响 CLI 和索引",
+                "python3 -m pip install -r knowledge-base-management/requirements-mcp.txt",
             )
         )
 

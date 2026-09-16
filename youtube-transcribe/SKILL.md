@@ -3,14 +3,11 @@ name: youtube-transcribe
 description: >
   YouTube 视频 → 下载 → 转录 → 翻译 → 存为 Markdown。
   支持中英文，英文内容自动翻译成中文，输出中英对照。
-category: media
-triggers:
-  - 用户发送 YouTube 视频链接
-  - "把这个 YouTube 视频转成文字"
-  - "帮我转录这个 YouTube"
-  - "YouTube 翻译"
-version: 1.0.0
-tags: [media, audio, video, transcription, youtube, translation]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送 YouTube 视频链接\", \"把这个 YouTube 视频转成文字\", \"帮我转录这个 YouTube\", \"YouTube 翻译\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"audio\", \"video\", \"transcription\", \"youtube\", \"translation\"]"
 ---
 
 # YouTube 视频转录 + 翻译 Skill
@@ -50,7 +47,7 @@ python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx"
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --output ./output
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --no-translate  # 不翻译
 python scripts/transcribe.py "https://www.youtube.com/watch?v=xxxxx" --no-subtitle  # 强制音频转录
-python scripts/batch_transcribe.py ../../examples/youtube-urls.txt -o ./output --no-translate
+python scripts/batch_transcribe.py urls.txt -o ./output --no-translate
 ```
 
 ## 流程

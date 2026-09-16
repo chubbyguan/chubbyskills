@@ -3,16 +3,11 @@ name: wechat-article-ingest
 description: >
   微信公众号文章 → Markdown 提取 + A层观点提取 + B层问题链生成。
   支持直接链接抓取和 PDF 提取两种方式。
-category: productivity
-triggers:
-  - "处理公众号文章"
-  - "公众号入库"
-  - "提取观点"
-  - "A+B 处理"
-  - "把这篇文章转成 markdown"
-  - "抓取公众号文章"
-version: 1.0.0
-tags: [productivity, wechat, article-ingest, knowledge-management]
+metadata:
+  category: "productivity"
+  triggers: "[\"处理公众号文章\", \"公众号入库\", \"提取观点\", \"A+B 处理\", \"把这篇文章转成 markdown\", \"抓取公众号文章\"]"
+  version: "1.0.0"
+  tags: "[\"productivity\", \"wechat\", \"article-ingest\", \"knowledge-management\"]"
 ---
 
 # 微信公众号文章处理 Skill

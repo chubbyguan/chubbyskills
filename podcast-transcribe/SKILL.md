@@ -3,14 +3,11 @@ name: podcast-transcribe
 description: >
   播客/小宇宙 → 下载 → 转录 → 存为 Markdown 的完整工作流。
   支持 RSS 批量下载、单集链接转录。
-category: media
-triggers:
-  - 用户发送小宇宙/播客链接
-  - "帮我转录这个播客"
-  - "下载播客"
-  - "批量转录播客"
-version: 1.0.0
-tags: [media, audio, podcast, transcription, xiaoyuzhou]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送小宇宙/播客链接\", \"帮我转录这个播客\", \"下载播客\", \"批量转录播客\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"audio\", \"podcast\", \"transcription\", \"xiaoyuzhou\"]"
 ---
 
 # 播客转录 Skill

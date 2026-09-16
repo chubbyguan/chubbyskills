@@ -6,12 +6,12 @@
 
 #### 信息流会忘，知识库会记，Agent 会用。
 
-<h3 align="center"><strong>中文 Agent 内容采集的事实标准</strong></h3>
+<h3 align="center"><strong>把收藏素材变成可引用的选题资料库</strong></h3>
 
-<p align="center"><em>内容创作者的知识资产管道 —— 把你每天刷到、听到、读到的好内容，变成可复用、可检索、可被 Agent 调用的选题库与知识资产。</em></p>
+<p align="center"><em>保存视频、文章和图文的原文与来源，让 Agent 从你的素材库中查找证据、整理选题。</em></p>
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.11.0-10B981?style=for-the-badge)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.11.1-10B981?style=for-the-badge)](./CHANGELOG.md)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -25,121 +25,99 @@
 
 ---
 
-## 生态定位：为什么不是又一个 skill 集合
-
-Agent Skills 生态已有 140 万+ 技能包，但绝大多数是泛化开发技能；**垂直领域（中文内容采集 → 知识库）至今没有事实标准**。Chubby Skills 要占据的，就是这个位置。
-
-| 维度 | **Chubby Skills** | feedgrab | RSSHub | 商业工具（Readwise / ima / NotebookLM） |
-|---|---|---|---|---|
-| 中文平台全渠道采集 | ✅ 10 平台 | ⚠️ 7 平台 | ⚠️ 订阅源（非正文采集） | ⚠️ 覆盖差 / 收费 |
-| 视频 / 播客转录（字幕优先免 GPU） | ✅ | ❌ | ❌ | ⚠️ 部分 |
-| 知识库 + 语义检索 + MCP 闭环 | ✅ 完整 | ❌ 只抓不存 | ❌ | ⚠️ 封闭生态 |
-| 本地运行 / 隐私 | ✅ 完全本地 | ✅ 本地 | ✅ | ❌ 云端 |
-| 可被 Agent 编排（开放标准） | ✅ | ✅ | ❌ | ❌ |
-| 免费 / 零 API 费用 | ✅ 零依赖档位可用 | ✅ | ✅ | ❌ 订阅制 |
-
-> 采集工具有很多，知识库工具也有很多。**但「中文全渠道采集 → 统一格式 → 知识库 → Agent 调用」的完整闭环、且完全本地可迁移的，只有 Chubby Skills。**
-
-完整对比与生态定位图见 [docs/comparison.md](./docs/comparison.md)。
-
----
-
 ## 这是什么
 
-Chubby Skills 是一套面向个人知识库和 AI Agent 的内容采集、整理、检索工具。
+Chubby Skills 是一套面向内容创作者的采集和知识库工具。把 B站、YouTube、抖音、小红书、公众号、X、播客等素材保存为本地 Markdown，再通过搜索或 MCP 让 Agent 读取原文、整理带来源的选题资料。
 
-你可以把它理解成三层：
+如果你经常收藏内容，写作时却找不到原文，并且已经在使用 Agent 或 Obsidian，可以从下面的一条素材开始。完整流程见[创作者工作流](./docs/creator-workflow.md)，安装前也可以先看[输出样例](./examples/README.md)。
 
-1. **采集层**：把 B站、YouTube、抖音、小红书、公众号、X、播客等内容转成统一 Markdown。
-2. **知识层**：把 Markdown 入库到 Obsidian / 本地 vault，支持索引、搜索、语义检索、归档和知识卡片。
-3. **Agent 层**：通过 Agent Skills 和 MCP server，让 Claude Code、Codex、OpenCode、OpenClaw、Hermes 等 Agent 真正读取你的知识库完成任务。
+**本地存储是默认路径。**采集需要访问内容平台，字幕和登录态影响成功率；DeepSeek 内容加工、OpenAI embedding 等可选功能会把内容发送给对应 API，可能计费。使用云端 Agent 时，它读取的素材也会进入模型上下文。[工具选择与处理边界](./docs/comparison.md)
 
-一句话：**把你每天刷到、听到、读到的好内容，变成可复用、可检索、可被 Agent 调用的个人知识资产。**
+## 从一条真实素材开始
 
-## 适合谁
-
-- 内容创作者：把爆款笔记、视频、播客、公众号文章沉淀成选题库。
-- 学习者：把视频和播客转成文字，再生成笔记、闪卡和知识点。
-- 研究者：搭一个能被 Agent 检索的本地资料库。
-- Agent 用户：把 skill、CLI、MCP 和 vault 串成可复用工作流。
-- 开源贡献者：按统一平台定义和输出协议扩展更多内容源。
-
-## 现在有什么
-
-当前版本：`0.11.0`
-
-| 模块 | 能力 | 入口 |
-|---|---|---|
-| 平台采集 | 视频、图文、公众号、播客、X、小红书等内容转 Markdown | `tools/chubby_ingest.py` / 各 skill 脚本 |
-| 管线编排 | 队列、状态、重试、日报、schema v1 元数据 | `tools/chubby.py` |
-| 内容加工 | 摘要、要点、标签、价值判断 | `content-enrich` |
-| 知识库 | vault 模板、SQLite 索引、全文搜索、语义检索、最近笔记、统计 | `tools/vault_index.py` |
-| 知识自动化 | 自动归档、知识卡片生成 | `tools/vault_curator.py` |
-| MCP | Agent 搜索、读取、重建索引、查看统计 | `knowledge-base-management/scripts/mcp_server.py` |
-| 质量保障 | 平台健康度、smoke matrix、golden outputs、schema 校验 | `tools/platform_health.py` / `tools/platform_smoke.py` / `tools/golden_outputs.py` |
-| 贡献者适配 | 新平台 definition / template / skill scaffold | `tools/platform_adapter.py` |
-
-## 60 秒开始
+以下命令适用于有 Python 3 的 macOS / Linux shell。先克隆完整仓库，建立独立运行环境：
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 tools/chubby.py quickstart
+python3 -m venv .venv
+source .venv/bin/activate
+bash setup.sh light
+python3 tools/chubby.py init
 ```
 
-`quickstart` 是离线首跑验收，不会抓真实平台内容。它会检查：
-
-- 配置和运行目录是否可写
-- X 链接 dry-run 路由是否正确
-- 示例 Markdown 是否符合输出协议
-- 平台定义和站点模板是否完整
-- 示例 vault 是否能索引和语义检索
-- MCP 依赖是否可用
-
-发布级验收：
+选一条你有权保存的真实链接，先查看下方平台要求，再运行：
 
 ```bash
-python3 tools/chubby.py --version
-python3 tools/platform_smoke.py --mode all --check
-python3 tools/golden_outputs.py examples/outputs
-python3 tools/mcp_workflow_demo.py
+python3 tools/chubby.py ingest "替换为你的真实链接" \
+  --vault "$PWD/creator-vault/00_Inbox" --no-enrich
+python3 tools/chubby.py status --latest
+python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" index "$PWD/creator-vault"
+python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" search "替换为原文中的关键词"
 ```
 
-更多发布检查见 [docs/release.md](./docs/release.md)。
+打开生成的 Markdown，核对正文、来源和需要保留的图片。**第一次成功指你自己的真实素材保存完整，并能找回原文。**手动正文 fallback 要单独记录，不能当作自动抓取成功。之后按[创作者工作流](./docs/creator-workflow.md)用 3 条素材整理一份带引用的选题资料。
+
+只想先检查环境，可以运行：
+
+```bash
+python3 tools/chubby.py quickstart --ephemeral --no-state
+```
+
+这是离线样例与环境检查，不抓真实平台，不证明登录态、平台可用性或用户素材质量。需要 MCP 时还要运行后面的协议检查。
 
 ## 安装方式
 
-### 推荐：分档安装
+### 运行依赖
+
+在已激活的虚拟环境中，按需要选择：
 
 ```bash
-bash setup.sh          # 默认 light：轻量能力
-bash setup.sh video    # 视频转录重依赖
-bash setup.sh podcast  # 播客转录
-bash setup.sh wechat   # 公众号/PDF 处理
-bash setup.sh all      # 全部依赖
-bash setup.sh doctor   # 只做环境体检
+bash setup.sh light   # 轻量图文与知识库路径
+bash setup.sh video   # 本地视频转录依赖
+bash setup.sh podcast # 本地播客转录依赖
+bash setup.sh wechat  # 公众号 / PDF 依赖
+bash setup.sh all     # 全部运行依赖
+bash setup.sh doctor  # 环境体检
 ```
 
-轻量模式可直接使用：X 图文、小红书图文、公众号基础处理、行业情报雷达、知识库健康检查、content-enrich。视频和播客转录才需要 `ffmpeg`、`yt-dlp`、`funasr`、`torch`、`faster-whisper` 等重依赖。
+`setup.sh` 安装运行依赖，不负责把 skill 注册到 Agent。字幕优先路径需要 `yt-dlp`；没有字幕时才需要本地转录模型。X / 小红书图文不需要视频模型，视频转录需另外安装 `video` 依赖。
 
-### 手动安装
+### 放入 Agent 的技能目录
+
+从完整仓库生成带公共源码的独立技能包。例如安装到 Codex：
 
 ```bash
-pip install -r requirements.txt
-pip install -r podcast-transcribe/requirements.txt
+python3 tools/install_skill.py bilibili-transcribe --dest ~/.codex/skills
 ```
 
-每个 skill 都是独立目录，也可以只安装你需要的那个。
+多个技能可在命令中依次列出；全部安装使用 `--all`。其它 Agent 用其实际技能目录作为 `--dest`。安装器不安装 Python 依赖、不启动 Agent，遇到已有同名目录会拒绝覆盖。
 
-### Agent 安装
+源码中的技能会引用仓库公共模块，不要只下载 GitHub 上的单个 skill 目录。使用安装器生成的目录可以整体搬移。完整说明见[安装指南](./docs/installation.md)。
 
-在 Claude Code、Codex、OpenClaw、Hermes 等支持 Skill 的 Agent 里，可以直接说：
+### 可选：知识库 MCP
 
-```text
-帮我安装这个 skill：https://github.com/chubbyguan/chubbyskills/tree/main/<skill-name>
+```bash
+python3 -m pip install -r knowledge-base-management/requirements-mcp.txt
+python3 tools/mcp_smoke.py --json
 ```
 
-Gitee 镜像：https://gitee.com/chubbyguan/chubbyskills
+该检查会启动真实 MCP 进程并验证协议交互。连接自己的 Agent 和 vault 见 [MCP 配置](./docs/mcp-workflow.md)。
+
+Gitee 镜像：[chubbyguan/chubbyskills](https://gitee.com/chubbyguan/chubbyskills)。
+
+## 现在有什么
+
+当前版本：`0.11.1`。
+
+| 模块 | 用途 | 入口 |
+|---|---|---|
+| 平台采集 | 内容转成保留来源的 Markdown | `tools/chubby_ingest.py` / 各 skill 脚本 |
+| 管线编排 | 队列、状态、重试、每次运行报告 | `tools/chubby.py` |
+| 内容加工 | 可选的摘要、要点、标签 | `content-enrich` |
+| 知识库 | 本地索引、搜索、读取原文、归档与知识卡片 | `tools/vault_index.py` / `tools/vault_curator.py` |
+| MCP | Agent 搜索、读取和管理知识库索引 | `knowledge-base-management/scripts/mcp_server.py` |
+| 维护工具 | 平台定义、分层 smoke、输出格式、适配骨架 | `tools/`；见[发布检查](./docs/release.md) |
 
 ## 平台能力
 
@@ -156,9 +134,9 @@ Gitee 镜像：https://gitee.com/chubbyguan/chubbyskills
 | 小红书 | [`xiaohongshu-ingest`](./xiaohongshu-ingest/SKILL.md) | 图文存图、视频转录、爆款拆解、衍生选题 | 图文零依赖，建议 `XHS_COOKIE` | `--fallback-text` 手动正文 |
 | X / Twitter | [`x-ingest`](./x-ingest/SKILL.md) | 推文正文、图片、视频转录，免 API Key | 图文零依赖，视频需 `ffmpeg` + `funasr` | `--fallback-text` 手动正文 |
 
-平台状态页：[docs/platform-status.md](./docs/platform-status.md)
+平台状态页：[docs/platform-status.md](./docs/platform-status.md)。上表列出实现范围，不是在线成功保证。状态页来自平台定义和模板；`stable` 等标签不能替代最近的真实链接测试。
 
-失败分型和 fallback 指南：[docs/platform-fallbacks.md](./docs/platform-fallbacks.md)
+最近一次[真实平台验证报告](./docs/live-verification.md)记录测试日期、环境和结果；失败分型见 [fallback 指南](./docs/platform-fallbacks.md)。
 
 ## 常用工作流
 
@@ -291,7 +269,7 @@ python3 tools/vault_curator.py card ~/Documents/ObsidianVault "10_Sources/x/exam
 启动 MCP server：
 
 ```bash
-pip install mcp
+python3 -m pip install -r knowledge-base-management/requirements-mcp.txt
 VAULT_DIR=~/Documents/ObsidianVault python3 knowledge-base-management/scripts/mcp_server.py
 ```
 
@@ -310,7 +288,7 @@ MCP 工具：
 python3 tools/mcp_workflow_demo.py
 ```
 
-这个 demo 会用 `fixtures/mcp-vault` 完成一次“检索 vault → 读取原文 → 带来源回答”的 Agent 任务。详细配置见 [docs/mcp-workflow.md](./docs/mcp-workflow.md)。
+这个 demo 用 `fixtures/mcp-vault` 演示索引、读取与带来源回答的逻辑；它不是 Agent 客户端的端到端验证。真实 MCP 协议检查运行 `python3 tools/mcp_smoke.py --json`。详细配置见 [docs/mcp-workflow.md](./docs/mcp-workflow.md)。
 
 ## 质量保障
 
@@ -320,10 +298,11 @@ python3 tools/mcp_workflow_demo.py
 |---|---|---|
 | 输出协议 | `python3 tools/validate_outputs.py examples/outputs --schema-v1` | 确认 Markdown frontmatter 和 schema v1 |
 | 平台定义 | `python3 tools/platform_health.py --check` | 校验 `platforms/*.yaml`、模板和脚本路径 |
-| 状态页新鲜度 | `python3 tools/platform_health.py --check-output` | 确认 `docs/platform-status.md` 未过期 |
-| 平台 smoke | `python3 tools/platform_smoke.py --mode all --check` | 验证 offline / fallback / live 分层 |
+| 状态页一致性 | `python3 tools/platform_health.py --check-output` | 检查状态页与定义是否一致，不验证平台在线可用性 |
+| 平台 smoke | `python3 tools/platform_smoke.py --mode all --check` | 分层检查；未配置的 live 项不等于成功 |
 | Golden outputs | `python3 tools/golden_outputs.py examples/outputs` | 防止示例输出结构被意外改坏 |
-| MCP workflow | `python3 tools/mcp_workflow_demo.py` | 验证 Agent 能通过 vault 完成任务 |
+| 本地示例工作流 | `python3 tools/mcp_workflow_demo.py` | 验证 fixture 上的索引与来源读取逻辑 |
+| MCP 协议 | `python3 tools/mcp_smoke.py --json` | 启动真实 server，检查握手和工具调用 |
 
 live smoke 是显式 opt-in，因为真实平台会受 cookie、地区、风控、重依赖和链接有效期影响：
 
@@ -421,13 +400,18 @@ python3 tools/platform_smoke.py --mode offline --check
 
 ## 文档入口
 
-- [快速开始](./docs/quickstart.md)
+- [创作者工作流：素材到可引用选题](./docs/creator-workflow.md)
+- [安装指南](./docs/installation.md)
+- [离线环境与样例检查](./docs/quickstart.md)
 - [平台状态](./docs/platform-status.md)
 - [平台失败分型和 fallback](./docs/platform-fallbacks.md)
 - [知识库自动化](./docs/knowledge-automation.md)
 - [MCP workflow](./docs/mcp-workflow.md)
 - [贡献者平台适配](./docs/contributor-platform-adapter.md)
 - [发布检查](./docs/release.md)
+- [工具选择与处理边界](./docs/comparison.md)
+- [十人试用计划（待执行）](./docs/user-pilot.md)
+- [社区贡献处理计划](./docs/community-triage.md)
 - [更新日志](./CHANGELOG.md)
 
 ## 环境变量

@@ -3,13 +3,11 @@ name: douyin-transcribe
 description: >
   抖音视频 → 下载 → 转录 → 存为 Markdown 的完整工作流。
   支持短链接和完整链接，无需 cookie/登录。
-category: media
-triggers:
-  - 用户发送抖音分享链接或口头提到要转录抖音视频
-  - "把这个抖音视频转成文字"
-  - "帮我转录这个抖音"
-version: 1.0.0
-tags: [media, audio, video, transcription, douyin]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送抖音分享链接或口头提到要转录抖音视频\", \"把这个抖音视频转成文字\", \"帮我转录这个抖音\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"audio\", \"video\", \"transcription\", \"douyin\"]"
 ---
 
 # 抖音视频转录 Skill

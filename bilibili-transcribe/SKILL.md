@@ -3,13 +3,11 @@ name: bilibili-transcribe
 description: >
   哔哩哔哩视频 → 下载 → 转录 → 存为 Markdown 的完整工作流。
   支持 BV 号和完整链接，无需登录。
-category: media
-triggers:
-  - 用户发送 B 站视频链接
-  - "把这个 B 站视频转成文字"
-  - "帮我转录这个 bilibili"
-version: 1.0.0
-tags: [media, audio, video, transcription, bilibili]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送 B 站视频链接\", \"把这个 B 站视频转成文字\", \"帮我转录这个 bilibili\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"audio\", \"video\", \"transcription\", \"bilibili\"]"
 ---
 
 # B 站视频转录 Skill
@@ -39,7 +37,7 @@ python scripts/transcribe.py "BV1rrQGBeEen"
 python scripts/transcribe.py "BV1rrQGBeEen" --no-subtitle   # 强制音频转录
 
 # 批量处理：每行一个 B站 URL 或 BV 号
-python scripts/batch_transcribe.py ../../examples/bilibili-urls.txt -o ./output
+python scripts/batch_transcribe.py urls.txt -o ./output
 ```
 
 ## 流程

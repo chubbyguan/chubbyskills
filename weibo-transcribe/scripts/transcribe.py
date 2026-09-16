@@ -18,7 +18,8 @@ import shutil
 import sys
 import tempfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = SKILL_ROOT if os.path.isdir(os.path.join(SKILL_ROOT, "chubby_common")) else os.path.dirname(SKILL_ROOT)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -75,7 +76,7 @@ def main():
                 {
                     "type": "note",
                     "platform": CFG.id,
-                    "tags": f"[{CFG.tag}]",
+                    "tags": [CFG.tag],
                     "source": args.url,
                     "author": "",
                     "transcriber": "SenseVoice-Small",

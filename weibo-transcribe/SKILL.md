@@ -3,13 +3,11 @@ name: weibo-transcribe
 description: >
   微博视频 → 下载 → 转录 → 存为 Markdown。
   支持微博视频链接，无需登录。
-category: media
-triggers:
-  - 用户发送微博视频链接
-  - "把这个微博视频转成文字"
-  - "帮我转录这个微博"
-version: 1.0.0
-tags: [media, video, transcription, weibo]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送微博视频链接\", \"把这个微博视频转成文字\", \"帮我转录这个微博\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"video\", \"transcription\", \"weibo\"]"
 ---
 
 # 微博视频转录 Skill

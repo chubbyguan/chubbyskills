@@ -5,7 +5,8 @@
 把本地 vault 的「搜索 / 语义检索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具。
 配合采集类 skill（采集加工 → 入库 → 索引）形成「skill 负责写入、MCP 负责被调用查询」的闭环。
 
-依赖：pip install mcp        （仅本 server 需要；知识库其它脚本零依赖）
+依赖（仓库根目录）：python3 -m pip install -r knowledge-base-management/requirements-mcp.txt
+仅本 server 需要 MCP SDK；知识库其它脚本零依赖。
 运行：VAULT_DIR=/path/to/vault python3 mcp_server.py
 可选：VAULT_INDEX_DB=/path/to/vault_index.sqlite
 
@@ -21,14 +22,19 @@
     }
 """
 
+import argparse
 import importlib.util
 import os
+import shlex
 import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-TOOLS_DIR = ROOT / "tools"
+SKILL_DIR = Path(__file__).resolve().parents[1]
+ROOT = SKILL_DIR.parent
+TOOLS_DIR = SKILL_DIR / "tools"
+if not (TOOLS_DIR / "vault_index.py").is_file():
+    TOOLS_DIR = ROOT / "tools"
 VAULT_INDEX_PATH = TOOLS_DIR / "vault_index.py"
 
 
@@ -70,7 +76,7 @@ def require_vault_index():
     if vault_index is None:
         detail = VAULT_INDEX_ERROR or f"missing {VAULT_INDEX_PATH}"
         raise RuntimeError(
-            f"无法加载 tools/vault_index.py（{detail}）。请从完整 chubbyskills 仓库运行 MCP，或保留 tools/vault_index.py。"
+            f"无法加载 tools/vault_index.py（{detail}）。请从完整 chubbyskills 仓库运行 MCP，或使用安装器保留 skill/tools/vault_index.py。"
         )
     return vault_index
 
@@ -194,8 +200,24 @@ def vault_stats(vault):
     return "\n".join(lines)
 
 
-def main():
-    from mcp.server.fastmcp import FastMCP
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="通过 stdio MCP 提供本地知识库搜索和读取工具。")
+    parser.parse_args(argv)
+    if not VAULT or not os.path.isdir(VAULT):
+        print("❌ 请设置 VAULT_DIR 环境变量指向你的 vault 根目录", file=sys.stderr)
+        return 1
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError as exc:
+        install = shlex.join([
+            sys.executable, "-m", "pip", "install", "-r",
+            str(SKILL_DIR / "requirements-mcp.txt"),
+        ])
+        print(
+            f"❌ MCP SDK 缺失或不兼容；本服务使用 mcp==1.30.0。\n安装：{install}\n原因：{exc}",
+            file=sys.stderr,
+        )
+        return 2
 
     mcp = FastMCP("chubby-kb")
 
@@ -230,10 +252,8 @@ def main():
         return vault_stats(VAULT)
 
     mcp.run()
+    return 0
 
 
 if __name__ == "__main__":
-    if not VAULT or not os.path.isdir(VAULT):
-        print("❌ 请设置 VAULT_DIR 环境变量指向你的 vault 根目录", file=sys.stderr)
-        sys.exit(1)
-    main()
+    sys.exit(main())

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chubby Skills - staged installer
+# Chubby Skills - runtime dependency installer (does not register Agent skills)
 #
 # Usage:
 #   bash setup.sh                 # light mode: zero/low-dependency tools
@@ -12,6 +12,9 @@
 #   bash setup.sh bilibili xhs    # aliases are accepted
 
 set -euo pipefail
+
+CHUBBY_SETUP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$CHUBBY_SETUP_ROOT"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -95,13 +98,13 @@ install_wechat() {
 
 normalize_target() {
     case "$1" in
-        light|x|twitter|xhs|xiaohongshu|content|radar|knowledge|kb)
+        light|x|twitter|x-ingest|xhs|xiaohongshu|xiaohongshu-ingest|content|enrich|content-enrich|radar|industry|industry-intelligence-radar|knowledge|kb|knowledge-base-management|learning|learning-notes-automation)
             echo "light" ;;
-        video|douyin|bilibili|youtube|tiktok|weibo|zhihu)
+        video|douyin|douyin-transcribe|bilibili|bilibili-transcribe|youtube|youtube-transcribe|tiktok|tiktok-transcribe|weibo|weibo-transcribe|zhihu|zhihu-transcribe)
             echo "video" ;;
-        podcast|rss)
+        podcast|podcast-transcribe|rss)
             echo "podcast" ;;
-        wechat|pdf|article)
+        wechat|wechat-article-ingest|pdf|article)
             echo "wechat" ;;
         all)
             echo "all" ;;
@@ -114,7 +117,7 @@ normalize_target() {
 
 echo ""
 echo "========================================="
-echo "  Chubby Skills 安装助手"
+echo "  Chubby Skills 运行依赖安装助手"
 echo "========================================="
 
 if [[ $# -eq 0 ]]; then
@@ -127,12 +130,13 @@ want_podcast=false
 want_wechat=false
 want_all=false
 want_doctor=false
+want_curl=false
 
 for raw in "$@"; do
     target="$(normalize_target "$raw")"
     if [[ "$target" == "unknown" ]]; then
         error "未知安装目标：$raw"
-        echo "可用目标：light / video / podcast / wechat / all / doctor"
+        echo "可用目标：light / video / podcast / wechat / all / doctor，以及完整 skill 目录名"
         exit 2
     fi
     case "$target" in
@@ -143,11 +147,19 @@ for raw in "$@"; do
         all) want_all=true ;;
         doctor) want_doctor=true ;;
     esac
+    case "$raw" in
+        video|all|douyin|douyin-transcribe|podcast|podcast-transcribe|rss|wechat|wechat-article-ingest|pdf|article)
+            want_curl=true ;;
+    esac
 done
 
 if $want_doctor; then
     run_doctor
     exit 0
+fi
+
+if $want_curl; then
+    require_cmd curl "macOS: 系统自带 | Ubuntu: sudo apt install curl"
 fi
 
 if $want_all; then
@@ -168,6 +180,7 @@ echo "  安装步骤完成"
 echo "========================================="
 echo ""
 echo "下一步建议："
+echo "  python3 tools/install_skill.py <skill-name> --dest <Agent-skills目录>"
 echo "  python3 tools/check_env.py"
 echo "  python3 tools/chubby.py quickstart"
 echo "  python3 tools/platform_smoke.py --mode all --check"

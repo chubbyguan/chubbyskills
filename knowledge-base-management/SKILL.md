@@ -1,21 +1,11 @@
 ---
 name: knowledge-base-management
 description: "Obsidian 知识库全生命周期管理：三层架构、素材入库(ABC分级)、健康检查、GBrain/GraphRAG/LLM Wiki 三件套集成、目录整理"
-triggers:
-  - "知识库管理"
-  - "素材入库"
-  - "健康检查"
-  - "盘点知识库"
-  - "清理知识库"
-  - "搜索知识库"
-  - "GBrain"
-  - "GraphRAG"
-  - "知识图谱"
-  - "整理知识库"
-  - "知识库架构"
-version: 1.0
-created: 2026-06-02
-tags: [knowledge-base, obsidian, wiki, note-taking, gbrain, graphrag]
+metadata:
+  triggers: "[\"知识库管理\", \"素材入库\", \"健康检查\", \"盘点知识库\", \"清理知识库\", \"搜索知识库\", \"GBrain\", \"GraphRAG\", \"知识图谱\", \"整理知识库\", \"知识库架构\"]"
+  version: "1.0"
+  created: "2026-06-02"
+  tags: "[\"knowledge-base\", \"obsidian\", \"wiki\", \"note-taking\", \"gbrain\", \"graphrag\"]"
 ---
 
 # Knowledge Base Management — 知识库全生命周期管理
@@ -199,10 +189,25 @@ python3 tools/vault_curator.py card "$VAULT_DIR" "10_Sources/x/example.md" --app
 
 `scripts/mcp_server.py` 把知识库的「搜索 / 语义检索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
 
+使用 Python 3.10 或更新版本，从完整仓库根目录安装已验证的 MCP 依赖并启动：
+
 ```bash
-pip install mcp
-VAULT_DIR=/path/to/your-vault python3 scripts/mcp_server.py
+python3 -m pip install -r knowledge-base-management/requirements-mcp.txt
+python3 tools/mcp_smoke.py
+VAULT_DIR=/path/to/your-vault python3 knowledge-base-management/scripts/mcp_server.py
 ```
+
+MCP SDK 固定为 `mcp==1.30.0`。2.x 已移除当前使用的 `mcp.server.fastmcp` 接口；完成迁移前不要单独执行 `pip install -U mcp`。`mcp_smoke.py` 使用临时 vault 启动真实 stdio 服务，验证握手、6 个工具发现、搜索和读取，不会访问你的知识库。`--help` 不需要安装 MCP SDK。
+
+需要单独安装 skill 时，在仓库根目录使用安装器，它会一起复制知识库工具：
+
+```bash
+python3 tools/install_skill.py knowledge-base-management --dest ~/.codex/skills
+python3 -m pip install -r ~/.codex/skills/knowledge-base-management/requirements-mcp.txt
+VAULT_DIR=/path/to/your-vault python3 ~/.codex/skills/knowledge-base-management/scripts/mcp_server.py
+```
+
+MCP 入口会先加载已安装 skill 内的 `tools/vault_index.py`，再尝试完整仓库里的工具路径。
 
 在 Agent 的 MCP 配置里：
 
