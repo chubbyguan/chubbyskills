@@ -1,0 +1,2 @@
+# Optional MCP server dependency. v2 removed mcp.server.fastmcp.
+mcp==1.30.0

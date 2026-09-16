@@ -1,0 +1,53 @@
+name: Real text and subtitle verification (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Text/subtitle platform (ASR and login cookies are not installed)
+        required: true
+        type: choice
+        options: [bilibili, youtube, x, wechat, xiaohongshu]
+      source:
+        description: Public URL (no private or credential-bearing links)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install lightweight capture dependencies
+        run: python -m pip install yt-dlp beautifulsoup4
+      - name: Verify selected source and retain evidence
+        env:
+          SMOKE_PLATFORM: ${{ inputs.platform }}
+          SMOKE_SOURCE: ${{ inputs.source }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          platform = os.environ["SMOKE_PLATFORM"]
+          os.environ["CHUBBY_SMOKE_" + platform.upper() + "_SOURCE"] = os.environ["SMOKE_SOURCE"]
+          sys.exit(subprocess.call([
+              sys.executable, "tools/platform_smoke.py", "--mode", "live",
+              "--platform", platform, "--require-live", "--check",
+              "--artifacts-dir", "runs/live", "--json",
+          ]))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-platform-evidence
+          path: runs/live/
+          retention-days: 7
+          if-no-files-found: warn

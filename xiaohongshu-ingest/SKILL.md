@@ -3,14 +3,11 @@ name: xiaohongshu-ingest
 description: >
   小红书笔记采集 → 统一 frontmatter Markdown → 爆款拆解 + 衍生选题。
   支持笔记链接和 xhslink 短链；爆款拆解按「人群×场景×痛点×情绪×钩子」生成可复用选题。
-category: content
-triggers:
-  - 用户发送小红书笔记链接
-  - "采集这篇小红书笔记"
-  - "拆解这个爆款笔记"
-  - "帮我做小红书选题"
-version: 1.0.0
-tags: [content, xiaohongshu, ingest, hook-analysis, topic]
+metadata:
+  category: "content"
+  triggers: "[\"用户发送小红书笔记链接\", \"采集这篇小红书笔记\", \"拆解这个爆款笔记\", \"帮我做小红书选题\"]"
+  version: "1.0.0"
+  tags: "[\"content\", \"xiaohongshu\", \"ingest\", \"hook-analysis\", \"topic\"]"
 ---
 
 # 小红书采集 + 爆款拆解 Skill

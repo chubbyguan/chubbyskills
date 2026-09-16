@@ -1,6 +1,6 @@
 # Quickstart Checklist
 
-v0.8 的目标是让新用户在不登录、不联网抓取真实平台内容的前提下，先完成一次可重复的本地验收。
+这个入口用于离线环境和样例验收，不计为真实平台采集成功。首次处理自己的素材请从[创作者工作流](creator-workflow.md)开始。
 
 推荐入口：
 
@@ -15,7 +15,7 @@ python3 tools/chubby.py quickstart
 - 校验 `examples/outputs` 的基础 frontmatter 和 schema v1。
 - 校验 `platforms/*.yaml` 与 `templates/sites/*.yaml` 的平台定义。
 - 对 `examples/outputs` 建立临时 SQLite 索引，并执行关键词与 semantic-lite 示例搜索。
-- 检查 MCP server 依赖是否安装；未安装只给 warning，不影响 CLI。
+- 检查兼容 MCP SDK 是否可导入；未安装只给 warning，不影响 CLI。真实启动和协议调用另用 `python3 tools/mcp_smoke.py --json` 验收。
 
 运行结束后会生成：
 
@@ -38,3 +38,5 @@ python3 tools/chubby.py status --latest
 python3 tools/vault_index.py index /path/to/your-vault
 VAULT_DIR=/path/to/your-vault python3 knowledge-base-management/scripts/mcp_server.py
 ```
+
+MCP 可选依赖：`python3 -m pip install -r knowledge-base-management/requirements-mcp.txt`。默认索引与检索不需要该依赖。

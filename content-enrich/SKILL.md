@@ -3,14 +3,11 @@ name: content-enrich
 description: >
   内容加工：给任意采集产物（转录稿 / 文章 / 笔记）自动补「摘要 + 要点 + 标签 + 价值判断」，
   写进 frontmatter 并在正文顶部插入摘要块。是「加工层」通用能力，惠及仓库所有采集 skill。
-category: content
-triggers:
-  - "给这篇笔记加摘要"
-  - "提炼要点和标签"
-  - "加工一下采集的内容"
-  - "批量给知识库补摘要"
-version: 1.0.0
-tags: [content, enrich, summary, tagging, knowledge-base]
+metadata:
+  category: "content"
+  triggers: "[\"给这篇笔记加摘要\", \"提炼要点和标签\", \"加工一下采集的内容\", \"批量给知识库补摘要\"]"
+  version: "1.0.0"
+  tags: "[\"content\", \"enrich\", \"summary\", \"tagging\", \"knowledge-base\"]"
 ---
 
 # 内容加工（Content Enrich）

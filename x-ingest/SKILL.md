@@ -3,14 +3,11 @@ name: x-ingest
 description: >
   X(Twitter) 推文采集 → 统一 frontmatter Markdown。自动区分图文与视频：
   图文下载图片本地嵌入，视频提取直链转成文字稿。无需登录（走官方嵌入端点）。
-category: content
-triggers:
-  - 用户发送 X / Twitter 推文链接
-  - "采集这条推文"
-  - "把这条 X 转成 Markdown"
-  - "这条推特视频转文字"
-version: 1.0.0
-tags: [content, x, twitter, ingest, transcription]
+metadata:
+  category: "content"
+  triggers: "[\"用户发送 X / Twitter 推文链接\", \"采集这条推文\", \"把这条 X 转成 Markdown\", \"这条推特视频转文字\"]"
+  version: "1.0.0"
+  tags: "[\"content\", \"x\", \"twitter\", \"ingest\", \"transcription\"]"
 ---
 
 # X(Twitter) 推文采集 Skill

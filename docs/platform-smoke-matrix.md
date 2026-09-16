@@ -1,8 +1,9 @@
 # Platform Smoke Matrix
 
-Generated at: `2026-06-30T20:53:13+08:00`
+Generated at: `2026-09-16T16:52:08+08:00`
 
 This matrix separates deterministic CI checks from optional live platform checks.
+A skipped live check is unverified. A passed check validates output structure, not transcript accuracy.
 
 - `offline`: verifies platform routing without network access.
 - `fallback`: verifies manual fallback can still produce schema v1 Markdown.
@@ -28,9 +29,9 @@ This matrix separates deterministic CI checks from optional live platform checks
 | weibo | offline | passed | - | audio transcription after yt-dlp download | routes to weibo-transcribe/scripts/transcribe.py |
 | weibo | fallback | skipped | - | audio transcription after yt-dlp download | platform has no deterministic fallback smoke |
 | weibo | live | skipped | - | audio transcription after yt-dlp download | set CHUBBY_SMOKE_WEIBO_SOURCE to run a live smoke |
-| x | offline | passed | - | manual text via --fallback-text | routes to x-ingest/scripts/fetch_tweet.py |
-| x | fallback | passed | - | manual text via --fallback-text | generated schema v1 Markdown |
-| x | live | skipped | - | manual text via --fallback-text | set CHUBBY_SMOKE_X_SOURCE to run a live smoke |
+| x | offline | passed | - | manual text via --fallback-text or structured tweet data via --fallback-json | routes to x-ingest/scripts/fetch_tweet.py |
+| x | fallback | passed | - | manual text via --fallback-text or structured tweet data via --fallback-json | generated schema v1 Markdown |
+| x | live | skipped | - | manual text via --fallback-text or structured tweet data via --fallback-json | set CHUBBY_SMOKE_X_SOURCE to run a live smoke |
 | xiaohongshu | offline | passed | - | manual text via --fallback-text | routes to xiaohongshu-ingest/scripts/fetch_note.py |
 | xiaohongshu | fallback | passed | - | manual text via --fallback-text | generated schema v1 Markdown |
 | xiaohongshu | live | skipped | - | manual text via --fallback-text | set CHUBBY_SMOKE_XIAOHONGSHU_SOURCE to run a live smoke |

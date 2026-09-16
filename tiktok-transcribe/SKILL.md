@@ -3,13 +3,11 @@ name: tiktok-transcribe
 description: >
   TikTok 视频 → 下载 → 转录 → 存为 Markdown。
   支持 TikTok 链接，无需登录。
-category: media
-triggers:
-  - 用户发送 TikTok 视频链接
-  - "把这个 TikTok 转成文字"
-  - "帮我转录这个 TikTok"
-version: 1.0.0
-tags: [media, video, transcription, tiktok]
+metadata:
+  category: "media"
+  triggers: "[\"用户发送 TikTok 视频链接\", \"把这个 TikTok 转成文字\", \"帮我转录这个 TikTok\"]"
+  version: "1.0.0"
+  tags: "[\"media\", \"video\", \"transcription\", \"tiktok\"]"
 ---
 
 # TikTok 视频转录 Skill

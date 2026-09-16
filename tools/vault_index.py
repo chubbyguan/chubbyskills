@@ -42,6 +42,13 @@ def split_frontmatter(text):
 
 def clean_scalar(value):
     value = str(value or "").strip()
+    if value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+            if isinstance(decoded, str):
+                return decoded
+        except ValueError:
+            pass
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1].strip()
     return value
@@ -64,6 +71,11 @@ def inline_list_items(value):
     value = clean_scalar(value)
     if not value.startswith("[") or not value.endswith("]"):
         return [value] if value else []
+    try:
+        items = json.loads(value)
+        return [str(item) for item in items]
+    except ValueError:
+        pass  # Legacy notes also use YAML lists with unquoted strings.
     inner = value[1:-1].strip()
     if not inner:
         return []

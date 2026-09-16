@@ -4,424 +4,181 @@
 
 # 🧰 Chubby Skills
 
-#### Your feed forgets. Your knowledge base remembers — and your agents put it to work.
+### Turn saved content into a source-backed idea library
 
-<h3 align="center"><strong>The de facto standard for Chinese content ingestion into AI agents</strong></h3>
-
-<p align="center"><em>A content creator's knowledge asset pipeline — turn what you scroll, watch, and read into a reusable, searchable idea bank your agents can query.</em></p>
+Save the original text and sources from videos, articles, and image posts. Let your agent find evidence in your own library and prepare content ideas with references.
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#-skills)
-[![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
-[![Hype Weekly](https://img.shields.io/badge/🔥_Featured_on-Hype_ML%2FAI-FF6B35?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills)
-
-![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97706?style=flat-square&logo=anthropic&logoColor=white)
-![Codex](https://img.shields.io/badge/Codex-Skill-10B981?style=flat-square&logo=openai&logoColor=white)
-![OpenCode](https://img.shields.io/badge/OpenCode-Skill-3B82F6?style=flat-square)
-![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-8B5CF6?style=flat-square)
-![Hermes](https://img.shields.io/badge/Hermes-Skill-EC4899?style=flat-square)
+[![Version](https://img.shields.io/badge/Version-0.11.1-10B981?style=for-the-badge)](./CHANGELOG.md)
+[![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skills)
 
 </div>
 
----
+## Who this is for
 
-## Why not just another skill collection
+Chubby Skills is for content creators who already use an agent or a local Markdown vault and want to find the sources behind their saved material when writing. It combines platform ingestion, Markdown storage, local search, and an optional knowledge-base MCP server.
 
-The Agent Skills ecosystem has grown past **1.4M published skills**, but the vast majority are generic development skills. **No de facto standard exists in the vertical of Chinese content ingestion → knowledge base.** That is the position Chubby Skills aims to own.
+Start with one of your own sources below. See the [creator workflow](./docs/creator-workflow.md) for a three-source research task, or inspect the [sample outputs](./examples/README.md) before installing. Detailed workflow documents are currently in Chinese.
 
-| Dimension | **Chubby Skills** | feedgrab | RSSHub | Commercial tools (Readwise / ima / NotebookLM) |
-|---|---|---|---|---|
-| Full Chinese-platform ingest | ✅ 10 platforms | ⚠️ 7 platforms | ⚠️ RSS feeds only | ⚠️ Limited / paid |
-| Video / podcast transcription | ✅ Subtitle-first, no GPU | ❌ | ❌ | ⚠️ Partial |
-| Knowledge base + semantic search + MCP | ✅ Full loop | ❌ Fetch only | ❌ | ⚠️ Closed ecosystem |
-| Local-first / privacy | ✅ Fully local | ✅ Local | ✅ | ❌ Cloud |
-| Agent-orchestrated (open standard) | ✅ | ✅ | ❌ | ❌ |
-| Free / zero API cost | ✅ Zero-dep tier | ✅ | ✅ | ❌ Subscription |
+Storage is local by default. Fetching content still needs network access and may depend on captions, login state, or platform restrictions. Optional DeepSeek enrichment and OpenAI embeddings send content to the configured API and may incur charges. If you use a cloud agent, the material it reads enters that model's context. See [tool selection and data-processing boundaries](./docs/comparison.md).
 
-> There are many ingest tools, and many knowledge base tools. **But the complete loop — Chinese omnichannel ingest → unified format → knowledge base → agent query — fully local and portable, is only Chubby Skills.**
+## Start with one real source
 
-Full comparison and ecosystem positioning: [docs/comparison.md](./docs/comparison.md)
-
-Chubby Skills follows the [Agent Skills](https://agentskills.io) open standard and runs on Claude Code, Codex, OpenCode, OpenClaw, and Hermes.
-
----
-
-## ✨ What it does for you
-
-- 📥 **Multi-platform ingest** — Douyin, Bilibili, Xiaohongshu, WeChat, X, podcasts, YouTube; just drop a link
-- 🎬 **Auto image/video routing** — image notes keep their images, video notes get transcribed
-- ⚡ **Subtitle-first, no GPU** — instant text when YouTube/Bilibili captions exist
-- 🧠 **Into your knowledge base** — unified Markdown for Obsidian, plus an MCP server so any agent can query your vault
-- 🧩 **Each skill installs independently** — grab only what you need; image/text ingest is zero-dependency
-
-> In one line: **turn Chinese content from everywhere into your own searchable second brain.**
-
----
-
-## 🚀 Quick Start
+The following commands target a macOS / Linux shell with Python 3. Clone the complete repository and create a virtual environment:
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 tools/chubby.py quickstart
-```
-
-`quickstart` does not fetch real platform content. It runs an offline first-use acceptance flow: config initialization, X-link dry-run, example Markdown validation, platform definition checks, temporary vault indexing, and MCP preflight. See [docs/quickstart.md](./docs/quickstart.md).
-
-Install only what you need:
-
-```bash
-bash setup.sh          # light mode: text/image ingest + knowledge tools
-bash setup.sh video    # ffmpeg + yt-dlp + funasr/torch stack
-bash setup.sh podcast  # faster-whisper stack
-bash setup.sh wechat   # WeChat/PDF extraction stack
-bash setup.sh all      # everything
-```
-
-Run the one-command workflow:
-
-```bash
+python3 -m venv .venv
+source .venv/bin/activate
+bash setup.sh light
 python3 tools/chubby.py init
-python3 tools/chubby.py quickstart
-python3 tools/chubby.py ingest "https://x.com/user/status/123" --dry-run
-python3 tools/chubby.py run
+```
+
+Choose a source you are allowed to read and save. Check its platform requirements below, replace the placeholders, then run:
+
+```bash
+python3 tools/chubby.py ingest "REPLACE_WITH_YOUR_REAL_URL" \
+  --vault "$PWD/creator-vault/00_Inbox" --no-enrich
+python3 tools/chubby.py status --latest
+python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" index "$PWD/creator-vault"
+python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" search "a phrase from the original"
+```
+
+Open the resulting Markdown and check its text, source, and required media. The first useful result is your own readable content with a source you can revisit. Record manual-text fallback separately from automatic fetch success. The [creator workflow](./docs/creator-workflow.md) continues from three saved sources to ideas with references.
+
+To check the environment and sample workflow first:
+
+```bash
+python3 tools/chubby.py quickstart --ephemeral --no-state
+```
+
+This is an offline check. It does not fetch real platform content or prove that your login, target platform, or source quality is sufficient. MCP requires the separate protocol check below.
+
+## Installation
+
+### Runtime dependencies
+
+Inside the active virtual environment, choose what you need:
+
+```bash
+bash setup.sh light   # lightweight text/image and knowledge tools
+bash setup.sh video   # local video transcription dependencies
+bash setup.sh podcast # local podcast transcription dependencies
+bash setup.sh wechat  # WeChat / PDF dependencies
+bash setup.sh all     # all runtime dependencies
+bash setup.sh doctor  # environment checks
+```
+
+`setup.sh` installs runtime dependencies; it does not register skills with an agent. Caption extraction needs `yt-dlp`. Local audio transcription needs additional dependencies when captions are unavailable. X and Xiaohongshu text/image ingestion do not need video models; install the `video` group for transcription.
+
+### Install a skill for your agent
+
+Build a portable skill directory, including shared source dependencies, from the complete repository. For Codex:
+
+```bash
+python3 tools/install_skill.py bilibili-transcribe --dest ~/.codex/skills
+```
+
+List multiple skill names to install several, or use `--all` for all skills. For another agent, set `--dest` to its actual skills directory. The installer does not install Python packages or start the agent, and refuses to overwrite an existing directory.
+
+Do not download a single source skill directory from GitHub: source skills reference shared repository modules. Directories produced by the installer can be moved as a unit. See the [installation guide](./docs/installation.md).
+
+### Optional knowledge-base MCP
+
+```bash
+python3 -m pip install -r knowledge-base-management/requirements-mcp.txt
+python3 tools/mcp_smoke.py --json
+```
+
+The check starts a real MCP process and verifies protocol interactions using test data. Configure your actual client and vault using the [MCP guide](./docs/mcp-workflow.md).
+
+## Platform capabilities and limits
+
+| Platform / content | Implemented path | Requirements and possible failures |
+|---|---|---|
+| Bilibili / YouTube | Captions first, then audio transcription | `yt-dlp`; local transcription stack without captions; login or region restrictions may apply |
+| Douyin | Video transcription | `ffmpeg` and local model; links may expire or downloads may be blocked |
+| TikTok / Weibo / Zhihu | Video transcription | `yt-dlp`, `ffmpeg`, local model; platform markup and access restrictions vary |
+| Podcasts | Xiaoyuzhou / Ximalaya / RSS / local audio | `ffmpeg` + `faster-whisper`; downloads and long recordings can fail or take time |
+| WeChat | Articles / PDF to Markdown | HTML/PDF extraction dependencies; saved HTML/PDF fallback for inaccessible pages |
+| Xiaohongshu | Text/images and video transcription | Login state may be needed; manual-text fallback; video requires local transcription dependencies |
+| X / Twitter | Text/images and video transcription | Public endpoints may fail; manual text / structured-data fallback; video requires local transcription dependencies |
+
+This table describes implementation scope, not guaranteed live availability. The [platform status page](./docs/platform-status.md) is generated from definitions and templates. Labels such as `stable` do not replace recent real-link tests. See the [dated live verification report](./docs/live-verification.md) and [failure/fallback guide](./docs/platform-fallbacks.md).
+
+## Use saved material
+
+Keep a separate SQLite index for each vault:
+
+```bash
+python3 tools/vault_index.py --db /path/to/vault/index.sqlite index /path/to/vault
+python3 tools/vault_index.py --db /path/to/vault/index.sqlite semantic "my writing question" --provider lite
+python3 tools/vault_index.py read "00_Inbox/actual-note.md" --vault /path/to/vault
+```
+
+Keyword search and default semantic-lite run locally. Optional embedding providers and dry-run-first archive/card commands are covered in [knowledge automation](./docs/knowledge-automation.md).
+
+Ask your agent to read the original notes before proposing ideas. For each factual claim, require both the note path and the original `source` link. Keep author claims separate from the agent's inferences, and mark missing evidence instead of inventing a reference. Manually check the sources before using the material in published work.
+
+For queued ingestion and retries:
+
+```bash
+python3 tools/chubby.py run --queue inbox/links.txt
 python3 tools/chubby.py status --latest
 python3 tools/chubby.py retry --all-failed
-python3 tools/platform_health.py --check
-python3 tools/vault_index.py index ~/Documents/ObsidianVault
-python3 tools/vault_index.py search "AI Agent"
-
-python3 tools/chubby_ingest.py "https://www.bilibili.com/video/BVxxxx" -o output/
-python3 tools/chubby_ingest.py "https://x.com/user/status/123" -o output/ --enrich
-python3 tools/chubby_ingest.py "https://mp.weixin.qq.com/s/xxx" --vault ~/Documents/Obsidian/Inbox
 ```
 
-Validate generated Markdown:
+The pipeline records per-source state in `.chubby/runs.jsonl`, writes daily reports in `runs/`, and adds schema v1 metadata. Put one authorized source per line in the queue.
 
-```bash
-python3 tools/validate_outputs.py examples/outputs
-python3 tools/validate_outputs.py examples/outputs --schema-v1
-python3 tools/validate_outputs.py output/
-```
+## Skills
 
-## 🧭 Capability Matrix
-
-| Capability | Scope | Dependencies | Notes |
-|---|---|---|---|
-| Subtitle-first transcription | Bilibili / YouTube | `yt-dlp` | Falls back to audio transcription when no captions exist |
-| Video transcription | Douyin / Bilibili / TikTok / Weibo / Zhihu / YouTube / XHS video / X video | `ffmpeg` + `funasr` + `torch` | Heavy first install; platform anti-bot rules may affect downloads |
-| Podcast transcription | Xiaoyuzhou / Ximalaya / RSS / local audio | `ffmpeg` + `faster-whisper` | Long episodes can take time |
-| Image/text ingest | Xiaohongshu / X / WeChat | light or zero pip deps | XHS works better with `XHS_COOKIE` |
-| Enrichment | Any Markdown output | `DEEPSEEK_API_KEY` | Adds summary, key points, tags |
-| Knowledge base | Obsidian vault | health check is zero-dep; MCP needs `mcp` | Set `VAULT_DIR` for MCP |
-| Knowledge pipeline | auto-detect, queue, state, reports, retry | uses matching skill deps | `tools/chubby.py` orchestrates; override with `--skill` when ambiguous |
-| Platform health | platform definitions / site templates / status page | zero pip deps | `tools/platform_health.py` validates structure; `--local` checks local deps |
-| Local vault index | Markdown vault / Obsidian | SQLite stdlib | `tools/vault_index.py` supports index/search/recent/read/stats |
-| Knowledge automation | semantic-lite / archive / cards | SQLite + stdlib | `tools/vault_curator.py` defaults to dry-run before moving files |
-| Contributor platform adapters | platform definition / template / skill scaffold | zero pip deps | `tools/platform_adapter.py new ...` creates a reviewable scaffold |
-
----
-
-## 📋 Table of Contents
-
-### Video transcription
-| Skill | Platform | One-liner |
-|---|---|---|
-| 🎬 **douyin-transcribe** | Douyin | Video → transcribe → Markdown |
-| 📺 **bilibili-transcribe** | Bilibili | Video → subtitle-first transcribe → Markdown |
-| 🎵 **tiktok-transcribe** | TikTok | Video → transcribe → Markdown |
-| 📱 **weibo-transcribe** | Weibo | Video → transcribe → Markdown |
-| 💡 **zhihu-transcribe** | Zhihu | Video → transcribe → Markdown |
-| 🌍 **youtube-transcribe** | YouTube | Subtitle-first → transcribe → CN translation |
-
-### Podcast
-| Skill | Platform | One-liner |
-|---|---|---|
-| 🎙️ **podcast-transcribe** | Xiaoyuzhou / Ximalaya | Podcast → transcribe → Markdown (RSS batch) |
-
-### Content ingest
-| Skill | Platform | One-liner |
-|---|---|---|
-| 📰 **wechat-article-ingest** | WeChat | Article → Markdown + A/B insight extraction |
-| 📕 **xiaohongshu-ingest** | Xiaohongshu | Image saved / video transcribed + hook analysis |
-| 🐦 **x-ingest** | X / Twitter | Tweet → image saved / video transcribed (no login) |
-
-### Enrich & knowledge base
-| Skill | One-liner |
+| Skill | Purpose |
 |---|---|
-| ✨ **content-enrich** | Auto-add summary + key points + tags to any ingested note |
-| 🧠 **knowledge-base-management** | Vault lifecycle + health check + **MCP server** |
-| 📡 **industry-intelligence-radar** | Multi-source scan → daily intel brief |
-| 📚 **learning-notes-automation** | Transcript → key points → Anki flashcards |
-
----
-
-## 📦 Installation
-
-### Option 1: Staged install (Recommended)
-
-```bash
-git clone https://github.com/chubbyguan/chubbyskills.git
-cd chubbyskills
-bash setup.sh          # light mode
-bash setup.sh video    # video transcription stack
-bash setup.sh podcast  # podcast transcription stack
-bash setup.sh wechat   # WeChat/PDF extraction stack
-bash setup.sh all      # everything
-```
-
-### Option 2: Manual install
-
-```bash
-git clone https://github.com/chubbyguan/chubbyskills.git
-cd chubbyskills
-pip install -r requirements.txt            # All skills
-pip install -r podcast-transcribe/requirements.txt   # Single skill
-```
-
-### Option 3: Agent install
-
-In any Agent that supports Skills (Claude Code, Codex, OpenClaw, Hermes, etc.), just say:
-
-```
-Install this skill: https://github.com/chubbyguan/chubbyskills/tree/main/<skill-name>
-```
-
----
-
-## ✨ Skills
-
-<a id="-skills"></a>
-
-<table>
-<tr><td>
-
-### 🎬 douyin-transcribe
-
-> *"Transcribing Douyin videos used to be a hassle with cookies and yt-dlp. Now it's one command."*
-
-Douyin video → download audio → SenseVoice-Small transcribe → save as Markdown. Supports short links and full links. No cookies, no login, no yt-dlp needed.
-
-**Why SenseVoice over Whisper**
-
-| | faster-whisper | SenseVoice-Small |
-|------|------|------|
-| Chinese accuracy | Average | **Exceeds Whisper** |
-| Speed (CPU) | tiny: 149s/1h, small: 10-15min | **RTF ~0.04, 1h audio ≈ 2-3 min** |
-| VAD | Extra setup needed | **Built-in fsmn-vad** |
-
-**What it does**
-
-- 🔗 Supports Douyin short links (`v.douyin.com/xxx`) and full links
-- ⚡ Fast transcription: 11-minute video in just 22 seconds
-- 📝 Auto-generates Markdown with frontmatter
-- 🎯 Chinese accuracy exceeds Whisper, simplified Chinese output
-- 🔒 No login, no cookies, no API Key needed
-
-→ [SKILL.md](./douyin-transcribe/SKILL.md) · [Scripts](./douyin-transcribe/scripts/)
-
-</td></tr>
-</table>
-
-<table>
-<tr><td>
-
-### 🎙️ podcast-transcribe
-
-> *"Can't finish listening to podcasts? Turn them into text."*
-
-Podcast audio → download → faster-whisper transcribe → save as Markdown. Supports Xiaoyuzhou, Ximalaya, and other platforms. RSS batch download supported.
-
-**What it does**
-
-- 🎧 Supports Xiaoyuzhou, Ximalaya, and other podcast platforms
-- 📡 RSS batch download for entire podcast seasons
-- 📝 Auto-generates Markdown with timestamps
-- ⏱️ Resume support, skips already transcribed episodes
-- 📁 Auto-naming by episode number
-
-**Performance**
-
-| Model | Speed (CPU) | Chinese Accuracy |
-|------|------|------|
-| faster-whisper tiny | ~149s/1h | Average |
-| faster-whisper small | ~10min/h | Good (~85-90%) |
-| faster-whisper large-v3 | ~30-60min/h | Best |
-
-→ [SKILL.md](./podcast-transcribe/SKILL.md) · [Scripts](./podcast-transcribe/scripts/)
-
-</td></tr>
-</table>
-
-<table>
-<tr><td>
-
-### 📺 bilibili-transcribe
-
-> *"So many great videos on Bilibili, now I can read them as text."*
-
-Bilibili video → yt-dlp download audio → SenseVoice-Small transcribe → save as Markdown. Supports BV IDs and full links. No login needed.
-
-**What it does**
-
-- 📺 Supports Bilibili BV IDs and full links
-- ⚡ Fast transcription: 7-minute video in just 15 seconds
-- 📝 Auto-generates Markdown with frontmatter
-- 🎯 High Chinese accuracy, simplified Chinese output
-- 🔒 No login, no cookies needed
-
-**Triggers**
-
-```
-Transcribe this Bilibili video: https://www.bilibili.com/video/BV1rrQGBeEen/
-Help me transcribe this bilibili
-```
-
-**Performance**
-
-| Video Duration | Transcription Time |
-|------|------|
-| 5 min | ~10s |
-| 10 min | ~20s |
-| 30 min | ~60s |
-
-**🌐 Cross-platform**: Claude Code · Codex · OpenCode · OpenClaw · Hermes
-
-→ [SKILL.md](./bilibili-transcribe/SKILL.md) · [Scripts](./bilibili-transcribe/scripts/)
-
-</td></tr>
-</table>
-
----
-
-## 🔁 Knowledge Pipeline
-
-`tools/chubby.py` is the recommended v0.5 entry point. It keeps the old one-shot ingest workflow, but adds config, queue runs, persistent state, retries, and daily run reports:
-
-```bash
-python3 tools/chubby.py init
-python3 tools/chubby.py doctor
-python3 tools/chubby.py ingest "<url>" -o output/
-python3 tools/chubby.py run --queue inbox/links.txt
-python3 tools/chubby.py status --latest --limit 20
-python3 tools/chubby.py retry --all-failed
-```
-
-The default config is `chubby.yaml`; generate it with `python3 tools/chubby.py init` or copy `chubby.example.yaml`.
-
-- `.chubby/runs.jsonl` stores per-source run state.
-- `runs/YYYY-MM-DD.md` stores a daily Markdown report.
-- Pipeline outputs get schema v1 fields such as `run_id`, `source_hash`, `captured_at`, `processed_at`, `content_type`, `status`, and `assets`.
-- `timeout_seconds` prevents one stuck platform fetch from blocking a whole queue.
-
-Validate v1 outputs:
-
-```bash
-python3 tools/validate_outputs.py output/ --schema-v1
-```
-
-## 🧭 Platform Health & Site Templates
-
-v0.6 turns platform support into versioned, reviewable metadata:
-
-- `platforms/*.yaml`: platform ID, skill directory, entry script, dependencies, status, fallback, sample source
-- `templates/sites/*.yaml`: URL matching, frontmatter fields, asset behavior, post-processing flow
-- `docs/platform-status.md`: generated platform status page
-- `.github/ISSUE_TEMPLATE/platform_failure.yml`: structured issue form for platform failures
-
-Commands:
-
-```bash
-python3 tools/platform_health.py --check
-python3 tools/platform_health.py --check-output
-python3 tools/platform_health.py
-python3 tools/platform_health.py --local --check
-python3 tools/platform_health.py --json
-```
-
-Status page: [docs/platform-status.md](./docs/platform-status.md).
-
-## 🧠 Knowledge Vault
-
-v0.7/v0.9 add a usable local knowledge layer:
-
-- `vault-template/`: Obsidian-friendly Inbox / Sources / Processed / Dashboards / Assets / Templates layout
-- `tools/vault_index.py`: SQLite index with keyword search, semantic-lite search, platform/tag filters, recent notes, read, and stats
-- `tools/vault_curator.py`: dry-run-first auto archive and knowledge card generation
-- `knowledge-base-management/scripts/mcp_server.py`: MCP server backed by the same local index
-
-Commands:
-
-```bash
-python3 tools/vault_index.py index ~/Documents/ObsidianVault
-python3 tools/vault_index.py search "AI Agent"
-python3 tools/vault_index.py semantic "content strategy"
-python3 tools/vault_index.py search "brand" --platform wechat
-python3 tools/vault_index.py recent --limit 10
-python3 tools/vault_index.py read "10_Sources/x/example.md" --vault ~/Documents/ObsidianVault
-python3 tools/vault_index.py stats
-python3 tools/vault_curator.py archive ~/Documents/ObsidianVault
-python3 tools/vault_curator.py card ~/Documents/ObsidianVault "10_Sources/x/example.md" --apply
-```
-
-MCP tools: `search_vault`, `semantic_search_vault`, `read_kb_note`, `list_recent_notes`, `reindex_vault`, `vault_index_stats`.
-
-Knowledge automation docs: [docs/knowledge-automation.md](./docs/knowledge-automation.md).
-
-Contributor platform scaffold:
-
-```bash
-python3 tools/platform_adapter.py new hacker-news \
-  --name "Hacker News" \
-  --sample-source "https://news.ycombinator.com/item?id=123" \
-  --match "news.ycombinator.com"
-python3 tools/platform_health.py --check
-```
-
-Contributor docs: [docs/contributor-platform-adapter.md](./docs/contributor-platform-adapter.md).
-
----
-
-## 🔧 Requirements
-
-### Quick install
-
-```bash
-bash setup.sh          # All dependencies
-bash setup.sh podcast  # Specific skill only
-```
-
-### douyin-transcribe / bilibili-transcribe / youtube-transcribe
-
-```bash
-pip install -r douyin-transcribe/requirements.txt
-# System: brew install ffmpeg yt-dlp  # macOS
-```
-
-### podcast-transcribe
-
-```bash
-pip install -r podcast-transcribe/requirements.txt
-# System: brew install ffmpeg  # macOS
-```
-
----
-
-## 🌟 About
-
-I'm Chubby, an indie creator tinkering with AI and content. I like to auto-collect everything I come across — videos, podcasts, articles, Xiaohongshu, tweets — into my own knowledge base so it actually sticks instead of being forgotten. These skills are what I use daily for exactly that. If they help, give it a ⭐. Issues and discussions welcome.
-
-- 🐦 [X / Twitter](https://x.com/Chubbyguan)
-- 💬 [Jike (即刻)](https://web.okjike.com/u/a876838d-d9a8-494b-9494-bb3410b77dd5)
-- 📕 [Xiaohongshu](https://www.xiaohongshu.com/user/profile/57c061626a6a696f5a70f9a8)
-- 📰 WeChat Official Account: **关关不过**
-
----
-
-<div align="center">
-
-[MIT License](./LICENSE) · Free to use / modify / redistribute
-
-Made by [@chubbyguan](https://github.com/chubbyguan)
-
-</div>
+| [douyin-transcribe](./douyin-transcribe/SKILL.md) | Douyin video transcription |
+| [bilibili-transcribe](./bilibili-transcribe/SKILL.md) | Bilibili captions and transcription |
+| [tiktok-transcribe](./tiktok-transcribe/SKILL.md) | TikTok video transcription |
+| [weibo-transcribe](./weibo-transcribe/SKILL.md) | Weibo video transcription |
+| [zhihu-transcribe](./zhihu-transcribe/SKILL.md) | Zhihu video transcription |
+| [youtube-transcribe](./youtube-transcribe/SKILL.md) | YouTube captions, transcription, optional translation |
+| [podcast-transcribe](./podcast-transcribe/SKILL.md) | Podcast / RSS / local audio transcription |
+| [wechat-article-ingest](./wechat-article-ingest/SKILL.md) | WeChat articles and PDF ingestion |
+| [xiaohongshu-ingest](./xiaohongshu-ingest/SKILL.md) | Xiaohongshu text, images, and video |
+| [x-ingest](./x-ingest/SKILL.md) | X / Twitter text, images, and video |
+| [content-enrich](./content-enrich/SKILL.md) | Optional API-based summaries, key points, and tags |
+| [knowledge-base-management](./knowledge-base-management/SKILL.md) | Vault management, indexing, and MCP |
+| [industry-intelligence-radar](./industry-intelligence-radar/SKILL.md) | Multi-source research workflow |
+| [learning-notes-automation](./learning-notes-automation/SKILL.md) | Learning notes and flashcards |
+
+## Verification
+
+| Check | What it establishes |
+|---|---|
+| `python3 tools/chubby.py quickstart --ephemeral --no-state` | Offline environment and fixture workflow |
+| `python3 tools/validate_outputs.py examples/outputs --schema-v1` | Example Markdown metadata conforms to schema v1 |
+| `python3 tools/platform_health.py --check` | Platform definitions and templates are structurally valid |
+| `python3 tools/platform_smoke.py --mode all --check` | Layered checks; unconfigured live checks are not successes |
+| `python3 tools/mcp_workflow_demo.py` | Fixture-based indexing and source-reading logic |
+| `python3 tools/mcp_smoke.py --json` | Real server startup, handshake, and tool calls |
+
+Neither fixtures nor MCP protocol checks prove that real platform content can be fetched. Live tests require explicit source configuration; results are scoped to the sample, environment, and test date. See the [release checklist](./docs/release.md) and [live verification report](./docs/live-verification.md).
+
+## Documentation and contributing
+
+- [Creator workflow](./docs/creator-workflow.md)
+- [Installation](./docs/installation.md)
+- [Offline quickstart](./docs/quickstart.md)
+- [MCP configuration](./docs/mcp-workflow.md)
+- [Tool selection and processing boundaries](./docs/comparison.md)
+- [Ten-creator pilot template — not yet executed](./docs/user-pilot.md)
+- [Community contribution triage plan](./docs/community-triage.md)
+- [Contributor guide](./CONTRIBUTING.md) and [platform adapters](./docs/contributor-platform-adapter.md)
+- [Changelog](./CHANGELOG.md)
+
+## Usage limits
+
+Ingestion skills are intended for personal learning and research. Follow platform terms, `robots.txt`, and applicable laws. Do not use them for bulk scraping, commercial scraping, redistribution, or infringing uses. Use only your own authorized login state. Source content remains the original author's work; obtain permission when required and attribute it appropriately.
+
+Code is provided under the [MIT License](./LICENSE), as is. This does not grant rights to third-party content.
+
+Maintained by [Chubby](https://github.com/chubbyguan), who uses these workflows for content work and a personal knowledge base.

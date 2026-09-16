@@ -1,9 +1,11 @@
 # Platform Status
 
-Generated at: `2026-07-18T19:36:03+03:00`
+Generated at: `2026-09-16T16:52:07+08:00`
 
 This page is generated from `platforms/*.yaml` and `templates/sites/*.yaml`.
 Default checks validate repository structure and template coverage. Run with `--local` to include local dependency readiness.
+The status labels below are declared capabilities, not recent live success measurements.
+For dated real-source evidence see [live verification](live-verification.md). Untested platforms remain unverified.
 
 Local dependency check: `off`
 
@@ -22,8 +24,8 @@ Local dependency check: `off`
 
 ## Status Meaning
 
-- `stable`: text/subtitle-first path is expected to be reliable.
-- `beta`: works, but platform markup or anti-bot behavior may change.
+- `stable`: maintained text/subtitle-first path; this label alone does not prove a recent successful capture.
+- `beta`: experimental support; platform markup or anti-bot behavior may change.
 - `heavy deps`: requires local audio/video transcription dependencies.
 - `manual fallback`: supports manual text fallback when live fetch fails.
 - `blocked` / `degraded`: local dependency check found missing required or optional dependencies.

@@ -2,6 +2,8 @@ import os
 import sys
 import unittest
 
+import yaml
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -31,14 +33,48 @@ class NoteMarkdownTest(unittest.TestCase):
         text = markdown.note_markdown(
             "标题",
             "正文",
-            {"type": "note", "platform": "x", "tags": "[X]", "source": "https://x.com/1", "author": ""},
+            {"type": "note", "platform": "x", "tags": ["X"], "source": "https://x.com/1", "author": ""},
             created="2026-08-18",
         )
-        self.assertTrue(text.startswith("---\ntitle: 标题\ncreated: 2026-08-18\n"))
-        self.assertIn("platform: x", text)
+        fields = yaml.safe_load(text.split("---", 2)[1])
+        self.assertEqual(fields["title"], "标题")
+        self.assertEqual(fields["created"], "2026-08-18")
+        self.assertEqual(fields["platform"], "x")
+        self.assertEqual(fields["tags"], ["X"])
         self.assertIn("# 标题", text)
         self.assertIn("正文", text)
         self.assertTrue(text.rstrip().endswith("正文"))
+
+    def test_yaml_round_trip_preserves_untrusted_scalars(self):
+        values = ['AI: 十个建议', '"双引号"和\\反斜线', '作者\nstatus: success',
+                  'true', 'null', '[看似列表]', 'a\u0085b\u2028c\u2029d', '标题 # 不是注释',
+                  ''.join(chr(code) for code in range(0x7f, 0xa0))]
+        for value in values:
+            with self.subTest(value=value):
+                text = markdown.note_markdown(value, "正文", {"author": value})
+                parsed = yaml.safe_load(text.split("\n---\n", 1)[0][4:])
+                self.assertEqual(parsed["title"], value)
+                self.assertEqual(parsed["author"], value)
+                self.assertEqual(set(parsed), {"title", "created", "author"})
+
+    def test_typed_metadata_and_index_round_trip(self):
+        from tools import vault_index
+
+        title = 'AI: "十个建议"\\资料'
+        tags = ['AI, Agent', '标题: 引用', '多\n行']
+        text = markdown.note_markdown(title, "正文", {"tags": tags, "translated": True})
+        block, _ = vault_index.split_frontmatter(text)
+        fields = yaml.safe_load(block)
+        self.assertEqual(fields["tags"], tags)
+        self.assertIs(fields["translated"], True)
+        indexed = vault_index.parse_frontmatter(block)
+        self.assertEqual(indexed["title"], title)
+        self.assertEqual(vault_index.inline_list_items(indexed["tags"]), tags)
+
+    def test_rejects_invalid_or_reserved_keys(self):
+        for key in ['author\nstatus', 'title', 'created']:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                markdown.note_markdown("标题", "正文", {key: "value"})
 
 
 class ParseJsonResponseTest(unittest.TestCase):

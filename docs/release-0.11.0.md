@@ -1,5 +1,7 @@
 # v0.11.0 发布与宣发文案（2026-08-19）
 
+> 历史草稿，仅用于保留版本记录。下文的定位、竞品比较与生态数量声明已由 0.11.1 撤回，不应继续用于宣传；当前说明见 [README](../README.md) 和 [comparison](comparison.md)。
+
 > 使用说明：GitHub Release 粘贴「一、Release Notes」到 https://github.com/chubbyguan/chubbyskills/releases/new
 > （Tag 填 `v0.11.0`，标题填 `v0.11.0 — 公共模块重构 + 依赖体检 + 叙事升级`），其余渠道按需复制。
 

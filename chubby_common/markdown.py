@@ -4,6 +4,7 @@
 下游 vault_index / validate_outputs 才能正常工作。
 """
 
+import json
 import re
 from datetime import datetime
 
@@ -19,12 +20,23 @@ def note_markdown(title: str, body: str, fields: dict, created: str = None) -> s
     """按统一协议生成带 frontmatter 的 Markdown。
 
     fields 为 frontmatter 字段（不含 title），如：
-        {"type": "note", "platform": "tiktok", "tags": "[TikTok]",
+        {"type": "note", "platform": "tiktok", "tags": ["TikTok"],
          "source": url, "author": "", "transcriber": "SenseVoice-Small"}
     """
     created = created or datetime.now().strftime("%Y-%m-%d")
-    lines = ["---", f"title: {title}", f"created: {created}"]
+    metadata = {"title": str(title), "created": str(created)}
     for key, value in fields.items():
-        lines.append(f"{key}: {value}")
+        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][\w-]*", key):
+            raise ValueError(f"invalid frontmatter key: {key!r}")
+        if key in {"title", "created"}:
+            raise ValueError(f"reserved frontmatter key: {key}")
+        metadata[key] = value
+    lines = ["---"]
+    for key, value in metadata.items():
+        # JSON scalars and flow collections are valid YAML. Escape Unicode line
+        # separators as well, so YAML readers cannot fold them into spaces.
+        encoded = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        encoded = re.sub(r"[\x7f-\x9f\u2028\u2029]", lambda match: f"\\u{ord(match[0]):04x}", encoded)
+        lines.append(f"{key}: {encoded}")
     lines += ["---", "", f"# {title}", "", str(body or "")]
     return "\n".join(lines)

@@ -16,7 +16,8 @@ import sys
 import tempfile
 import urllib.request
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = SKILL_ROOT if os.path.isdir(os.path.join(SKILL_ROOT, "chubby_common")) else os.path.dirname(SKILL_ROOT)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -40,12 +41,18 @@ def get_video_info(url: str) -> dict:
     """Get video title and duration; fall back to defaults on any failure."""
     try:
         result = ytdlp.run_ydl(
-            CFG, ["--get-title", "--get-duration", url], timeout=CFG.info_timeout, capture=True
+            CFG,
+            ["--skip-download", "--ignore-no-formats-error", "--print", "%(title)s",
+             "--print", "%(duration_string)s", url],
+            timeout=CFG.info_timeout,
+            capture=True,
         )
-        lines = result.stdout.strip().split("\n")
+        lines = result.stdout.splitlines()
+        title = lines[0].strip() if lines else ""
+        duration = lines[1].strip() if len(lines) > 1 else ""
         return {
-            "title": lines[0] if lines else CFG.default_title,
-            "duration": lines[1] if len(lines) > 1 else "",
+            "title": title if title and title != "NA" else CFG.default_title,
+            "duration": duration if duration != "NA" else "",
         }
     except Exception:
         return {"title": CFG.default_title, "duration": ""}
@@ -171,14 +178,14 @@ def generate_markdown(title: str, original: str, translated: str, language: str,
     fields = {
         "type": "note",
         "platform": "youtube",
-        "tags": "[YouTube]",
+        "tags": ["YouTube"],
         "source": url,
         "author": "",
         "language": language,
         "transcriber": transcriber,
     }
     if language == "en" and translated:
-        fields["translated"] = "true"
+        fields["translated"] = True
         body = (
             "> 🌐 英文视频，已翻译为中文\n\n"
             "---\n\n"

@@ -9,21 +9,35 @@ on:
 jobs:
   reliability:
     name: Reliability checks
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: macos-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
+
+      - name: Install test and MCP dependencies
+        run: python -m pip install -r requirements-dev.txt -r knowledge-base-management/requirements-mcp.txt
 
       - name: Python syntax check
         run: |
-          find . -name "*.py" -type f -not -path "./.git/*" -print0 \
+          find . -name "*.py" -type f -not -path "./.git/*" -not -path "./.venv/*" -print0 \
             | xargs -0 python -m py_compile
 
       - name: Unit tests
         run: python -m unittest discover -s tests -v
+
+      - name: MCP stdio handshake and tool calls
+        run: python tools/mcp_smoke.py --json
 
       - name: Validate example outputs
         run: |
@@ -73,5 +87,4 @@ jobs:
 
       - name: Lint
         run: |
-          python -m pip install ruff
           ruff check . --select E,F,W --ignore E402,E501

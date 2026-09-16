@@ -23,7 +23,8 @@ import json
 import argparse
 import urllib.request
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = SKILL_ROOT if os.path.isdir(os.path.join(SKILL_ROOT, "chubby_common")) else os.path.dirname(SKILL_ROOT)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
