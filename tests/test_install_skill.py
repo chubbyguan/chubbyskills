@@ -71,12 +71,19 @@ class PortableSkillInstallTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             # Documented local indexing/curation CLIs are also bundled.
-            for tool in ("vault_index.py", "vault_curator.py"):
+            for tool in ("vault_index.py", "vault_curator.py", "evidence_brief.py"):
                 result = subprocess.run(
                     [sys.executable, "-I", str(destination / "knowledge-base-management" / "tools" / tool), "--help"],
                     cwd=base, capture_output=True, text=True, timeout=15,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
+            result = subprocess.run(
+                [sys.executable, "-I", str(destination / "knowledge-base-management" / "tools" / "evidence_brief.py"),
+                 "--vault", str(vault), "--topic", "Portable", "--output", str(base / "brief.md")],
+                cwd=base, capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Portable Agent capture sample", (base / "brief.md").read_text())
 
     def test_existing_skill_aborts_entire_install_without_overwriting(self):
         with tempfile.TemporaryDirectory() as temporary:

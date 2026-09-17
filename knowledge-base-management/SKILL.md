@@ -1,9 +1,9 @@
 ---
 name: knowledge-base-management
-description: "Obsidian 知识库全生命周期管理：三层架构、素材入库(ABC分级)、健康检查、GBrain/GraphRAG/LLM Wiki 三件套集成、目录整理"
+description: "管理本地 Markdown/Obsidian 知识库：素材入库、健康检查、增量索引、关键词与 semantic-lite 检索、逐字原文资料包、归档和 MCP 连接。用于搜索知识库、整理资料及为 Agent 准备可定位的引用。"
 metadata:
   triggers: "[\"知识库管理\", \"素材入库\", \"健康检查\", \"盘点知识库\", \"清理知识库\", \"搜索知识库\", \"GBrain\", \"GraphRAG\", \"知识图谱\", \"整理知识库\", \"知识库架构\"]"
-  version: "1.0"
+  version: "0.12.0"
   created: "2026-06-02"
   tags: "[\"knowledge-base\", \"obsidian\", \"wiki\", \"note-taking\", \"gbrain\", \"graphrag\"]"
 ---
@@ -30,7 +30,15 @@ vault 路径通过环境变量配置，不写死在脚本里：
 export VAULT_DIR="$HOME/Documents/your-vault"   # 你的 Obsidian vault 根目录
 ```
 
-- **健康检查 cron**：建议每周日 9:00 运行 `scripts/vault_health_check.py`（见第 2 节）
+完整仓库可以统一配置采集、搜索和资料包：
+
+```bash
+python3 tools/chubby.py init --vault "$VAULT_DIR"
+```
+
+这里的路径是知识库根目录。采集进入根目录的 `00_Inbox`，默认索引为 `.chubby/index.sqlite`。独立安装本 skill 后，`tools/vault_index.py` 和 `tools/evidence_brief.py` 直接使用 `VAULT_DIR` 或 `--vault`，不读取仓库中的 `chubby.yaml`。
+
+健康检查可自行加入调度器；安装本 skill 不会创建 cron。
 
 ---
 
@@ -56,10 +64,10 @@ export VAULT_DIR="$HOME/Documents/your-vault"   # 你的 Obsidian vault 根目�
 
 ### 公众号文章处理
 
-**来源一：wechat-article-exporter 自动同步（每天 07:00 cron）**
-公众号文章直接存入 `素材库/公众号文章/<公众号名>/`，每日自动增量同步。
+**来源一：可选的 wechat-article-exporter 外部同步**
+如果已自行部署该工具和调度器，可把公众号文章同步到 `素材库/公众号文章/<公众号名>/`。本 skill 不内置该服务或定时任务。
 
-**来源二：手机保存的文章同步（每天 08:00 cron）**
+**来源二：手机保存的文章导入**
 通过手机保存的文章先落到一个待处理目录（按日期），再由一个归类脚本搬入素材库并按领域筛选优质文章做 A+B 深度处理。
 
 > 归类脚本（如 `sync_notes_to_kb.py`）与各人的目录结构强相关，本仓库不内置，按下面的「工作流」自建即可。
@@ -89,7 +97,7 @@ export VAULT_DIR="$HOME/Documents/your-vault"   # 你的 Obsidian vault 根目�
 
 ### 自动检查项
 
-每周日 9:00 cron 自动运行，检查：
+手动运行脚本或配置自己的调度器后，检查：
 - 断链（broken wikilinks）
 - 缺 source 字段
 - frontmatter 缺失
@@ -155,12 +163,23 @@ summary: 已被 [[新位置/新文件名|新版本]] 取代。
 
 ## 3. 工具集成 (Tools)
 
-### 🧠 本地索引（本仓库提供，零依赖）
+### 🧠 增量索引与统一搜索
 
-`tools/vault_index.py` 会把 Markdown vault 建成 SQLite 索引，支持关键词搜索、semantic-lite 检索、平台/标签过滤、最近笔记、读取笔记和统计。SQLite FTS5 可用时自动启用；不可用时降级为 LIKE 搜索，中文内容也能命中。
+完整仓库的统一入口：
 
 ```bash
-# 在仓库根目录运行
+python3 tools/chubby.py init --vault "$VAULT_DIR"
+python3 tools/chubby.py ingest "替换为真实素材链接" --no-enrich
+python3 tools/chubby.py search "AI Agent"
+python3 tools/chubby.py search "内容策略" --mode lite
+```
+
+成功采集后，以及统一搜索前，自动同步索引。`init --vault` 指向根目录；旧的 `ingest --vault` 参数仍表示具体入库目录。
+
+独立安装本 skill 后，在 skill 目录内使用自带工具：
+
+```bash
+export VAULT_DIR="$HOME/Documents/your-vault"
 python3 tools/vault_index.py index "$VAULT_DIR"
 python3 tools/vault_index.py search "AI Agent"
 python3 tools/vault_index.py semantic "内容策略"
@@ -170,11 +189,47 @@ python3 tools/vault_index.py read "10_Sources/x/example.md" --vault "$VAULT_DIR"
 python3 tools/vault_index.py stats
 ```
 
-默认索引位置：`.chubby/vault_index.sqlite`。也可以用 `--db /path/to/index.sqlite` 指定。
+独立 `vault_index.py` 搜索读取已有索引，笔记变化后先再运行 `index`。后续命令需要保持 `VAULT_DIR`，或显式传入同一个数据库：
 
-### 🗂️ 自动归档与知识卡片（本仓库提供，零依赖）
+```bash
+python3 tools/vault_index.py --db /path/to/index.sqlite index "$VAULT_DIR"
+python3 tools/vault_index.py --db /path/to/index.sqlite search "内容策略"
+```
 
-`tools/vault_curator.py` 默认 dry-run，适合先看会移动/生成什么：
+SQLite FTS5 可用时自动启用；不可用时使用 LIKE 搜索。默认 `semantic-lite` 只做本地词语和字符组合排序，不调用模型 API。
+
+索引规则：
+
+- 默认位置为 `$VAULT_DIR/.chubby/index.sqlite`；`VAULT_INDEX_DB` 或显式 `--db` 可以覆盖。
+- `index` 默认增量同步。未变笔记的向量保留，实际 embedding 输入变化时使旧向量失效，删除笔记时移除对应索引和向量。
+- 新默认索引不存在时，旧 `$VAULT_DIR/.chubby/vault_index.sqlite` 会复制迁移，原文件保留。其他位置的旧数据库需显式指定并验证所属知识库。
+- 数据库绑定知识库，扫描或读取失败会回滚同步，越出知识库范围的符号链接会被拒绝。
+- 全量重建需显式执行 `python3 tools/vault_index.py index "$VAULT_DIR" --rebuild`，会丢弃已有 embedding。
+
+### 📎 逐字原文资料包
+
+完整仓库使用统一入口：
+
+```bash
+python3 tools/chubby.py brief --topic "内容策略" --output reports/content-brief.md
+```
+
+独立安装后，在 skill 目录运行：
+
+```bash
+python3 tools/evidence_brief.py --vault "$VAULT_DIR" --topic "内容策略" \
+  --output "$VAULT_DIR/30_Output/content-brief.md"
+```
+
+资料包工具先自动同步索引，关键词检索没有命中时回退到本地 semantic-lite；生成的 `research_brief` 文档从候选中排除。输出 Markdown 与同名 JSON，包含逐字摘录、原始 `source`、笔记相对路径、真实文件行号和 SHA-256。
+
+行号从源文件第一行计算，包含 frontmatter。导出前再次检查文件和摘录，来源变动时需要重新生成。已有输出默认拒绝覆盖，显式 `--force` 才替换。没有匹配内容时写明证据不足。
+
+工具只整理原文证据包和 Agent 任务说明，选题由 Agent 另行生成；文件和摘录核验不代表原文事实已证实。要求 Agent 区分原作者观点与推断，并在引用中保留证据编号、路径和行号。
+
+### 🗂️ 自动归档与知识卡片
+
+`tools/vault_curator.py` 默认预览，确认后用 `--apply` 执行：
 
 ```bash
 python3 tools/vault_curator.py archive "$VAULT_DIR"
@@ -182,24 +237,22 @@ python3 tools/vault_curator.py archive "$VAULT_DIR" --apply
 python3 tools/vault_curator.py card "$VAULT_DIR" "10_Sources/x/example.md" --apply
 ```
 
-- `archive` 只处理 `00_Inbox/**/*.md`，按 `platform`、`summary`、processed 标签归入 `10_Sources/<platform>/` 或 `20_Processed/`。
-- `card` 从单篇笔记生成 `20_Processed/Cards/*.md`，保留来源、摘要、要点和 tags。
+- `archive` 只处理 `00_Inbox/**/*.md`，按平台、摘要和 processed 标签归入 `10_Sources/<platform>/` 或 `20_Processed/`。
+- `card` 生成 `20_Processed/Cards/*.md`，保留来源、摘要、要点和 tags。
 
-### 🔌 MCP Server（本仓库提供，推荐）
+### 🔌 MCP Server
 
-`scripts/mcp_server.py` 把知识库的「搜索 / 语义检索 / 读取 / 最近笔记 / 重建索引 / 统计」暴露成 MCP 工具，让**任何支持 MCP 的 Agent**（Claude Code、Codex 等）直接查你的库——形成「采集类 skill 负责写入、MCP 负责被调用查询」的闭环。
-
-使用 Python 3.10 或更新版本，从完整仓库根目录安装已验证的 MCP 依赖并启动：
+`scripts/mcp_server.py` 为支持 MCP 的 Agent 提供搜索、读取和索引工具。使用 Python 3.10 或更新版本，在完整仓库根目录执行：
 
 ```bash
 python3 -m pip install -r knowledge-base-management/requirements-mcp.txt
-python3 tools/mcp_smoke.py
+python3 tools/mcp_smoke.py --json
 VAULT_DIR=/path/to/your-vault python3 knowledge-base-management/scripts/mcp_server.py
 ```
 
-MCP SDK 固定为 `mcp==1.30.0`。2.x 已移除当前使用的 `mcp.server.fastmcp` 接口；完成迁移前不要单独执行 `pip install -U mcp`。`mcp_smoke.py` 使用临时 vault 启动真实 stdio 服务，验证握手、6 个工具发现、搜索和读取，不会访问你的知识库。`--help` 不需要安装 MCP SDK。
+当前验证 SDK 为 `mcp==1.30.0`。`mcp_smoke.py` 用临时 vault 启动真实 stdio 服务，验证握手、6 个工具发现、搜索和读取，不访问你的知识库。`--help` 不需要安装 SDK。
 
-需要单独安装 skill 时，在仓库根目录使用安装器，它会一起复制知识库工具：
+完整仓库的安装器会一起复制 `vault_index.py`、`vault_curator.py` 和 `evidence_brief.py`：
 
 ```bash
 python3 tools/install_skill.py knowledge-base-management --dest ~/.codex/skills
@@ -207,24 +260,25 @@ python3 -m pip install -r ~/.codex/skills/knowledge-base-management/requirements
 VAULT_DIR=/path/to/your-vault python3 ~/.codex/skills/knowledge-base-management/scripts/mcp_server.py
 ```
 
-MCP 入口会先加载已安装 skill 内的 `tools/vault_index.py`，再尝试完整仓库里的工具路径。
+目标技能目录必须不存在；已有安装先备份，或使用新的安装目录。MCP 优先加载 skill 内的工具，安装后不依赖原仓库位置。
 
-在 Agent 的 MCP 配置里：
+客户端配置使用真实的 Python 和 server 绝对路径：
 
 ```json
 {
   "mcpServers": {
     "chubby-kb": {
-      "command": "python3",
-      "args": ["<knowledge-base-management/scripts/mcp_server.py 的绝对路径>"],
+      "command": "/absolute/path/to/venv/bin/python",
+      "args": ["/absolute/path/to/knowledge-base-management/scripts/mcp_server.py"],
       "env": { "VAULT_DIR": "/path/to/your-vault" }
     }
   }
 }
 ```
 
-暴露的工具：`search_vault(query, limit, platform, tag)`、`semantic_search_vault(query, limit, platform, tag)`、`read_kb_note(path)`、`list_recent_notes(limit, platform)`、`reindex_vault()`、`vault_index_stats()`。
-内置路径穿越防护，只能读 `VAULT_DIR` 范围内的笔记。
+工具名保持 6 个：`search_vault`、`semantic_search_vault`、`read_kb_note`、`list_recent_notes`、`reindex_vault`、`vault_index_stats`。搜索、语义检索、最近笔记和统计前自动同步索引；`read_kb_note` 直接读取原文；`reindex_vault()` 名称不变，执行增量同步。
+
+默认数据库与 CLI 一致，为根目录下 `.chubby/index.sqlite`；自定义时在客户端环境中设置 `VAULT_INDEX_DB`。读取路径必须位于 `VAULT_DIR` 范围内。
 
 ---
 

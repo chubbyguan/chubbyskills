@@ -66,7 +66,7 @@ def skill_payload(name, repo_root):
     if name in COMMON_SKILLS:
         files.extend((path, Path("chubby_common") / rel) for path, rel in payload_files(repo_root / "chubby_common"))
     if name == "knowledge-base-management":
-        for module in ("vault_index.py", "vault_curator.py"):
+        for module in ("vault_index.py", "vault_curator.py", "evidence_brief.py"):
             files.extend((path, Path("tools") / rel) for path, rel in payload_files(repo_root / "tools" / module))
     if not (skill / "LICENSE").exists():
         files.extend(payload_files(repo_root / "LICENSE"))

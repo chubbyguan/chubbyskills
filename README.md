@@ -11,7 +11,7 @@
 <p align="center"><em>保存视频、文章和图文的原文与来源，让 Agent 从你的素材库中查找证据、整理选题。</em></p>
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.11.1-10B981?style=for-the-badge)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.12.0-10B981?style=for-the-badge)](./CHANGELOG.md)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -43,20 +43,21 @@ cd chubbyskills
 python3 -m venv .venv
 source .venv/bin/activate
 bash setup.sh light
-python3 tools/chubby.py init
+python3 tools/chubby.py init --vault "$PWD/creator-vault"
 ```
 
 选一条你有权保存的真实链接，先查看下方平台要求，再运行：
 
 ```bash
-python3 tools/chubby.py ingest "替换为你的真实链接" \
-  --vault "$PWD/creator-vault/00_Inbox" --no-enrich
+python3 tools/chubby.py ingest "替换为你的真实链接" --no-enrich
 python3 tools/chubby.py status --latest
-python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" index "$PWD/creator-vault"
-python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" search "替换为原文中的关键词"
+python3 tools/chubby.py search "替换为原文中的关键词"
+python3 tools/chubby.py brief --topic "替换为准备写的主题" --output research/brief.md
 ```
 
-打开生成的 Markdown，核对正文、来源和需要保留的图片。**第一次成功指你自己的真实素材保存完整，并能找回原文。**手动正文 fallback 要单独记录，不能当作自动抓取成功。之后按[创作者工作流](./docs/creator-workflow.md)用 3 条素材整理一份带引用的选题资料。
+素材进入 `creator-vault/00_Inbox`，索引自动同步。相同来源、处理配置和目的地的有效产物会复用；使用 `--refresh` 重新采集并保留旧版本。资料包同时生成 Markdown 和 JSON，包含原文行号、来源和文件 hash，供 Agent 整理选题；不会自动证明观点或调用云模型。
+
+打开生成的 Markdown，核对正文、来源和需要保留的图片。**第一次成功指你自己的真实素材保存完整，并能找回原文。**手动正文 fallback 要单独记录，不能当作自动抓取成功。完整说明见[创作者工作流](./docs/creator-workflow.md)；已有安装先看 [0.12 升级与行为说明](./docs/iteration-0.12.0.md)。
 
 只想先检查环境，可以运行：
 
@@ -108,7 +109,7 @@ Gitee 镜像：[chubbyguan/chubbyskills](https://gitee.com/chubbyguan/chubbyskil
 
 ## 现在有什么
 
-当前版本：`0.11.1`。
+当前版本：`0.12.0`。
 
 | 模块 | 用途 | 入口 |
 |---|---|---|

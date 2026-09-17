@@ -8,6 +8,7 @@ state, retry, and Markdown run reports without adding runtime dependencies.
 """
 
 import argparse
+import copy
 import hashlib
 import importlib.util
 import json
@@ -29,17 +30,21 @@ try:
     from tools import platform_health
     from tools import validate_outputs
     from tools import vault_index
+    from tools import source_identity
 except ModuleNotFoundError:
     sys.path.insert(0, str(TOOLS_DIR))
     import chubby_ingest
     import platform_health
     import validate_outputs
     import vault_index
+    import source_identity
 
 
 DEFAULT_CONFIG = {
     "output_dir": "output",
     "vault_dir": "",
+    "vault_root": "",
+    "index_db": "",
     "state_file": ".chubby/runs.jsonl",
     "report_dir": "runs",
     "queue_file": "inbox/links.txt",
@@ -69,7 +74,7 @@ def today():
 
 
 def source_hash(source):
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+    return source_identity.source_digest(source, base_dir=ROOT)
 
 
 def make_run_id():
@@ -79,6 +84,13 @@ def make_run_id():
 
 def clean_scalar(value):
     value = str(value).strip()
+    if value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+            if isinstance(decoded, str):
+                return decoded
+        except ValueError:
+            pass
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1].strip()
     return value
@@ -130,19 +142,44 @@ def load_config(path=None):
     return config
 
 
-def write_default_config(path):
+def write_default_config(path, vault=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     text = """# Chubby Skills pipeline config
 # Paths can be absolute or relative to this repository.
 output_dir: output
 vault_dir:
+vault_root:
+index_db:
 state_file: .chubby/runs.jsonl
 report_dir: runs
 queue_file: inbox/links.txt
 enrich: false
 timeout_seconds: 1800
 """
+    if vault:
+        root = resolve_path(vault).resolve()
+        for key, value in vault_config_fields(root).items():
+            text = text.replace(f"{key}:\n", f"{key}: {json.dumps(value, ensure_ascii=False)}\n")
     path.write_text(text, encoding="utf-8")
+
+
+def vault_config_fields(vault):
+    root = resolve_path(vault).resolve()
+    return {"vault_root": str(root), "vault_dir": str(root / "00_Inbox"),
+            "index_db": str(root / ".chubby" / "index.sqlite")}
+
+
+def update_vault_config(path, vault):
+    values = vault_config_fields(vault)
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key = line.split(":", 1)[0].strip()
+        if key in values:
+            lines.append(f"{key}: {json.dumps(values.pop(key), ensure_ascii=False)}")
+        else:
+            lines.append(line)
+    lines.extend(f"{key}: {json.dumps(value, ensure_ascii=False)}" for key, value in values.items())
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def ensure_runtime_dirs(config):
@@ -150,15 +187,21 @@ def ensure_runtime_dirs(config):
     resolve_path(config["report_dir"]).mkdir(parents=True, exist_ok=True)
     resolve_path(config["queue_file"]).parent.mkdir(parents=True, exist_ok=True)
     resolve_path(config["output_dir"]).mkdir(parents=True, exist_ok=True)
+    if config.get("vault_dir"):
+        resolve_path(config["vault_dir"]).mkdir(parents=True, exist_ok=True)
 
 
 def init_workspace(args):
     config_path = resolve_path(args.config) if args.config else ROOT / "chubby.yaml"
     if config_path.exists() and not args.force:
-        print(f"⚠️  配置已存在：{config_path}")
-        print("   如需覆盖，请加 --force。")
+        if getattr(args, "vault", None):
+            update_vault_config(config_path, args.vault)
+            print(f"✅ 已更新知识库配置：{config_path}")
+        else:
+            print(f"⚠️  配置已存在：{config_path}")
+            print("   如需覆盖，请加 --force。")
     else:
-        write_default_config(config_path)
+        write_default_config(config_path, vault=getattr(args, "vault", None))
         print(f"✅ 已写入配置：{config_path}")
 
     config = load_config(str(config_path))
@@ -263,7 +306,7 @@ def infer_content_type(skill, source):
 def asset_manifest(markdown_path):
     asset_dir = markdown_path.with_suffix("").with_name(markdown_path.stem + ".assets")
     if asset_dir.is_dir():
-        return f"[{asset_dir.name}]"
+        return json.dumps([asset_dir.name], ensure_ascii=False)
     return "[]"
 
 
@@ -340,7 +383,10 @@ def add_inferred_working_output(record):
     output_path = record.get("output_path", "")
     if not output_path or not str(output_path).endswith(".md") or not record.get("vault_dir"):
         return record
-    working_path = resolve_path(record.get("output_dir", DEFAULT_CONFIG["output_dir"])) / Path(output_path).name
+    working_dir = resolve_path(record.get("output_dir", DEFAULT_CONFIG["output_dir"]))
+    if any(resolve_path(path).resolve().parent == working_dir.resolve() for path in record.get("output_paths", [])):
+        return record
+    working_path = working_dir / Path(output_path).name
     if working_path.exists():
         paths = list(record.get("output_paths") or [])
         working = str(working_path)
@@ -396,18 +442,135 @@ def compact_log(value, limit=4000):
     return value[: limit - 20] + "\n...[truncated]..."
 
 
+def index_context(vault, config):
+    if not vault:
+        return "", ""
+    destination = resolve_path(vault).resolve()
+    root = resolve_path(config["vault_root"]).resolve() if config.get("vault_root") else None
+    if root is not None and (destination == root or root in destination.parents):
+        database = resolve_path(config["index_db"]) if config.get("index_db") else None
+        return str(root), str(vault_index.resolve_db_path(root, db_path=database))
+    # An explicit destination outside the configured vault owns its own index.
+    database = None
+    if root is None and config.get("vault_dir") and destination == resolve_path(config["vault_dir"]).resolve():
+        database = resolve_path(config["index_db"]) if config.get("index_db") else None
+    return str(destination), str(vault_index.resolve_db_path(destination, db_path=database))
+
+
+def execution_fingerprint(execution):
+    context = dict(execution)
+    file_inputs = {}
+    for value in execution["extra"]:
+        if str(value).startswith("-"):
+            if "=" not in str(value):
+                continue
+            value = str(value).split("=", 1)[1]
+        path = resolve_path(value)
+        try:
+            if path.is_file():
+                file_inputs[str(path.resolve())] = source_hash(str(path))
+        except OSError:
+            continue
+    context["file_inputs"] = file_inputs
+    context["project_version"] = read_version()
+    return hashlib.sha256(json.dumps(context, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def find_reusable_record(config, identity, fingerprint):
+    for previous in reversed(load_records(config)):
+        if (previous.get("status") != "success" or previous.get("source_hash") != identity
+                or previous.get("execution_hash") != fingerprint):
+            continue
+        paths = previous.get("output_paths") or [previous.get("output_path")]
+        if not paths or not all(paths):
+            continue
+        try:
+            valid = True
+            for value in paths:
+                path = resolve_path(value)
+                if not path.is_file() or any(
+                    issue["level"] == "error"
+                    for issue in validate_outputs.validate_file(path, require_schema_v1=True)
+                ):
+                    valid = False
+                    break
+                block, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+                fields = validate_outputs.parse_frontmatter(block)
+                if (clean_scalar(fields.get("source_hash", "")) != identity
+                        or clean_scalar(fields.get("status", "")) != "success"):
+                    valid = False
+                    break
+                for asset in vault_index.inline_list_items(fields.get("assets", "[]")):
+                    if not (path.parent / asset).exists():
+                        valid = False
+            if not all(resolve_path(path).is_file() for path in previous.get("artifact_files", [])):
+                valid = False
+            if valid:
+                return previous
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def finish_record(record, secrets=()):
+    if record.get("status") == "success" and not record.get("reused"):
+        files = []
+        try:
+            for value in record.get("output_paths", []):
+                assets = resolve_path(value).with_suffix(".assets")
+                if assets.is_dir():
+                    files.extend(str(path) for path in assets.rglob("*") if path.is_file())
+            record["artifact_files"] = sorted(set(files))
+        except OSError as exc:
+            record["status"] = "failed"
+            record["error"] = f"cannot inspect output assets: {exc}"
+    if record.get("status") == "success" and record.get("index_vault"):
+        try:
+            record["index_result"] = vault_index.sync_vault(record["index_vault"], db_path=record["index_db"])
+            record["index_status"] = "success"
+        except Exception as exc:
+            record["index_status"] = "failed"
+            record["index_error"] = str(exc)
+    # Commands, source URLs, and persisted options are already structurally
+    # redacted. Only free-form diagnostics need value-based scrubbing; doing
+    # this to every field could corrupt IDs or status for short credentials.
+    for key in ("stdout", "stderr", "error", "index_error"):
+        if key in record:
+            record[key] = chubby_ingest.redact_text(record[key], secrets)
+    return record
+
+
 def run_ingest_source(source, args, config, batch_id=None, skill=None):
     started_at = now_iso()
     detected_skill = skill or args.skill or chubby_ingest.detect_skill(source)
     cmd, selected_skill, output, vault, enrich = build_ingest_command(
         source, args, config, skill=detected_skill
     )
+    timeout_seconds = getattr(args, "timeout", None)
+    if timeout_seconds is None:
+        timeout_seconds = parse_int(config.get("timeout_seconds"), 1800)
+    index_vault, index_db = index_context(vault, config)
+    execution = {
+        "output_dir": str(resolve_path(output).resolve()),
+        "vault_dir": str(resolve_path(vault).resolve()) if vault else "",
+        "vault_root": index_vault, "index_db": index_db,
+        "enrich": bool(enrich), "skill": selected_skill or detected_skill or "",
+        "extra": list(getattr(args, "extra", [])), "timeout_seconds": timeout_seconds,
+    }
+    safe_extra, retry_requires, secrets = chubby_ingest.redact_arguments(execution["extra"])
+    safe_source, source_secrets = chubby_ingest.redact_url(source)
+    secrets.extend(source_secrets)
+    if source_secrets:
+        retry_requires.append("--source")
+    safe_command, _, command_secrets = chubby_ingest.redact_arguments(cmd)
+    secrets.extend(command_secrets)
+    fingerprint = execution_fingerprint(execution)
     run_id = make_run_id()
     record = {
         "schema_version": 1,
         "run_id": run_id,
         "batch_id": batch_id or run_id,
-        "source": source,
+        "source": safe_source,
         "source_hash": source_hash(source),
         "skill": selected_skill or detected_skill or "",
         "content_type": infer_content_type(selected_skill or detected_skill or "", source),
@@ -421,11 +584,25 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
         "vault_dir": vault or "",
         "enrich": bool(enrich),
         "dry_run": bool(args.dry_run),
-        "command": cmd,
+        "reused": False,
+        "command": safe_command,
+        "execution": dict(execution, extra=safe_extra),
+        "execution_hash": fingerprint,
+        "retry_requires": sorted(set(retry_requires)),
+        "index_vault": index_vault,
+        "index_db": index_db,
+        "index_status": "not_run" if index_vault else "skipped",
         "error": "",
     }
-
-    timeout_seconds = parse_int(config.get("timeout_seconds"), 1800)
+    if not args.dry_run and not getattr(args, "refresh", False):
+        previous = find_reusable_record(config, record["source_hash"], fingerprint)
+        if previous:
+            record.update(status="success", finished_at=now_iso(),
+                          output_path=previous["output_path"],
+                          output_paths=previous.get("output_paths") or [previous["output_path"]],
+                          artifact_files=previous.get("artifact_files", []),
+                          reused=True, reused_from=previous["run_id"])
+            return finish_record(record, secrets)
     try:
         process = subprocess.run(
             cmd,
@@ -436,14 +613,14 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
         )
     except subprocess.TimeoutExpired as exc:
         record["finished_at"] = now_iso()
-        record["stdout"] = compact_log(exc.stdout)
-        record["stderr"] = compact_log(exc.stderr)
+        record["stdout"] = compact_log(chubby_ingest.redact_text(exc.stdout, secrets))
+        record["stderr"] = compact_log(chubby_ingest.redact_text(exc.stderr, secrets))
         record["error"] = f"timeout after {timeout_seconds}s"
-        return record
+        return finish_record(record, secrets)
 
     record["finished_at"] = now_iso()
-    record["stdout"] = compact_log(process.stdout)
-    record["stderr"] = compact_log(process.stderr)
+    record["stdout"] = compact_log(chubby_ingest.redact_text(process.stdout, secrets))
+    record["stderr"] = compact_log(chubby_ingest.redact_text(process.stderr, secrets))
 
     if process.returncode == 0:
         record["status"] = "dry_run" if args.dry_run else "success"
@@ -484,9 +661,10 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
                         validation_errors.append(f"cannot mark output failed {output_path}: {exc}")
                 record["error"] = "output validation failed: " + "; ".join(validation_errors)
     else:
-        record["error"] = compact_error(process.stdout, process.stderr)
+        record["error"] = compact_error(chubby_ingest.redact_text(process.stdout, secrets),
+                                         chubby_ingest.redact_text(process.stderr, secrets))
 
-    return record
+    return finish_record(record, secrets)
 
 
 def escape_cell(value):
@@ -520,7 +698,10 @@ def write_report(config, records, title):
                     escape_cell(record.get("skill")),
                     escape_cell(record.get("source")),
                     escape_cell(record.get("output_path")),
-                    escape_cell(record.get("error")),
+                    escape_cell(record.get("error") or (
+                        "索引同步失败: " + record.get("index_error", "")
+                        if record.get("index_status") == "failed" else ""
+                    )),
                 ]
             )
             + " |"
@@ -549,6 +730,14 @@ def print_run_summary(records, report_path):
     for record in records:
         if record.get("status") == "failed":
             print(f"❌ {record.get('source')}: {record.get('error')}")
+        elif record.get("reused_from"):
+            print(f"♻️  复用：{record.get('output_path')}")
+        if record.get("index_status") == "failed":
+            print(f"❌ 采集已成功，索引同步失败：{record.get('index_error')}")
+
+
+def record_failed(record):
+    return record.get("status") == "failed" or record.get("index_status") == "failed"
 
 
 def command_ingest(args, config):
@@ -559,7 +748,7 @@ def command_ingest(args, config):
     print_run_summary([record], report_path)
     if record.get("output_path"):
         print(record["output_path"])
-    return 1 if record["status"] == "failed" else 0
+    return 1 if record_failed(record) else 0
 
 
 def command_run(args, config):
@@ -577,13 +766,22 @@ def command_run(args, config):
 
     batch_id = make_run_id()
     records = []
+    seen = {}
     for source in sources:
-        record = run_ingest_source(source, args, config, batch_id=batch_id)
+        identity = source_hash(source)
+        run_args = copy.copy(args)
+        if identity in seen:
+            run_args.refresh = False
+        if identity in seen and seen[identity].get("status") == "failed":
+            record = dict(seen[identity], run_id=make_run_id(), duplicate_of=seen[identity]["run_id"])
+        else:
+            record = run_ingest_source(source, run_args, config, batch_id=batch_id)
         append_record(config, record)
         records.append(record)
+        seen[identity] = record
     report_path = write_report(config, records, "queue run")
     print_run_summary(records, report_path)
-    return 1 if any(record["status"] == "failed" for record in records) else 0
+    return 1 if any(record_failed(record) for record in records) else 0
 
 
 def latest_records(records):
@@ -599,7 +797,7 @@ def command_status(args, config):
     if args.latest:
         records = latest_records(records)
     if args.failed:
-        records = [record for record in records if record.get("status") == "failed"]
+        records = [record for record in records if record_failed(record)]
     records = records[-args.limit :]
     if not records:
         print("暂无运行记录。")
@@ -608,7 +806,7 @@ def command_status(args, config):
     print("| status | skill | run_id | source | output/error |")
     print("|---|---|---|---|---|")
     for record in records:
-        tail = record.get("error") or record.get("output_path")
+        tail = record.get("error") or record.get("index_error") or record.get("output_path")
         print(
             "| "
             + " | ".join(
@@ -628,10 +826,66 @@ def command_status(args, config):
 def failed_retry_targets(records, all_failed=False, run_id=None):
     if run_id:
         return [record for record in records if record.get("run_id") == run_id]
-    failed = [record for record in latest_records(records) if record.get("status") == "failed"]
+    failed = [record for record in latest_records(records) if record_failed(record)]
     if all_failed:
         return failed
     return failed[-1:] if failed else []
+
+
+def extra_groups(values):
+    groups = []
+    index = 0
+    while index < len(values):
+        item = str(values[index])
+        group = [item]
+        key = item.split("=", 1)[0] if item.startswith("-") else f"positional:{index}"
+        if item.startswith("-") and "=" not in item and index + 1 < len(values) and not str(values[index + 1]).startswith("-"):
+            index += 1
+            group.append(str(values[index]))
+        groups.append((key, group))
+        index += 1
+    return groups
+
+
+def merge_extra_options(original, overrides):
+    replacement = {key for key, _ in extra_groups(overrides)}
+    return [item for key, group in extra_groups(original) if key not in replacement for item in group] + list(overrides)
+
+
+def retry_arguments(target, args, config):
+    inherited = dict(target.get("execution") or {})
+    legacy_requires = []
+    if not inherited and target.get("command"):
+        # v0.11 records stored the complete wrapper command instead of a
+        # structured execution context. Recover only its adapter options.
+        core_options = {"--output", "-o", "--vault", "--skill", "--enrich", "--dry-run"}
+        old_extra = [item for key, group in extra_groups(target["command"][3:])
+                     if key not in core_options for item in group]
+        safe_extra, legacy_requires, _ = chubby_ingest.redact_arguments(old_extra)
+        inherited["extra"] = safe_extra
+        _, source_secrets = chubby_ingest.redact_url(target.get("source", ""))
+        if source_secrets:
+            legacy_requires.append("--source")
+    retry_args = copy.copy(args)
+    for argument, key in (("output", "output_dir"), ("vault", "vault_dir"), ("enrich", "enrich"), ("skill", "skill")):
+        if getattr(args, argument, None) is None:
+            setattr(retry_args, argument, inherited.get(key, target.get(key)))
+    if getattr(args, "timeout", None) is None:
+        retry_args.timeout = inherited.get("timeout_seconds", parse_int(config.get("timeout_seconds"), 1800))
+    original_extra = inherited.get("extra", [])
+    retry_args.extra = merge_extra_options(original_extra, getattr(args, "extra", []))
+    required = set(target.get("retry_requires", [])) | set(legacy_requires)
+    supplied = {key for key, _ in extra_groups(getattr(args, "extra", []))}
+    if getattr(args, "source", None):
+        supplied.add("--source")
+    missing = required - supplied
+    if missing:
+        raise ValueError("凭据未保存在运行记录中，请重新提供：" + ", ".join(sorted(missing)))
+    retry_config = dict(config)
+    for key in ("vault_root", "index_db"):
+        if key in inherited:
+            retry_config[key] = inherited[key]
+    return retry_args, retry_config
 
 
 def command_retry(args, config):
@@ -643,26 +897,89 @@ def command_retry(args, config):
 
     batch_id = make_run_id()
     retry_records = []
+    blocked = False
     for target in targets:
-        skill = args.skill or target.get("skill") or None
-        record = run_ingest_source(target["source"], args, config, batch_id=batch_id, skill=skill)
+        try:
+            retry_args, retry_config = retry_arguments(target, args, config)
+        except ValueError as exc:
+            print(f"❌ 无法重试 {target.get('run_id')}: {exc}")
+            blocked = True
+            continue
+        source = getattr(args, "source", None) or target["source"]
+        record = run_ingest_source(source, retry_args, retry_config, batch_id=batch_id, skill=retry_args.skill)
         record["retry_of"] = target.get("run_id")
         append_record(config, record)
         retry_records.append(record)
     report_path = write_report(config, retry_records, "retry")
     print_run_summary(retry_records, report_path)
-    return 1 if any(record["status"] == "failed" for record in retry_records) else 0
+    return 1 if blocked or any(record_failed(record) for record in retry_records) else 0
 
 
 def command_doctor(args, config):
     print(f"配置文件：{config['_config_path']} ({'存在' if config['_config_exists'] else '未创建'})")
-    for key in ("output_dir", "state_file", "report_dir", "queue_file", "vault_dir", "enrich", "timeout_seconds"):
+    for key in ("output_dir", "state_file", "report_dir", "queue_file", "vault_dir", "vault_root", "index_db", "enrich", "timeout_seconds"):
         print(f"  {key}: {config.get(key, '')}")
     if not config["_config_exists"]:
         print("\n提示：运行 python3 tools/chubby.py init 可生成 chubby.yaml。")
     print("")
-    result = subprocess.run([sys.executable, str(TOOLS_DIR / "check_env.py")], cwd=ROOT)
+    command = [sys.executable, str(TOOLS_DIR / "check_env.py")]
+    if getattr(args, "platform", None):
+        command.extend(["--platform", args.platform])
+    result = subprocess.run(command, cwd=ROOT)
     return result.returncode
+
+
+def query_context(args, config):
+    configured = config.get("vault_root") or config.get("vault_dir") or os.environ.get("VAULT_DIR")
+    value = getattr(args, "vault", None) or configured
+    if not value:
+        raise ValueError("请先运行 init --vault <知识库根目录>，或提供 --vault")
+    vault = resolve_path(value).resolve()
+    database = getattr(args, "db", None)
+    if not database and config.get("index_db") and configured and vault == resolve_path(configured).resolve():
+        database = config["index_db"]
+    return vault, vault_index.resolve_db_path(vault, db_path=resolve_path(database) if database else None)
+
+
+def command_search(args, config):
+    try:
+        vault, database = query_context(args, config)
+        vault_index.sync_vault(vault, db_path=database)
+        options = dict(db_path=database, query=args.query, limit=args.limit,
+                       platform=args.platform, tag=args.tag)
+        rows = (vault_index.semantic_search(**options, provider="lite") if args.mode == "lite"
+                else vault_index.search(**options))
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+        else:
+            for row in rows:
+                print(f"{row['title']}\n  {row['path']}\n  {row.get('snippet', '')}\n")
+            if not rows:
+                print("没有找到匹配素材。")
+        return 0
+    except Exception as exc:
+        print(f"❌ 搜索失败：{exc}", file=sys.stderr)
+        return 1
+
+
+def command_brief(args, config):
+    try:
+        try:
+            from tools import evidence_brief
+        except ModuleNotFoundError:
+            import evidence_brief
+        vault, database = query_context(args, config)
+        bundle = evidence_brief.build_brief(vault, args.topic, db_path=database,
+                                            limit=args.limit, platform=args.platform)
+        if args.output:
+            outputs = evidence_brief.write_brief(bundle, resolve_path(args.output), overwrite=args.force)
+            print(json.dumps(outputs, ensure_ascii=False, indent=2))
+        else:
+            print(evidence_brief.render_markdown(bundle))
+        return 0
+    except Exception as exc:
+        print(f"❌ 资料包生成失败：{exc}", file=sys.stderr)
+        return 1
 
 
 def prepare_runtime_files(config):
@@ -945,6 +1262,8 @@ def add_ingest_options(parser):
     parser.add_argument("--enrich", dest="enrich", action="store_true", help="Run content-enrich")
     parser.add_argument("--no-enrich", dest="enrich", action="store_false", help="Disable configured enrich")
     parser.add_argument("--dry-run", action="store_true", help="Print matching skill commands only")
+    parser.add_argument("--refresh", action="store_true", help="Capture again, preserving previous artifacts")
+    parser.add_argument("--timeout", type=int, help="Ingest timeout in seconds; 0 disables the limit")
 
 
 def build_parser():
@@ -955,9 +1274,11 @@ def build_parser():
 
     init = sub.add_parser("init", help="Create chubby.yaml and runtime directories")
     init.add_argument("--force", action="store_true", help="Overwrite existing config")
+    init.add_argument("--vault", help="Vault root; captures go to its 00_Inbox directory")
 
     doctor = sub.add_parser("doctor", help="Show config and dependency health")
     doctor.set_defaults(handler=command_doctor)
+    doctor.add_argument("--platform", choices=sorted(chubby_ingest.SKILL_COMMANDS))
 
     quickstart = sub.add_parser("quickstart", help="Run the first-use offline acceptance flow")
     quickstart.add_argument("--force-init", action="store_true", help="Overwrite chubby.yaml before checks")
@@ -983,7 +1304,24 @@ def build_parser():
     retry = sub.add_parser("retry", help="Retry failed runs")
     retry.add_argument("--run-id", help="Retry a specific run_id")
     retry.add_argument("--all-failed", action="store_true", help="Retry all latest failed sources")
+    retry.add_argument("--source", help="Resupply a source URL whose credentials were redacted")
     add_ingest_options(retry)
+
+    search = sub.add_parser("search", help="Sync the vault index and search collected notes")
+    search.add_argument("query")
+    search.add_argument("--mode", choices=["keyword", "lite"], default="keyword")
+    search.add_argument("--tag")
+    search.add_argument("--json", action="store_true")
+
+    brief = sub.add_parser("brief", help="Build a local source-backed evidence brief")
+    brief.add_argument("--topic", required=True)
+    brief.add_argument("--output")
+    brief.add_argument("--force", action="store_true", help="Explicitly replace existing brief outputs")
+    for command in (search, brief):
+        command.add_argument("--vault", help="Vault root directory")
+        command.add_argument("--db", help="Override SQLite index path")
+        command.add_argument("--platform")
+        command.add_argument("--limit", type=int, default=5 if command is brief else 10)
 
     return parser
 
@@ -1038,6 +1376,10 @@ def main(argv=None):
         return command_status(args, config)
     if args.command == "retry":
         return command_retry(args, config)
+    if args.command == "search":
+        return command_search(args, config)
+    if args.command == "brief":
+        return command_brief(args, config)
     parser.error("unknown command")
     return 2
 

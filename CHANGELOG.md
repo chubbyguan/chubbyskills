@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 - 2026-09-17
+
+- Added incremental vault synchronization with vault identity checks, transactional updates and deletion handling. Unchanged embedding inputs retain their vectors; only missing vectors are generated. MCP refreshes the same index before queries.
+- Added source-aware capture reuse and `--refresh`, isolated working directories, collision-safe Markdown/assets publication and preservation of previous captures.
+- Retry inherits the original effective capture configuration, with explicit overrides; credential values are redacted and must be supplied again when necessary.
+- Added `init --vault`, automatic indexing after capture/reuse, unified `search` and platform-specific dependency checks with meaningful failure exits.
+- Added `brief --topic` to export local source excerpts, exact line ranges, source links and SHA-256 as Markdown and JSON. Generated briefs are excluded from their own candidate set; original notes cannot be overwritten by brief export.
+- Bundled the brief helper in portable knowledge-base skills. Added CLI integration, migration, refresh, collision, retry and citation regression coverage.
+
+
 ## 0.11.1 - 2026-09-16
 
 - Added a portable skill installer that bundles local dependencies, refuses to overwrite existing skills, and supports all 14 skills. Runtime setup now accepts every full skill directory name.
