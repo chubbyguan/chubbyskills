@@ -69,6 +69,24 @@ class PipelineReuseTest(unittest.TestCase):
         self.assertNotEqual(first["output_path"], second["output_path"])
         self.assertTrue(Path(first["output_path"]).exists())
 
+    def test_failed_refresh_blocks_older_successful_cache_on_retry_and_rerun(self):
+        first = self.run_capture()
+        self.args.extra = ["--resubmit"]
+        with patch.object(chubby.subprocess, "run", return_value=types.SimpleNamespace(
+                returncode=1, stdout="", stderr="new task pending; polling timed out")):
+            failed = chubby.run_ingest_source(self.source, self.args, self.config)
+        chubby.append_record(self.config, failed)
+        self.assertEqual(first["execution_hash"], failed["execution_hash"])
+        retry_args, retry_config = chubby.retry_arguments(failed, self.args, self.config)
+        retry_args.extra = []
+        with patch.object(chubby.subprocess, "run", side_effect=self.adapter):
+            retried = chubby.run_ingest_source(self.source, retry_args, retry_config)
+        self.assertFalse(retried["reused"])
+        self.args.extra = []
+        rerun = self.run_capture()
+        self.assertFalse(rerun["reused"])
+        self.assertEqual(self.calls, 3)
+
     def test_missing_or_invalid_output_does_not_reuse(self):
         first = self.run_capture()
         Path(first["output_path"]).unlink()

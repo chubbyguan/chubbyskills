@@ -1,6 +1,6 @@
 # Release Checklist
 
-Current version: `0.12.0`. Release notes: [0.12.0](release-0.12.0.md).
+Current version: `0.13.0`. Release notes: [0.13.0](release-0.13.0.md).
 
 ## Install Verification
 
@@ -40,7 +40,7 @@ The manual GitHub workflow installs only text/subtitle dependencies, without ASR
 ## Portable skill asset and publication
 
 1. Generate all 14 skill outputs in a fresh temporary directory using `python3 tools/install_skill.py --all --dest <temporary-directory>`.
-2. Archive the directories as `chubbyskills-0.12.0-skills.tar.gz`, calculate SHA-256, then extract into a fresh directory and verify imports, installed knowledge-base MCP and `tools/evidence_brief.py --output` with Python isolated mode (`-I`).
+2. Archive the directories as `chubbyskills-0.13.0-skills.tar.gz`, calculate SHA-256, then extract into a fresh directory and verify imports, installed knowledge-base MCP and `tools/evidence_brief.py --output` with Python isolated mode (`-I`).
 3. Require the local gates and both GitHub CI matrix jobs to pass on the exact candidate commit before tagging it.
 4. Publish release notes and verified assets, then confirm the remote commit/tag and asset checksum.
 

@@ -9,7 +9,7 @@
 Save the original text and sources from videos, articles, and image posts. Let your agent find evidence in your own library and prepare content ideas with references.
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.12.0-10B981?style=for-the-badge)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.13.0-10B981?style=for-the-badge)](./CHANGELOG.md)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skills)
 
 </div>
@@ -43,6 +43,17 @@ python3 tools/chubby.py status --latest
 python3 tools/chubby.py search "a phrase from the original"
 python3 tools/chubby.py brief --topic "my writing question" --output research/brief.md
 ```
+
+Import existing Markdown, text, or text-based PDF into the same workflow:
+
+```bash
+python3 tools/chubby.py import "/path/to/source.md"
+python3 tools/chubby.py import "/path/to/source.pdf" --source-url "https://example.com/original"
+```
+
+Markdown/text imports use the standard library; PDF needs optional `pymupdf`. Sources and referenced local assets are preserved. See [document import](./docs/document-import.md) and [optional integrations](./docs/integrations.md).
+
+Podcast transcription stays local by default. Atlas and MuAPI are experimental, opt-in cloud providers with persistent task recovery; see [cloud transcription](./docs/cloud-transcription.md).
 
 Captures go into `creator-vault/00_Inbox` and synchronize the index automatically. Valid artifacts are reused for the same source, processing settings and destination; `--refresh` captures again and preserves previous versions. Brief exports contain exact source lines, links and file hashes in Markdown and JSON. They do not call a cloud model or verify whether a claim is true.
 

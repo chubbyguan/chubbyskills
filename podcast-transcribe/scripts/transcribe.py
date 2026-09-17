@@ -13,7 +13,6 @@ import os
 import time
 import subprocess
 import tempfile
-import shutil
 import re
 from datetime import datetime
 
@@ -26,31 +25,11 @@ def download_audio(url: str, output_dir: str) -> tuple:
     title = "Podcast Episode"
     audio_url = url
 
-    # If it's already a direct audio link, skip page parsing
-    if re.search(r'\.(mp3|m4a|wav|ogg|aac)(\?|$)', url, re.IGNORECASE):
-        try:
-            head = subprocess.run(
-                ["curl", "-sI", "-L", "--max-time", "15", url],
-                capture_output=True, text=True, timeout=20
-            )
-            for line in head.stdout.split('\n'):
-                if line.lower().startswith('content-disposition'):
-                    m = re.search(r'filename[*]?=["\']?([^"\';\r\n]+)', line)
-                    if m:
-                        title = m.group(1).strip()
-        except Exception:
-            pass
-    else:
-        # Fetch page HTML to extract audio URL and title
+    downloader = _sibling("safe_download")
+    # Every media URL is independently validated, including extracted page metadata.
+    if not re.search(r'\.(mp3|m4a|wav|ogg|aac)(\?|$)', url, re.IGNORECASE):
         print("  Fetching page...", file=sys.stderr)
-        try:
-            result = subprocess.run(
-                ["curl", "-s", "-L", "--max-time", "30", url],
-                capture_output=True, text=True, timeout=35
-            )
-            html = result.stdout
-        except Exception as e:
-            raise RuntimeError(f"Failed to fetch page: {e}")
+        html = downloader.fetch_text(url)
 
         # Extract title
         title_match = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
@@ -93,7 +72,7 @@ def download_audio(url: str, output_dir: str) -> tuple:
                             "Try passing the direct audio link instead."
                         )
 
-        print(f"  Audio URL: {audio_url[:80]}...", file=sys.stderr)
+        print("  Audio link resolved.", file=sys.stderr)
 
     # Generate filename
     safe_title = "".join(c for c in title if c.isalnum() or c in "-_ ").strip()
@@ -113,12 +92,7 @@ def download_audio(url: str, output_dir: str) -> tuple:
 
     # Download
     print(f"  Downloading: {title[:60]}...", file=sys.stderr)
-    subprocess.run(
-        ["curl", "-L", "-o", audio_path, "--max-time", "1800", "-s",
-         "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-         audio_url],
-        timeout=1900, check=True
-    )
+    downloader.download(audio_url, audio_path)
 
     size_mb = os.path.getsize(audio_path) / (1024 * 1024)
     if size_mb < 0.01:
@@ -132,114 +106,155 @@ def download_audio(url: str, output_dir: str) -> tuple:
     return audio_path, title
 
 
-def transcribe_audio(audio_path: str, output_path: str, title: str, source: str = ""):
-    """Transcribe audio using faster-whisper and save as Markdown."""
-    from faster_whisper import WhisperModel
+def _sibling(name):
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("podcast_" + name, Path(__file__).with_name(name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    print("Loading faster-whisper model...", file=sys.stderr)
-    model = WhisperModel('small', device='cpu', compute_type='int8')
-    print("Model loaded. Transcribing...", file=sys.stderr)
 
-    start = time.time()
-    segments, info = model.transcribe(
-        audio_path,
-        language='zh',
-        beam_size=5,
-        vad_filter=True,
-    )
+def transcribe_audio(audio_path: str, output_path: str, title: str, source: str = "",
+                     provider: str = "local", language: str = "zh", model_name=None,
+                     base_url=None, state_dir=None, cloud_timeout=1800,
+                     poll_interval=3, resubmit=False):
+    """Transcribe through one provider and create a new Markdown file exclusively.
 
-    # Collect segments
-    text_segments = []
-    for segment in segments:
-        ts = "[{:6.1f}s -> {:6.1f}s] ".format(segment.start, segment.end)
-        text_segments.append(ts + segment.text.strip())
-
-    elapsed = time.time() - start
-
-    # Generate Markdown
+    Cloud result caching precedes export, so a failed write can be retried without
+    submitting another paid task. Existing output files are never overwritten.
+    """
+    import json
+    settings = _sibling("provider_config")
+    config = settings.resolve_provider_config(provider, model_name, language, base_url, state_dir)
+    settings.positive_seconds(cloud_timeout, "cloud-timeout")
+    settings.positive_seconds(poll_interval, "poll-interval", maximum=60)
+    if os.path.lexists(output_path):
+        raise FileExistsError("Output already exists; choose a new path")
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    start = time.monotonic()
+    if config["provider"] == "local":
+        from faster_whisper import WhisperModel
+        print("Loading local faster-whisper model...", file=sys.stderr)
+        model = WhisperModel(config["model"], device="cpu", compute_type="int8")
+        segments, _info = model.transcribe(audio_path, language=config["language"] or None, beam_size=5, vad_filter=True)
+        text_segments = [f"[{segment.start:6.1f}s -> {segment.end:6.1f}s] {segment.text.strip()}" for segment in segments]
+        text = "\n".join(text_segments)
+        segment_count = len(text_segments)
+        transcriber = f"faster-whisper-{config['model']}"
+    else:
+        result = _sibling("cloud_transcribe").transcribe_cloud(
+            audio_path, provider=config["provider"], model=config["model"],
+            language=config["language"], base_url=config["base_url"],
+            state_dir=config["state_dir"], cloud_timeout=cloud_timeout,
+            poll_interval=poll_interval, resubmit=resubmit,
+        )
+        text_segments = [f"[{segment['start']:6.1f}s -> {segment['end']:6.1f}s] {segment['text']}" for segment in result.get("segments", [])]
+        # Full provider text is authoritative; validated timestamps may be incomplete.
+        text = result["text"]
+        if text_segments:
+            text += "\n\n## 时间戳参考（可能不完整）\n\n" + "\n".join(text_segments)
+        segment_count = len(text_segments) or 1
+        transcriber = f"{config['provider']}-{config['model']}"
+    if not text.strip():
+        raise RuntimeError("Transcription returned no speech text")
+    elapsed = time.monotonic() - start
     now = datetime.now().strftime("%Y-%m-%d")
-    text = "\n".join(text_segments)
-
+    def scalar(value):
+        return json.dumps(value, ensure_ascii=False)
     markdown = f"""---
-title: {title}
+title: {scalar(title)}
 type: note
 platform: podcast
 tags: [播客]
 created: {now}
-source: {source}
+source: {scalar(source)}
 author:
-transcriber: faster-whisper-small
+transcriber: {scalar(transcriber)}
+transcription_provider: {config['provider']}
+transcription_model: {scalar(config['model'])}
 ---
 
-# {title}
+# {title.replace(chr(10), ' ').replace(chr(13), ' ')}
 
-> 转录引擎：faster-whisper small | 耗时：{elapsed:.0f}秒 | 段数：{len(text_segments)}
+> 转录引擎：{transcriber} | 耗时：{elapsed:.0f}秒 | 段数：{segment_count}
 
-{text}"""
+{text}
+"""
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    # Exclusive create makes concurrent exports safe and preserves user edits.
+    with open(output_path, "x", encoding="utf-8") as stream:
+        try:
+            stream.write(markdown)
+        except BaseException:
+            stream.close()
+            os.unlink(output_path)
+            raise
+    return elapsed, segment_count
 
-    # Save to file
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(markdown)
 
-    return elapsed, len(text_segments)
+def _output_path(output_dir, title, audio_path, config):
+    import hashlib
+    import json
+    from pathlib import Path
+    digest = hashlib.sha256()
+    with open(audio_path, "rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    digest.update(json.dumps({key: config[key] for key in ("provider", "model", "language", "base_url")}, sort_keys=True).encode())
+    safe_title = "".join(char for char in title if char.isalnum() or char in "-_ ").strip()[:50] or "episode"
+    base = Path(output_dir).expanduser().resolve() / f"{safe_title}-{digest.hexdigest()[:12]}"
+    candidate = base.with_suffix(".md")
+    number = 2
+    while candidate.exists() or candidate.is_symlink():
+        candidate = base.with_name(f"{base.name}-{number}").with_suffix(".md")
+        number += 1
+    return str(candidate)
 
 
-def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <audio_url_or_path> [output_dir]")
-        print("\nExample:")
-        print(f'  {sys.argv[0]} "https://www.xiaoyuzhoufm.com/episode/xxxxx"')
-        print(f'  {sys.argv[0]} "path/to/audio.m4a" ./output')
-        sys.exit(1)
-
-    source = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "."
-
-    # Step 1: Get audio
-    print("=" * 50, file=sys.stderr)
-    print("Step 1: Getting audio...", file=sys.stderr)
-    print("=" * 50, file=sys.stderr)
-
-    tmpdir = tempfile.mkdtemp(prefix="podcast-")
-
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(description="播客一键转录工具；local 默认，云转录为可选实验功能", allow_abbrev=False)
+    parser.add_argument("source", help="音频 URL 或本地文件")
+    parser.add_argument("output_dir", nargs="?", default=".", help="Markdown 输出目录")
+    parser.add_argument("--source-url", help="批量模式保留原始音频来源")
+    settings = _sibling("provider_config")
+    settings.add_provider_arguments(parser)
+    args = parser.parse_args(argv)
     try:
-        if os.path.exists(source):
-            # Local file
-            audio_path = source
-            title = os.path.splitext(os.path.basename(source))[0]
-        else:
-            # URL
-            audio_path, title = download_audio(source, tmpdir)
-
-        # Step 2: Transcribe
-        print("\n" + "=" * 50, file=sys.stderr)
-        print("Step 2: Transcribing...", file=sys.stderr)
-        print("=" * 50, file=sys.stderr)
-
-        # Generate output filename
-        safe_title = "".join(c for c in title if c.isalnum() or c in "-_ ").strip()
-        safe_title = safe_title[:50]
-        output_filename = f"{safe_title}.md"
-        output_path = os.path.join(output_dir, output_filename)
-
-        elapsed, seg_count = transcribe_audio(audio_path, output_path, title, source)
-
-        print("\n" + "=" * 50, file=sys.stderr)
-        print("✅ Done!", file=sys.stderr)
-        print("=" * 50, file=sys.stderr)
-        print(f"  Title: {title}", file=sys.stderr)
-        print(f"  Time: {elapsed:.0f}s", file=sys.stderr)
-        print(f"  Segments: {seg_count}", file=sys.stderr)
-        print(f"  Output: {output_path}", file=sys.stderr)
-
-        # Print output path to stdout for scripting
-        print(output_path)
-
-    finally:
-        # Cleanup
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        config = settings.resolve_provider_config(args.provider, args.model, args.language, args.base_url, args.state_dir)
+        settings.positive_seconds(args.cloud_timeout, "cloud-timeout")
+        settings.positive_seconds(args.poll_interval, "poll-interval", maximum=60)
+    except ValueError as exc:
+        parser.error(str(exc))
+    with tempfile.TemporaryDirectory(prefix="podcast-") as temporary:
+        try:
+            if os.path.isfile(args.source):
+                audio_path = os.path.abspath(args.source)
+                title = os.path.splitext(os.path.basename(args.source))[0]
+            else:
+                from urllib.parse import urlsplit
+                if urlsplit(args.source).scheme not in ("http", "https"):
+                    raise ValueError("Source must be an existing audio file or HTTP(S) URL")
+                audio_path, title = download_audio(args.source, temporary)
+            output_path = _output_path(args.output_dir, title, audio_path, config)
+            elapsed, count = transcribe_audio(
+                audio_path, output_path, title, args.source_url or args.source,
+                provider=config["provider"], model_name=config["model"], language=config["language"],
+                base_url=config["base_url"], state_dir=config["state_dir"],
+                cloud_timeout=args.cloud_timeout, poll_interval=args.poll_interval, resubmit=args.resubmit,
+            )
+        except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+            if isinstance(exc, (RuntimeError, ValueError)):
+                print(f"Transcription failed: {exc}", file=sys.stderr)
+            else:
+                # Raw process/OS errors can contain a signed URL or private source path.
+                print("Transcription failed while reading, downloading or exporting; cloud job state is retained for retry", file=sys.stderr)
+            return 1
+    print(f"Done: provider={config['provider']}, {count} segments, {elapsed:.0f}s", file=sys.stderr)
+    print(output_path)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

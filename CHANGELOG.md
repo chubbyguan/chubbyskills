@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 - 2026-09-17
+
+- Added local Markdown/text/PDF import with source provenance, referenced-asset handling, safe publication, attachment-aware reuse and automatic indexing.
+- Added shared podcast provider configuration and optional experimental Atlas/MuAPI adapters while retaining the local default. Persisted jobs resume polling or reuse completed results; ambiguous submissions require explicit resubmission.
+- Restricted authenticated HTTP redirects and endpoint validation; froze provider/model/endpoint/language in capture and retry context, and made resubmission a one-shot action.
+- Made podcast dependency checks provider-aware and documented cloud processing boundaries.
+- Closed the superseded installation PR #1 with implementation evidence and credit. Adapted the ideas/code from #3/#5 and documented #6 as an optional external integration with a local Markdown handoff.
+
 ## 0.12.0 - 2026-09-17
 
 - Added incremental vault synchronization with vault identity checks, transactional updates and deletion handling. Unchanged embedding inputs retain their vectors; only missing vectors are generated. MCP refreshes the same index before queries.

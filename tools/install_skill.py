@@ -63,10 +63,10 @@ def skill_payload(name, repo_root):
     if not (skill / "SKILL.md").is_file():
         raise ValueError(f"Missing SKILL.md: {skill}")
     files = payload_files(skill)
-    if name in COMMON_SKILLS:
+    if name in COMMON_SKILLS or name == "knowledge-base-management":
         files.extend((path, Path("chubby_common") / rel) for path, rel in payload_files(repo_root / "chubby_common"))
     if name == "knowledge-base-management":
-        for module in ("vault_index.py", "vault_curator.py", "evidence_brief.py"):
+        for module in ("vault_index.py", "vault_curator.py", "evidence_brief.py", "import_document.py"):
             files.extend((path, Path("tools") / rel) for path, rel in payload_files(repo_root / "tools" / module))
     if not (skill / "LICENSE").exists():
         files.extend(payload_files(repo_root / "LICENSE"))

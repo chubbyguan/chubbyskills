@@ -16,8 +16,10 @@ import importlib.util
 
 try:
     from tools import platform_health
+    from tools import podcast_options
 except ModuleNotFoundError:
     import platform_health
+    import podcast_options
 
 
 def has_cmd(c):
@@ -84,18 +86,25 @@ def report_all():
 
     print("\n💡 小红书·X 图文、情报雷达和知识库管理可以只用标准库；公众号 HTML 需要 beautifulsoup4。")
     print("   YouTube/B站优先抓字幕，命中时也无需 funasr。只有「视频/播客转录」才需要 funasr / whisper。")
-    print("\n   一键安装依赖：bash setup.sh [skill-name ...]")
+    print("\n   安装运行依赖：bash setup.sh [skill-name ...]")
     print("   只验所需路径：python3 tools/check_env.py --platform <platform-id>")
     return 0
 
 
-def platform_report(selected):
+def platform_report(selected, provider=None):
     definitions = {item["id"]: item for item in platform_health.load_records(platform_health.DEFAULT_PLATFORM_DIR)}
+    definitions["document"] = {"skill": "document", "required_deps": [], "optional_deps": ["python:pymupdf"],
+                               "notes": "Markdown/text need only Python; text-based PDF also requires pymupdf."}
     results = []
     for name in selected:
         if name not in definitions:
             raise ValueError(f"Unknown platform: {name}")
-        definition = definitions[name]
+        definition = dict(definitions[name])
+        settings = podcast_options.resolve_config(provider=provider) if name == "podcast" else None
+        cloud = settings is not None and settings["provider"] != "local"
+        if cloud:
+            definition.update(required_deps=[], optional_deps=["cmd:curl", "cmd:ffmpeg"],
+                              notes="Experimental cloud local-audio path; URL downloads need curl, Atlas format conversion may need ffmpeg. Key presence only, no remote requests.")
         missing = {}
         for group in ("required", "optional"):
             missing[group] = []
@@ -103,13 +112,20 @@ def platform_report(selected):
                 present, label = platform_health.check_dependency(dependency)
                 if not present:
                     missing[group].append(label)
+        if cloud:
+            keys = ("ATLAS_API_KEY", "ATLAS_CLOUD_API_KEY") if settings["provider"] == "atlas" else ("MUAPI_API_KEY", "MU_API_KEY")
+            if not any(os.environ.get(key) for key in keys):
+                missing["required"].append("environment:" + " or ".join(keys))
         results.append({
             "platform": name,
             "ready": not missing["required"],
             "missing_required": missing["required"],
             "missing_optional": missing["optional"],
-            "install_hint": f"bash setup.sh {definition['skill']}",
+            "install_hint": ("Configure the selected provider API key in your local environment" if cloud else
+                             "python3 -m pip install pymupdf (PDF only)" if name == "document" else
+                             f"bash setup.sh {definition['skill']}"),
             "scope": definition.get("notes", "Default capture path only"),
+            **({"provider": settings["provider"]} if settings else {}),
         })
     return {"platforms": results, "checks_live_access": False}
 
@@ -117,13 +133,16 @@ def platform_report(selected):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Check capture dependencies; explicit platform checks fail when required dependencies are missing")
     parser.add_argument("--platform", action="append", help="Platform ID; repeat to check more than one")
+    parser.add_argument("--provider", choices=["local", "atlas", "muapi"], help="Provider for --platform podcast")
     parser.add_argument("--json", action="store_true", help="Return the platform dependency report as JSON")
     args = parser.parse_args(argv)
+    if args.provider and (not args.platform or "podcast" not in args.platform):
+        parser.error("--provider requires --platform podcast")
     if not args.platform and not args.json:
         return report_all()
     selected = args.platform or [item["id"] for item in platform_health.load_records(platform_health.DEFAULT_PLATFORM_DIR)]
     try:
-        report = platform_report(list(dict.fromkeys(selected)))
+        report = platform_report(list(dict.fromkeys(selected)), provider=args.provider)
     except ValueError as exc:
         parser.error(str(exc))
     if args.json:
