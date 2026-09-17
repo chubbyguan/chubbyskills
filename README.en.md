@@ -9,7 +9,7 @@
 Save the original text and sources from videos, articles, and image posts. Let your agent find evidence in your own library and prepare content ideas with references.
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.11.1-10B981?style=for-the-badge)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.12.0-10B981?style=for-the-badge)](./CHANGELOG.md)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skills)
 
 </div>
@@ -18,7 +18,7 @@ Save the original text and sources from videos, articles, and image posts. Let y
 
 Chubby Skills is for content creators who already use an agent or a local Markdown vault and want to find the sources behind their saved material when writing. It combines platform ingestion, Markdown storage, local search, and an optional knowledge-base MCP server.
 
-Start with one of your own sources below. See the [creator workflow](./docs/creator-workflow.md) for a three-source research task, or inspect the [sample outputs](./examples/README.md) before installing. Detailed workflow documents are currently in Chinese.
+Start with one of your own sources below. See the [creator workflow](./docs/creator-workflow.md) for the complete capture-to-brief workflow, or inspect the [sample outputs](./examples/README.md) before installing. Detailed workflow documents are currently in Chinese.
 
 Storage is local by default. Fetching content still needs network access and may depend on captions, login state, or platform restrictions. Optional DeepSeek enrichment and OpenAI embeddings send content to the configured API and may incur charges. If you use a cloud agent, the material it reads enters that model's context. See [tool selection and data-processing boundaries](./docs/comparison.md).
 
@@ -32,20 +32,21 @@ cd chubbyskills
 python3 -m venv .venv
 source .venv/bin/activate
 bash setup.sh light
-python3 tools/chubby.py init
+python3 tools/chubby.py init --vault "$PWD/creator-vault"
 ```
 
 Choose a source you are allowed to read and save. Check its platform requirements below, replace the placeholders, then run:
 
 ```bash
-python3 tools/chubby.py ingest "REPLACE_WITH_YOUR_REAL_URL" \
-  --vault "$PWD/creator-vault/00_Inbox" --no-enrich
+python3 tools/chubby.py ingest "REPLACE_WITH_YOUR_REAL_URL" --no-enrich
 python3 tools/chubby.py status --latest
-python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" index "$PWD/creator-vault"
-python3 tools/vault_index.py --db "$PWD/creator-vault/index.sqlite" search "a phrase from the original"
+python3 tools/chubby.py search "a phrase from the original"
+python3 tools/chubby.py brief --topic "my writing question" --output research/brief.md
 ```
 
-Open the resulting Markdown and check its text, source, and required media. The first useful result is your own readable content with a source you can revisit. Record manual-text fallback separately from automatic fetch success. The [creator workflow](./docs/creator-workflow.md) continues from three saved sources to ideas with references.
+Captures go into `creator-vault/00_Inbox` and synchronize the index automatically. Valid artifacts are reused for the same source, processing settings and destination; `--refresh` captures again and preserves previous versions. Brief exports contain exact source lines, links and file hashes in Markdown and JSON. They do not call a cloud model or verify whether a claim is true.
+
+Open the resulting Markdown and check its text, source, and required media. The first useful result is your own readable content with a source you can revisit. Record manual-text fallback separately from automatic fetch success. See the [creator workflow](./docs/creator-workflow.md) and [0.12 migration notes](./docs/iteration-0.12.0.md).
 
 To check the environment and sample workflow first:
 

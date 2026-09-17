@@ -14,6 +14,7 @@ import os
 import re
 import sqlite3
 import sys
+import tempfile
 import urllib.request
 from collections import Counter
 from datetime import datetime
@@ -21,7 +22,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DB = ROOT / ".chubby" / "vault_index.sqlite"
+DEFAULT_DB = None  # Resolve to the selected vault, never a shared repository index.
 MAX_READ_CHARS = 12000
 SNIPPET_CTX = 80
 EMBEDDING_BATCH_SIZE = 32
@@ -84,15 +85,24 @@ def inline_list_items(value):
 
 def iter_markdown(vault):
     vault = Path(vault)
-    for root, dirs, files in os.walk(vault):
+
+    def fail_scan(error):
+        raise error
+
+    for root, dirs, files in os.walk(vault, onerror=fail_scan):
         dirs[:] = [
             d
             for d in dirs
             if not d.startswith(".") and d != "__pycache__" and not d.endswith(".assets")
         ]
+        for name in dirs:
+            safe_path(vault, str((Path(root) / name).relative_to(vault)))
+        dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
         for name in files:
             if name.endswith(".md"):
-                yield Path(root) / name
+                path = Path(root) / name
+                safe_path(vault, str(path.relative_to(vault)))
+                yield path
 
 
 def safe_path(vault, rel_path):
@@ -105,10 +115,14 @@ def safe_path(vault, rel_path):
 
 def note_record(vault, path):
     vault = Path(vault)
-    text = path.read_text(encoding="utf-8", errors="replace")
+    full = safe_path(vault, str(path.relative_to(vault)))
+    before = full.stat()
+    text = full.read_text(encoding="utf-8", errors="strict")
+    stat = full.stat()
+    if (before.st_mtime_ns, before.st_size, before.st_ino) != (stat.st_mtime_ns, stat.st_size, stat.st_ino):
+        raise OSError(f"note changed while reading: {path}")
     frontmatter, body = split_frontmatter(text)
     fields = parse_frontmatter(frontmatter)
-    stat = path.stat()
     rel = str(path.relative_to(vault))
     title = fields.get("title") or path.stem
     tags = inline_list_items(fields.get("tags", "")) + inline_list_items(fields.get("auto_tags", ""))
@@ -128,6 +142,25 @@ def note_record(vault, path):
     }
 
 
+def resolve_db_path(vault=None, db_path=None):
+    """Resolve one override/default without allowing a vault-local symlink escape."""
+    root = vault or os.environ.get("VAULT_DIR")
+    candidate = db_path if db_path is not None else os.environ.get("VAULT_INDEX_DB")
+    if not candidate:
+        if not root:
+            raise ValueError("Provide a vault path or set VAULT_DIR, or pass an explicit --db.")
+        candidate = Path(root).expanduser() / ".chubby" / "index.sqlite"
+    logical_db = Path(candidate).expanduser().absolute()
+    if root:
+        logical_vault = Path(root).expanduser().absolute()
+        # Account for aliases such as /var -> /private/var before comparing the
+        # logical location, then check descendants before resolving their links.
+        for boundary in (logical_vault, logical_vault.resolve()):
+            if boundary in logical_db.parents:
+                safe_path(logical_vault, str(logical_db.relative_to(boundary)))
+    return logical_db.resolve()
+
+
 def connect(db_path):
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -135,8 +168,10 @@ def connect(db_path):
 
 
 def require_db(db_path):
-    if not Path(db_path).exists():
+    db_path = resolve_db_path(db_path=db_path)
+    if not db_path.exists():
         raise FileNotFoundError(f"index not found: {db_path}. Run `python3 tools/vault_index.py index <vault>` first.")
+    return db_path
 
 
 def has_fts5(conn):
@@ -152,9 +187,18 @@ def reset_schema(conn):
     conn.execute("DROP TABLE IF EXISTS notes_fts")
     conn.execute("DROP TABLE IF EXISTS notes")
     conn.execute("DROP TABLE IF EXISTS embeddings")
+    ensure_notes_schema(conn)
+    ensure_embedding_schema(conn)
+    if has_fts5(conn):
+        conn.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, tags, body)")
+        return True
+    return False
+
+
+def ensure_notes_schema(conn):
     conn.execute(
         """
-        CREATE TABLE notes (
+        CREATE TABLE IF NOT EXISTS notes (
             path TEXT PRIMARY KEY,
             title TEXT,
             platform TEXT,
@@ -170,11 +214,6 @@ def reset_schema(conn):
         )
         """
     )
-    ensure_embedding_schema(conn)
-    if has_fts5(conn):
-        conn.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(path UNINDEXED, title, tags, body)")
-        return True
-    return False
 
 
 def ensure_embedding_schema(conn):
@@ -194,44 +233,119 @@ def ensure_embedding_schema(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model ON embeddings(provider, model)")
 
 
-def index_vault(vault, db_path=DEFAULT_DB):
+NOTE_COLUMNS = (
+    "path", "title", "platform", "source", "author", "created", "content_type",
+    "tags", "summary", "modified", "size", "body",
+)
+
+
+def migrate_default_db(vault, db_path):
+    """Copy the previous vault-local default; retain its original as a backup."""
+    legacy = vault / ".chubby" / "vault_index.sqlite"
+    if db_path.exists() or db_path != vault / ".chubby" / "index.sqlite" or not legacy.is_file():
+        return
+    # Validate the legacy path boundary before opening it, including symlinks.
+    safe_path(vault, str(legacy.relative_to(vault)))
+    source = sqlite3.connect(legacy.as_uri() + "?mode=ro", uri=True)
+    fd, temporary = tempfile.mkstemp(prefix=".index-migration-", dir=db_path.parent)
+    os.close(fd)
+    try:
+        target = connect(temporary)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+        try:
+            # A complete backup is published without replacing a DB created by
+            # another process while this migration was preparing its snapshot.
+            os.link(temporary, db_path)
+        except FileExistsError:
+            pass
+    finally:
+        source.close()
+        Path(temporary).unlink(missing_ok=True)
+
+
+def sync_vault(vault, db_path=DEFAULT_DB):
+    """Atomically synchronize notes and invalidate only changed embedding inputs."""
+    return index_vault(vault, db_path=db_path)
+
+
+def index_vault(vault, db_path=DEFAULT_DB, rebuild=False):
+    vault_input = vault
     vault = Path(vault).expanduser().resolve()
     if not vault.is_dir():
         raise FileNotFoundError(f"vault not found: {vault}")
+    db_path = resolve_db_path(vault_input, db_path)
+    migrate_default_db(vault, db_path)
     conn = connect(db_path)
+    conn.row_factory = sqlite3.Row
     try:
-        fts_enabled = reset_schema(conn)
-        records = [note_record(vault, path) for path in sorted(iter_markdown(vault))]
-        for record in records:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("CREATE TABLE IF NOT EXISTS index_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        binding = conn.execute("SELECT value FROM index_metadata WHERE key = 'vault'").fetchone()
+        if binding and binding[0] != str(vault) and not rebuild:
+            raise ValueError(f"index belongs to another vault: {binding[0]}; use index --rebuild explicitly to rebind")
+
+        # Collect a complete readable snapshot before deleting anything. os.walk
+        # errors, decoding failures and escaped symlinks all abort this transaction.
+        records = {record["path"]: record for record in (
+            note_record(vault, path) for path in sorted(iter_markdown(vault))
+        )}
+        ensure_notes_schema(conn)
+        old = {row["path"]: dict(row) for row in conn.execute("SELECT * FROM notes")}
+        if not binding and old and db_path.parent != vault / ".chubby" and not rebuild:
+            # Legacy indexes have no vault identifier. An external DB can only be
+            # adopted when every old record demonstrably belongs to this vault.
+            if any(path not in records or any(previous.get(key) != records[path].get(key)
+                   for key in ("title", "source", "body")) for path, previous in old.items()):
+                raise ValueError("unbound legacy index cannot be verified against this vault; use index --rebuild explicitly")
+        if rebuild:
+            fts_enabled = reset_schema(conn)
+            repair_fts = False
+            old = {}
+        else:
+            ensure_embedding_schema(conn)
+            fts_enabled = has_fts5(conn)
+            repair_fts = not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'notes_fts'").fetchone()
+            if fts_enabled:
+                conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(path UNINDEXED, title, tags, body)")
+
+        counts = {"added": 0, "updated": 0, "deleted": 0, "unchanged": 0}
+        removed = old.keys() - records.keys()
+        for path in removed:
+            conn.execute("DELETE FROM embeddings WHERE path = ?", (path,))
+            conn.execute("DELETE FROM notes WHERE path = ?", (path,))
+            if fts_enabled:
+                conn.execute("DELETE FROM notes_fts WHERE path = ?", (path,))
+        counts["deleted"] = len(removed)
+        for path, record in records.items():
+            previous = old.get(path)
+            if previous and all(previous.get(key) == record[key] for key in NOTE_COLUMNS):
+                counts["unchanged"] += 1
+                continue
+            counts["updated" if previous else "added"] += 1
+            if previous and embedding_text(previous) != embedding_text(record):
+                conn.execute("DELETE FROM embeddings WHERE path = ?", (path,))
             conn.execute(
-                """
-                INSERT INTO notes (
-                    path, title, platform, source, author, created, content_type,
-                    tags, summary, modified, size, body
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record["path"],
-                    record["title"],
-                    record["platform"],
-                    record["source"],
-                    record["author"],
-                    record["created"],
-                    record["content_type"],
-                    record["tags"],
-                    record["summary"],
-                    record["modified"],
-                    record["size"],
-                    record["body"],
-                ),
+                "INSERT OR REPLACE INTO notes (" + ",".join(NOTE_COLUMNS) + ") VALUES (" + ",".join("?" for _ in NOTE_COLUMNS) + ")",
+                tuple(record[key] for key in NOTE_COLUMNS),
             )
             if fts_enabled:
-                conn.execute(
-                    "INSERT INTO notes_fts(path, title, tags, body) VALUES (?, ?, ?, ?)",
-                    (record["path"], record["title"], record["tags"], record["body"]),
-                )
+                conn.execute("DELETE FROM notes_fts WHERE path = ?", (path,))
+                conn.execute("INSERT INTO notes_fts(path, title, tags, body) VALUES (?, ?, ?, ?)",
+                             (path, record["title"], record["tags"], record["body"]))
+        if fts_enabled and (not binding or repair_fts):
+            # Repair legacy FTS state while adopting the existing note/vector data.
+            conn.execute("DELETE FROM notes_fts")
+            conn.execute("INSERT INTO notes_fts(path, title, tags, body) SELECT path, title, tags, body FROM notes")
+        conn.execute("INSERT OR REPLACE INTO index_metadata(key, value) VALUES ('vault', ?)", (str(vault),))
+        conn.execute("INSERT OR REPLACE INTO index_metadata(key, value) VALUES ('schema_version', '2')")
         conn.commit()
-        return {"vault": str(vault), "db": str(Path(db_path)), "notes": len(records), "fts5": fts_enabled}
+        return {"vault": str(vault), "db": str(db_path), "notes": len(records), "fts5": fts_enabled, **counts}
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -385,23 +499,35 @@ def embed_vault(vault=None, db_path=DEFAULT_DB, provider="openai", model=None, l
     if provider == "lite":
         raise ValueError("lite provider does not persist embeddings; use semantic search directly")
     model = embedding_model(provider, model)
+    db_path = resolve_db_path(vault, db_path)
     if vault:
         index_vault(vault, db_path=db_path)
-    require_db(db_path)
+    db_path = require_db(db_path)
 
     conn = sqlite3.connect(str(db_path))
     try:
         ensure_embedding_schema(conn)
-        records = note_rows_for_embedding(conn)
+        existing = {row[0] for row in conn.execute("SELECT path FROM embeddings WHERE provider = ? AND model = ?", (provider, model))}
+        records = [record for record in note_rows_for_embedding(conn) if record["path"] not in existing]
+        conn.commit()
         if limit:
             records = records[:limit]
         now = datetime.now().astimezone().replace(microsecond=0).isoformat()
+        stored = 0
+        skipped_changed = 0
         for chunk in batched(records, batch_size):
+            # Model downloads and provider requests must not hold a database
+            # writer lock: MCP queries synchronize the vault before searching.
             texts = [embedding_text(record) for record in chunk]
             vectors = embed_texts(texts, provider, model)
             if len(vectors) != len(chunk):
                 raise RuntimeError("embedding provider returned a mismatched vector count")
+            conn.execute("BEGIN IMMEDIATE")
             for record, vector in zip(chunk, vectors):
+                current = conn.execute("SELECT title, tags, summary, body FROM notes WHERE path = ?", (record["path"],)).fetchone()
+                if current is None or embedding_text(dict(zip(("title", "tags", "summary", "body"), current))) != embedding_text(record):
+                    skipped_changed += 1
+                    continue
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO embeddings(path, provider, model, dims, vector, updated_at)
@@ -416,23 +542,25 @@ def embed_vault(vault=None, db_path=DEFAULT_DB, provider="openai", model=None, l
                         now,
                     ),
                 )
-        conn.commit()
+                stored += 1
+            conn.commit()
         return {
             "db": str(Path(db_path)),
             "provider": provider,
             "model": model,
-            "notes": len(records),
+            "notes": stored,
+            "skipped_changed": skipped_changed,
         }
     finally:
         conn.close()
 
 
-def embedding_search(db_path=DEFAULT_DB, query="", limit=10, provider="openai", model=None, platform=None, tag=None):
+def embedding_search(db_path=DEFAULT_DB, query="", limit=10, provider="openai", model=None, platform=None, tag=None, exclude_content_types=()):
     provider = embedding_provider(provider)
     if provider == "lite":
-        return semantic_search(db_path=db_path, query=query, limit=limit, platform=platform, tag=tag)
+        return semantic_search(db_path=db_path, query=query, limit=limit, platform=platform, tag=tag, exclude_content_types=exclude_content_types)
     model = embedding_model(provider, model)
-    require_db(db_path)
+    db_path = require_db(db_path)
     query_vector = embed_texts([query], provider, model)[0]
 
     conn = sqlite3.connect(str(db_path))
@@ -440,6 +568,7 @@ def embedding_search(db_path=DEFAULT_DB, query="", limit=10, provider="openai", 
         ensure_embedding_schema(conn)
         params = [provider, model]
         where = ["embeddings.provider = ?", "embeddings.model = ?"]
+        append_content_exclusions(where, params, exclude_content_types, "notes.content_type")
         if platform:
             where.append("notes.platform = ?")
             params.append(platform)
@@ -448,7 +577,7 @@ def embedding_search(db_path=DEFAULT_DB, query="", limit=10, provider="openai", 
             params.append(f"%{tag.lower()}%")
         sql = (
             "SELECT notes.path, notes.title, notes.platform, notes.tags, notes.summary, "
-            "notes.modified, notes.body, embeddings.vector "
+            "notes.modified, notes.body, embeddings.vector, notes.source "
             "FROM embeddings JOIN notes ON embeddings.path = notes.path "
             "WHERE " + " AND ".join(where)
         )
@@ -468,6 +597,7 @@ def embedding_search(db_path=DEFAULT_DB, query="", limit=10, provider="openai", 
                     "modified": row[5],
                     "snippet": snippet(row[6] or row[4] or "", query),
                     "score": round(score, 4),
+                    "source": row[8],
                     "provider": provider,
                     "model": model,
                 }
@@ -478,7 +608,7 @@ def embedding_search(db_path=DEFAULT_DB, query="", limit=10, provider="openai", 
         conn.close()
 
 
-def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=None, provider="lite", model=None):
+def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=None, provider="lite", model=None, exclude_content_types=()):
     provider = embedding_provider(provider)
     if provider != "lite":
         return embedding_search(
@@ -489,8 +619,9 @@ def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=N
             model=model,
             platform=platform,
             tag=tag,
+            exclude_content_types=exclude_content_types,
         )
-    require_db(db_path)
+    db_path = require_db(db_path)
     query_vector = semantic_vector(query)
     if not query_vector:
         return []
@@ -499,13 +630,14 @@ def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=N
     try:
         params = []
         where = []
+        append_content_exclusions(where, params, exclude_content_types)
         if platform:
             where.append("platform = ?")
             params.append(platform)
         if tag:
             where.append("LOWER(tags) LIKE ?")
             params.append(f"%{tag.lower()}%")
-        sql = "SELECT path, title, platform, tags, summary, modified, body FROM notes"
+        sql = "SELECT path, title, platform, tags, summary, modified, body, source FROM notes"
         if where:
             sql += " WHERE " + " AND ".join(where)
         rows = []
@@ -535,6 +667,7 @@ def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=N
                     "modified": row[5],
                     "snippet": snippet(row[6] or row[4] or "", query),
                     "score": round(score, 4),
+                    "source": row[7],
                 }
             )
         rows.sort(key=lambda item: (item["score"], item.get("modified") or 0), reverse=True)
@@ -543,9 +676,19 @@ def semantic_search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=N
         conn.close()
 
 
-def like_query(conn, query, limit=10, platform=None, tag=None):
+def append_content_exclusions(where, params, content_types, column="content_type"):
+    if isinstance(content_types, str):
+        raise ValueError("exclude_content_types must be a sequence of content type names")
+    excluded = tuple(content_types)
+    if excluded:
+        where.append(f"COALESCE({column}, '') NOT IN (" + ",".join("?" for _ in excluded) + ")")
+        params.extend(excluded)
+
+
+def like_query(conn, query, limit=10, platform=None, tag=None, exclude_content_types=()):
     params = []
     where = []
+    append_content_exclusions(where, params, exclude_content_types)
     if query:
         where.append("(LOWER(title) LIKE ? OR LOWER(body) LIKE ? OR LOWER(tags) LIKE ?)")
         q = f"%{query.lower()}%"
@@ -556,7 +699,7 @@ def like_query(conn, query, limit=10, platform=None, tag=None):
     if tag:
         where.append("LOWER(tags) LIKE ?")
         params.append(f"%{tag.lower()}%")
-    sql = "SELECT path, title, platform, tags, modified, body FROM notes"
+    sql = "SELECT path, title, platform, tags, modified, body, source FROM notes"
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY modified DESC LIMIT ?"
@@ -570,17 +713,19 @@ def like_query(conn, query, limit=10, platform=None, tag=None):
             "tags": row[3],
             "modified": row[4],
             "snippet": snippet(row[5] or "", query),
+            "source": row[6],
         }
         for row in rows
     ]
 
 
-def fts_query(conn, query, limit=10, platform=None, tag=None):
+def fts_query(conn, query, limit=10, platform=None, tag=None, exclude_content_types=()):
     if not query:
         return []
     phrase = '"' + query.replace('"', '""') + '"'
     params = [phrase]
     where = ["notes_fts MATCH ?"]
+    append_content_exclusions(where, params, exclude_content_types, "notes.content_type")
     if platform:
         where.append("notes.platform = ?")
         params.append(platform)
@@ -588,7 +733,7 @@ def fts_query(conn, query, limit=10, platform=None, tag=None):
         where.append("LOWER(notes.tags) LIKE ?")
         params.append(f"%{tag.lower()}%")
     sql = (
-        "SELECT notes.path, notes.title, notes.platform, notes.tags, notes.modified, notes.body "
+        "SELECT notes.path, notes.title, notes.platform, notes.tags, notes.modified, notes.body, notes.source "
         "FROM notes_fts JOIN notes ON notes_fts.path = notes.path "
         "WHERE " + " AND ".join(where) + " ORDER BY notes.modified DESC LIMIT ?"
     )
@@ -602,29 +747,30 @@ def fts_query(conn, query, limit=10, platform=None, tag=None):
             "tags": row[3],
             "modified": row[4],
             "snippet": snippet(row[5] or "", query),
+            "source": row[6],
         }
         for row in rows
     ]
 
 
-def search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=None):
-    require_db(db_path)
+def search(db_path=DEFAULT_DB, query="", limit=10, platform=None, tag=None, exclude_content_types=()):
+    db_path = require_db(db_path)
     conn = sqlite3.connect(str(db_path))
     try:
         rows = []
         try:
-            rows = fts_query(conn, query, limit=limit, platform=platform, tag=tag)
+            rows = fts_query(conn, query, limit=limit, platform=platform, tag=tag, exclude_content_types=exclude_content_types)
         except sqlite3.DatabaseError:
             rows = []
         if not rows:
-            rows = like_query(conn, query, limit=limit, platform=platform, tag=tag)
+            rows = like_query(conn, query, limit=limit, platform=platform, tag=tag, exclude_content_types=exclude_content_types)
         return rows
     finally:
         conn.close()
 
 
 def recent(db_path=DEFAULT_DB, limit=10, platform=None):
-    require_db(db_path)
+    db_path = require_db(db_path)
     conn = sqlite3.connect(str(db_path))
     try:
         params = []
@@ -643,7 +789,7 @@ def recent(db_path=DEFAULT_DB, limit=10, platform=None):
 
 
 def stats(db_path=DEFAULT_DB):
-    require_db(db_path)
+    db_path = require_db(db_path)
     conn = sqlite3.connect(str(db_path))
     try:
         total = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
@@ -688,14 +834,15 @@ def default_vault(value):
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Index and search a local Markdown vault")
-    parser.add_argument("--db", default=str(DEFAULT_DB), help="SQLite index path")
+    parser.add_argument("--db", help="SQLite index path; default: VAULT_DIR/.chubby/index.sqlite")
     sub = parser.add_subparsers(dest="command", required=True)
     embed_default_provider = os.environ.get("CHUBBY_EMBEDDING_PROVIDER", "openai")
     if embed_default_provider not in {"openai", "local"}:
         embed_default_provider = "openai"
 
-    index_cmd = sub.add_parser("index", help="Build or rebuild the vault index")
+    index_cmd = sub.add_parser("index", help="Synchronize the vault index incrementally")
     index_cmd.add_argument("vault", nargs="?", help="Vault directory, defaults to VAULT_DIR")
+    index_cmd.add_argument("--rebuild", action="store_true", help="Explicitly rebuild all notes and discard stored embeddings")
     index_cmd.add_argument("--json", action="store_true", help="Print JSON")
 
     embed_cmd = sub.add_parser("embed", help="Build OpenAI or local embedding vectors for indexed notes")
@@ -740,9 +887,9 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    db_path = Path(args.db).expanduser()
-
     try:
+        vault = getattr(args, "vault", None) or os.environ.get("VAULT_DIR")
+        db_path = resolve_db_path(vault, args.db) if args.command != "read" else args.db
         return run_command(args, db_path)
     except Exception as exc:
         print(f"❌ {exc}", file=sys.stderr)
@@ -751,7 +898,7 @@ def main(argv=None):
 
 def run_command(args, db_path):
     if args.command == "index":
-        result = index_vault(default_vault(args.vault), db_path=db_path)
+        result = index_vault(default_vault(args.vault), db_path=db_path, rebuild=args.rebuild)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

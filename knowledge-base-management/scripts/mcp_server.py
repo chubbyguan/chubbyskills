@@ -65,7 +65,7 @@ SEMANTIC_MODEL = os.environ.get("CHUBBY_EMBEDDING_MODEL", "")
 def index_db(vault):
     if INDEX_DB:
         return INDEX_DB
-    return str(Path(vault) / ".chubby" / "vault_index.sqlite")
+    return str(Path(vault) / ".chubby" / "index.sqlite")
 
 
 def unavailable(exc):
@@ -90,8 +90,7 @@ def ensure_index(vault):
     require_vault_dir(vault)
     indexer = require_vault_index()
     db = index_db(vault)
-    if not os.path.exists(db):
-        indexer.index_vault(vault, db_path=db)
+    indexer.sync_vault(vault, db_path=db)
     return db
 
 
@@ -109,6 +108,8 @@ def format_notes(rows, empty):
         out.append(f"{i}. `{row['path']}` — {row.get('title') or row['path']}")
         if meta:
             out.append(f"   {meta}")
+        if row.get("source"):
+            out.append(f"   来源：{row['source']}")
         if row.get("snippet"):
             out.append(f"   {row['snippet']}")
     return "\n".join(out)
@@ -243,7 +244,7 @@ def main(argv=None):
 
     @mcp.tool()
     def reindex_vault() -> str:
-        """重建知识库 SQLite 索引。"""
+        """增量更新知识库 SQLite 索引，保留未变化笔记的向量。"""
         return reindex(VAULT)
 
     @mcp.tool()

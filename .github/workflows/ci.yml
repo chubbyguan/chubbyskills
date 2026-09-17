@@ -65,6 +65,10 @@ jobs:
           python tools/chubby.py run --help
           python tools/chubby.py status --help
           python tools/chubby.py retry --help
+          python tools/chubby.py search --help
+          python tools/chubby.py brief --help
+          python tools/chubby.py doctor --platform x
+          python tools/evidence_brief.py --help
           python tools/chubby.py quickstart --ephemeral --no-state
           python tools/chubby_ingest.py --help
           python tools/platform_health.py --help

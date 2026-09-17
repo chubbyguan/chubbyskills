@@ -1,8 +1,11 @@
 # Chubby Skills pipeline config
-# Copy to chubby.yaml or run: python3 tools/chubby.py init
+# Copy to chubby.yaml or run: python3 tools/chubby.py init --vault /path/to/vault
 # Paths can be absolute or relative to this repository.
 output_dir: output
 vault_dir:
+# init --vault sets the root, its 00_Inbox capture destination and index below.
+vault_root:
+index_db:
 state_file: .chubby/runs.jsonl
 report_dir: runs
 queue_file: inbox/links.txt
