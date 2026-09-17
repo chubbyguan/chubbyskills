@@ -33,9 +33,9 @@
 | 贡献 | 已执行的公开动作 | 链接或当前边界 |
 |---|---|---|
 | #1 | 已评论说明等效解决并关闭 | [维护说明](https://github.com/chubbyguan/chubbyskills/pull/1#issuecomment-5708973399) |
-| #3 | 尚未在本记录中确认公开处理 | 代码吸收与 PR 评论、关闭是不同动作 |
-| #5 | 尚未在本记录中确认公开处理 | 代码吸收与 PR 评论、关闭是不同动作 |
-| #6 | 保留待真实集成示例 | 未安装或调用上游服务，未声称已验证解析 |
+| #3 | 已评论说明统一实现、作者归属与实验边界 | [采用说明](https://github.com/chubbyguan/chubbyskills/pull/3#issuecomment-5709293444)，实现见 [#9](https://github.com/chubbyguan/chubbyskills/pull/9) |
+| #5 | 已评论说明统一实现、作者归属与实验边界 | [采用说明](https://github.com/chubbyguan/chubbyskills/pull/5#issuecomment-5709293636)，实现见 [#9](https://github.com/chubbyguan/chubbyskills/pull/9) |
+| #6 | 已回复接入边界，保留待真实集成示例 | [维护回复](https://github.com/chubbyguan/chubbyskills/pull/6#issuecomment-5709293898)；未安装或调用上游服务 |
 
 仅在维护动作真实完成后更新此表，不用计划替代已执行状态。
 
