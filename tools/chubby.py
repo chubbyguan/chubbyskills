@@ -31,6 +31,7 @@ try:
     from tools import validate_outputs
     from tools import vault_index
     from tools import source_identity
+    from tools import podcast_options
 except ModuleNotFoundError:
     sys.path.insert(0, str(TOOLS_DIR))
     import chubby_ingest
@@ -38,6 +39,7 @@ except ModuleNotFoundError:
     import validate_outputs
     import vault_index
     import source_identity
+    import podcast_options
 
 
 DEFAULT_CONFIG = {
@@ -54,7 +56,7 @@ DEFAULT_CONFIG = {
 
 BOOL_KEYS = {"enrich"}
 SCHEMA_VERSION = "1"
-VALID_STATUSES = {"success", "failed", "dry_run"}
+VALID_STATUSES = {"success", "failed", "dry_run", "running"}
 QUICKSTART_SOURCE = "https://x.com/example/status/123456"
 
 
@@ -248,7 +250,14 @@ def load_records(config):
             records.append(json.loads(line))
         except json.JSONDecodeError:
             records.append({"status": "failed", "error": "invalid state line", "raw": line})
-    return records
+    # A cloud run writes a start event before launching a possibly billable
+    # child and a final event afterwards. Keep attempts in their first-seen
+    # order: an older attempt finishing late must not hide a newer pending job.
+    latest = {}
+    for index, record in enumerate(records):
+        key = record.get("run_id") or ("line", index)
+        latest[key] = record
+    return list(latest.values())
 
 
 def append_record(config, record):
@@ -478,8 +487,13 @@ def execution_fingerprint(execution):
 
 def find_reusable_record(config, identity, fingerprint):
     for previous in reversed(load_records(config)):
-        if (previous.get("status") != "success" or previous.get("source_hash") != identity
-                or previous.get("execution_hash") != fingerprint):
+        if previous.get("source_hash") != identity or previous.get("execution_hash") != fingerprint:
+            continue
+        # A newer failed refresh/resubmission represents unfinished work. Do
+        # not hide it by returning an older success instead of resuming it.
+        if previous.get("status") in {"failed", "running"}:
+            return None
+        if previous.get("status") != "success":
             continue
         paths = previous.get("output_paths") or [previous.get("output_path")]
         if not paths or not all(paths):
@@ -543,6 +557,21 @@ def finish_record(record, secrets=()):
 def run_ingest_source(source, args, config, batch_id=None, skill=None):
     started_at = now_iso()
     detected_skill = skill or args.skill or chubby_ingest.detect_skill(source)
+    args = copy.copy(args)
+    args.extra = list(getattr(args, "extra", []))
+    preflight_error = ""
+    document_fingerprint = ""
+    try:
+        if detected_skill == "podcast":
+            args.extra, _ = podcast_options.resolve_extra(args.extra)
+        elif detected_skill == "document" and not args.dry_run:
+            try:
+                from tools import import_document
+            except ModuleNotFoundError:
+                import import_document
+            document_fingerprint = import_document.document_fingerprint(resolve_path(source))
+    except (OSError, ValueError) as exc:
+        preflight_error = str(exc)
     cmd, selected_skill, output, vault, enrich = build_ingest_command(
         source, args, config, skill=detected_skill
     )
@@ -555,11 +584,15 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
         "vault_dir": str(resolve_path(vault).resolve()) if vault else "",
         "vault_root": index_vault, "index_db": index_db,
         "enrich": bool(enrich), "skill": selected_skill or detected_skill or "",
-        "extra": list(getattr(args, "extra", [])), "timeout_seconds": timeout_seconds,
+        "extra": [item for item in args.extra if item != "--resubmit"], "timeout_seconds": timeout_seconds,
     }
+    if document_fingerprint:
+        execution["document_fingerprint"] = document_fingerprint
     safe_extra, retry_requires, secrets = chubby_ingest.redact_arguments(execution["extra"])
     safe_source, source_secrets = chubby_ingest.redact_url(source)
     secrets.extend(source_secrets)
+    if detected_skill == "podcast":
+        secrets.extend(os.environ[key] for key in ("ATLAS_API_KEY", "ATLAS_CLOUD_API_KEY", "MUAPI_API_KEY", "MU_API_KEY") if os.environ.get(key))
     if source_secrets:
         retry_requires.append("--source")
     safe_command, _, command_secrets = chubby_ingest.redact_arguments(cmd)
@@ -594,7 +627,10 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
         "index_status": "not_run" if index_vault else "skipped",
         "error": "",
     }
-    if not args.dry_run and not getattr(args, "refresh", False):
+    if preflight_error:
+        record.update(error=preflight_error, finished_at=now_iso())
+        return finish_record(record, secrets)
+    if not args.dry_run and not getattr(args, "refresh", False) and "--resubmit" not in args.extra:
         previous = find_reusable_record(config, record["source_hash"], fingerprint)
         if previous:
             record.update(status="success", finished_at=now_iso(),
@@ -603,6 +639,10 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
                           artifact_files=previous.get("artifact_files", []),
                           reused=True, reused_from=previous["run_id"])
             return finish_record(record, secrets)
+    if detected_skill == "podcast" and extra_option_value(args.extra, "--provider") in {"atlas", "muapi"} and not args.dry_run:
+        # A killed parent must not leave an older success eligible for reuse
+        # while the provider's newer job still needs recovery.
+        append_record(config, dict(record, status="running", error="Cloud capture started; final state not recorded yet"))
     try:
         process = subprocess.run(
             cmd,
@@ -737,7 +777,7 @@ def print_run_summary(records, report_path):
 
 
 def record_failed(record):
-    return record.get("status") == "failed" or record.get("index_status") == "failed"
+    return record.get("status") in {"failed", "running"} or record.get("index_status") == "failed"
 
 
 def command_ingest(args, config):
@@ -852,6 +892,14 @@ def merge_extra_options(original, overrides):
     return [item for key, group in extra_groups(original) if key not in replacement for item in group] + list(overrides)
 
 
+def extra_option_value(values, option):
+    result = None
+    for key, group in extra_groups(values):
+        if key == option:
+            result = group[0].split("=", 1)[1] if "=" in group[0] else (group[1] if len(group) > 1 else None)
+    return result
+
+
 def retry_arguments(target, args, config):
     inherited = dict(target.get("execution") or {})
     legacy_requires = []
@@ -872,7 +920,14 @@ def retry_arguments(target, args, config):
             setattr(retry_args, argument, inherited.get(key, target.get(key)))
     if getattr(args, "timeout", None) is None:
         retry_args.timeout = inherited.get("timeout_seconds", parse_int(config.get("timeout_seconds"), 1800))
-    original_extra = inherited.get("extra", [])
+    original_extra = [item for key, group in extra_groups(inherited.get("extra", [])) if key != "--resubmit" for item in group]
+    requested_provider = extra_option_value(getattr(args, "extra", []), "--provider")
+    previous_provider = extra_option_value(original_extra, "--provider") or "local"
+    if requested_provider is not None and requested_provider != previous_provider:
+        # A provider's default model and endpoint must never leak into another
+        # provider, especially when their authentication headers differ.
+        original_extra = [item for key, group in extra_groups(original_extra)
+                          if key not in {"--model", "--base-url"} for item in group]
     retry_args.extra = merge_extra_options(original_extra, getattr(args, "extra", []))
     required = set(target.get("retry_requires", [])) | set(legacy_requires)
     supplied = {key for key, _ in extra_groups(getattr(args, "extra", []))}
@@ -925,6 +980,8 @@ def command_doctor(args, config):
     command = [sys.executable, str(TOOLS_DIR / "check_env.py")]
     if getattr(args, "platform", None):
         command.extend(["--platform", args.platform])
+    if getattr(args, "provider", None):
+        command.extend(["--provider", args.provider])
     result = subprocess.run(command, cwd=ROOT)
     return result.returncode
 
@@ -1279,6 +1336,7 @@ def build_parser():
     doctor = sub.add_parser("doctor", help="Show config and dependency health")
     doctor.set_defaults(handler=command_doctor)
     doctor.add_argument("--platform", choices=sorted(chubby_ingest.SKILL_COMMANDS))
+    doctor.add_argument("--provider", choices=["local", "atlas", "muapi"], help="Podcast provider to check")
 
     quickstart = sub.add_parser("quickstart", help="Run the first-use offline acceptance flow")
     quickstart.add_argument("--force-init", action="store_true", help="Overwrite chubby.yaml before checks")
@@ -1289,6 +1347,11 @@ def build_parser():
     ingest = sub.add_parser("ingest", help="Ingest one source and record state")
     ingest.add_argument("source", help="URL, BV id, local audio, or article PDF")
     add_ingest_options(ingest)
+
+    document = sub.add_parser("import", help="Import local Markdown, text or text-based PDF into the same capture pipeline")
+    document.add_argument("source", help="Local .md, .markdown, .txt or .pdf file")
+    document.add_argument("--source-url", help="Original HTTP(S) source of the imported document")
+    add_ingest_options(document)
 
     run = sub.add_parser("run", help="Run a queue or explicit list of sources")
     run.add_argument("sources", nargs="*", help="Optional sources; defaults to queue_file")
@@ -1360,6 +1423,12 @@ def main(argv=None):
     if extra and args.command not in {"ingest", "run", "retry"}:
         parser.error("unrecognized arguments: " + " ".join(extra))
     args.extra = extra
+    if args.command == "import":
+        if args.skill and args.skill != "document":
+            parser.error("import only accepts the document skill")
+        args.skill = "document"
+        if args.source_url:
+            args.extra.extend(["--source-url", args.source_url])
     config = load_config(args.config)
 
     if args.command == "init":
@@ -1368,7 +1437,7 @@ def main(argv=None):
         return command_doctor(args, config)
     if args.command == "quickstart":
         return command_quickstart(args, config)
-    if args.command == "ingest":
+    if args.command in {"ingest", "import"}:
         return command_ingest(args, config)
     if args.command == "run":
         return command_run(args, config)

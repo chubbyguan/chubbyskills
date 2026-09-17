@@ -40,6 +40,7 @@ STATIC_SKILL_COMMANDS = {
     "youtube": ["youtube-transcribe", "scripts", "transcribe.py"],
     "zhihu": ["zhihu-transcribe", "scripts", "transcribe.py"],
     "podcast": ["podcast-transcribe", "scripts", "transcribe.py"],
+    "document": ["tools", "import_document.py"],
 }
 
 
@@ -65,7 +66,9 @@ def load_skill_commands(platform_dir=None):
                     commands[pid] = [skill] + str(script).split("/")
         except Exception:
             commands = {}
-    return commands or dict(STATIC_SKILL_COMMANDS)
+    result = commands or dict(STATIC_SKILL_COMMANDS)
+    result["document"] = ["tools", "import_document.py"]
+    return result
 
 
 SKILL_COMMANDS = load_skill_commands()
@@ -154,6 +157,9 @@ def detect_skill(source):
     host = parsed.netloc.lower()
     lower = source.lower()
 
+    if os.path.isfile(source) and lower.endswith((".md", ".markdown", ".txt")):
+        return "document"
+
     if lower.startswith("bv") or "bilibili.com" in host:
         return "bilibili"
     if "youtube.com" in host or "youtu.be" in host:
@@ -174,7 +180,7 @@ def detect_skill(source):
         return "xiaohongshu"
     if lower.endswith(".pdf") and os.path.exists(source):
         return "wechat"
-    if os.path.exists(source) or lower.endswith((".mp3", ".m4a", ".wav", ".ogg", ".aac")):
+    if (os.path.isfile(source) and lower.endswith((".mp3", ".m4a", ".wav", ".ogg", ".aac", ".mp4", ".mkv", ".webm", ".flac", ".mov"))) or lower.endswith((".mp3", ".m4a", ".wav", ".ogg", ".aac")):
         return "podcast"
     return None
 

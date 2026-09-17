@@ -67,7 +67,12 @@ jobs:
           python tools/chubby.py retry --help
           python tools/chubby.py search --help
           python tools/chubby.py brief --help
+          python tools/chubby.py import --help
           python tools/chubby.py doctor --platform x
+          python tools/chubby.py doctor --platform document
+          python tools/import_document.py --help
+          python podcast-transcribe/scripts/transcribe.py --help
+          python podcast-transcribe/scripts/batch_transcribe.py --help
           python tools/evidence_brief.py --help
           python tools/chubby.py quickstart --ephemeral --no-state
           python tools/chubby_ingest.py --help

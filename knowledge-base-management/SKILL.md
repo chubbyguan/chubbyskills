@@ -3,7 +3,7 @@ name: knowledge-base-management
 description: "管理本地 Markdown/Obsidian 知识库：素材入库、健康检查、增量索引、关键词与 semantic-lite 检索、逐字原文资料包、归档和 MCP 连接。用于搜索知识库、整理资料及为 Agent 准备可定位的引用。"
 metadata:
   triggers: "[\"知识库管理\", \"素材入库\", \"健康检查\", \"盘点知识库\", \"清理知识库\", \"搜索知识库\", \"GBrain\", \"GraphRAG\", \"知识图谱\", \"整理知识库\", \"知识库架构\"]"
-  version: "0.12.0"
+  version: "0.13.0"
   created: "2026-06-02"
   tags: "[\"knowledge-base\", \"obsidian\", \"wiki\", \"note-taking\", \"gbrain\", \"graphrag\"]"
 ---
@@ -206,6 +206,19 @@ SQLite FTS5 可用时自动启用；不可用时使用 LIKE 搜索。默认 `sem
 - 数据库绑定知识库，扫描或读取失败会回滚同步，越出知识库范围的符号链接会被拒绝。
 - 全量重建需显式执行 `python3 tools/vault_index.py index "$VAULT_DIR" --rebuild`，会丢弃已有 embedding。
 
+### 📥 导入本地材料
+
+完整仓库中，`python3 tools/chubby.py import "/path/to/document.md"` 将 Markdown、文本或文字层 PDF 接入现有采集、复用和索引流程。可用 `--source-url` 指定原始网页；本地附件会复制并改写引用，原文件保留。PDF 需要可选 `pymupdf`，扫描件不会被当作成功导入。
+
+独立安装本 skill 后，也可在 skill 目录使用：
+
+```bash
+python3 tools/import_document.py "/path/to/document.md" --output "$VAULT_DIR/00_Inbox"
+python3 tools/vault_index.py index "$VAULT_DIR"
+```
+
+独立导入工具不写统一 CLI 的运行记录；MCP 查询或 `brief` 生成前仍会自动同步知识库。安装包包含该工具及所需公共模块。
+
 ### 📎 逐字原文资料包
 
 完整仓库使用统一入口：
@@ -252,7 +265,7 @@ VAULT_DIR=/path/to/your-vault python3 knowledge-base-management/scripts/mcp_serv
 
 当前验证 SDK 为 `mcp==1.30.0`。`mcp_smoke.py` 用临时 vault 启动真实 stdio 服务，验证握手、6 个工具发现、搜索和读取，不访问你的知识库。`--help` 不需要安装 SDK。
 
-完整仓库的安装器会一起复制 `vault_index.py`、`vault_curator.py` 和 `evidence_brief.py`：
+完整仓库的安装器会一起复制 `vault_index.py`、`vault_curator.py`、`evidence_brief.py`、`import_document.py` 及所需公共模块：
 
 ```bash
 python3 tools/install_skill.py knowledge-base-management --dest ~/.codex/skills
