@@ -217,6 +217,9 @@ class SubscriptionTest(unittest.TestCase):
                     subscription_adapters.classify_http_error(status), expected
                 )
 
+    def test_public_feed_user_agent_matches_the_actual_urllib_client(self):
+        self.assertRegex(subscription_adapters.USER_AGENT, r"^Python-urllib/\d+\.\d+$")
+
     def test_fake_ip_proxy_dns_is_allowed_but_private_network_is_rejected(self):
         fake_ip = [(2, 1, 6, "", ("198.18.0.3", 443))]
         with patch.object(

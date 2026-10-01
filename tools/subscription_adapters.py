@@ -11,6 +11,7 @@ import ipaddress
 import json
 import socket
 import ssl
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,9 +20,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-USER_AGENT = (
-    "chubbyskills-subscriptions/0.13 (+https://github.com/chubbyguan/chubbyskills)"
-)
+# Public RSS hosts sometimes blacklist application names while accepting the
+# standard client identity that urllib actually uses. Keep this accurate instead
+# of impersonating a browser or sending a project-branded UA.
+USER_AGENT = f"Python-urllib/{sys.version_info.major}.{sys.version_info.minor}"
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_REDIRECTS = 3
 # Clash and similar local proxy clients use this IANA benchmarking range as a
