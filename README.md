@@ -34,6 +34,7 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | 写作时找回证据 | 关键词搜索、可选语义检索、原文读取；采集入库后自动更新索引 |
 | 整理一份选题资料 | 导出 Markdown / JSON 资料包，包含原文摘录、行号、来源和文件摘要 |
 | 让 Agent 使用知识库 | 独立技能包，以及提供搜索、原文读取等工具的可选 MCP 服务 |
+| 持续跟踪可靠来源 | P0 订阅公开 RSS / Atom / JSON Feed 与 YouTube 频道；发现、审核、转录与入库分离 |
 
 先看[输出样例](./examples/README.md)，或直接运行下面的本地示例。
 
@@ -48,6 +49,7 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | 抖音 / TikTok / 微博 / 知乎 | 测试·重依赖 | 视频转录需 `funasr` + `ffmpeg` |
 | 播客 | 重依赖 | `faster-whisper`，可选云转录 |
 | X / 小红书 | 手动兜底 | 零依赖采集正文，失败可手动补全文 |
+| RSS / YouTube 频道订阅 | P0 | 公开 Feed；默认只发现，需显式开启自动入库 |
 | 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
 
 <a id="安装方式"></a>
@@ -168,6 +170,22 @@ python3 tools/chubby.py retry --all-failed
 
 采集入库后和统一查询前，索引会增量同步。更多例子见[创作者工作流](./docs/creator-workflow.md)；已有索引的迁移和重建见[知识库自动化](./docs/knowledge-automation.md)。
 
+### 订阅 YouTube、播客和 RSS
+
+P0 将订阅扫描和媒体处理拆开：首次同步只建立已见基线，新条目先进入待审队列；确认来源质量后，可对该来源开启 `auto_ingest`，让 YouTube / 播客复用现有字幕优先和转录路径。
+
+```bash
+python3 tools/chubby.py subscribe init
+python3 tools/chubby.py subscribe add \
+  --id yt-3blue1brown --name "3Blue1Brown" \
+  --kind youtube_channel --channel-id UCYO_jab_esuFRV4b17AJtAw \
+  --content-profile video --mode discover_only
+python3 tools/chubby.py subscribe sync --all    # 首次只建立基线
+python3 tools/chubby.py subscribe pending
+```
+
+定时运行使用 `python3 tools/chubby.py subscribe tick --due --process-limit 3`，交给 macOS launchd 或 Linux cron 每小时触发。P0 仅支持公开 Feed / YouTube 频道；X、小红书、抖音、B站、公众号账号扫描尚未支持。完整命令、调度、失败恢复和安全边界见[订阅与调度](./docs/subscriptions.md)。
+
 ## 安装到 Agent
 
 ### 按需安装技能
@@ -267,6 +285,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [创作者工作流](./docs/creator-workflow.md) | 从素材到搜索、资料包和 Agent 选题 |
 | [文档导入](./docs/document-import.md) | Markdown / TXT / PDF、来源和附件规则 |
 | [云转录](./docs/cloud-transcription.md) | Provider 配置、任务恢复和计费边界 |
+| [订阅与调度（P0）](./docs/subscriptions.md) | 公开 Feed / YouTube 订阅、队列、调度、故障恢复与限制 |
 | [知识库自动化](./docs/knowledge-automation.md) | 索引、向量检索、归档和知识卡片 |
 | [MCP 配置](./docs/mcp-workflow.md) | 将知识库接入 Agent |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
