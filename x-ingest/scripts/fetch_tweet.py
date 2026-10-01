@@ -13,6 +13,7 @@ X（Twitter）推文采集 → 统一 frontmatter Markdown
     python fetch_tweet.py "链接" --no-images   # 图文只留图片链接
     python fetch_tweet.py "链接" --no-video    # 视频不转录，只留视频链接
     python fetch_tweet.py "链接" --fallback-json tweet.json --fallback-only
+    python fetch_tweet.py "链接" --cookies "auth_token=...; ct0=..."  # 长文章抓全文
 
 图文采集零依赖；视频转录需要 funasr + ffmpeg（与抖音/B站/小红书同一套，延迟导入）。
 注：syndication 是非官方公开端点，受限/已删/成人内容可能取不到。
@@ -28,6 +29,7 @@ import subprocess
 import tempfile
 import shutil
 import urllib.request
+import urllib.parse
 from datetime import datetime
 
 
@@ -36,6 +38,17 @@ UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 _B36 = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+# X Web 端公开 bearer token（匿名客户端凭证，不含用户身份）。
+_GRAPHQL_BEARER = (
+    "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs"
+    "%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+)
+# TweetResultByRestId 的 queryId 会随 X 前端发版轮换，按新到旧依次尝试。
+_TWEET_RESULT_QUERY_IDS = [
+    "DJS3BdhUhcaEpZ7B7irJDg",
+    "V3vfsYzNEyD9tsf4xoPhgw",
+]
 
 
 def extract_tweet_id(url):
@@ -88,6 +101,103 @@ def fetch_tweet(tweet_id):
         return json.loads(resp.read().decode("utf-8", "replace"))
 
 
+def load_cookies(source):
+    """从文件路径 / "k=v; k=v" 字符串解析出 auth_token 和 ct0。"""
+    raw = source or ""
+    if os.path.isfile(raw):
+        with open(raw, encoding="utf-8") as f:
+            raw = f.read().strip()
+    jar = {}
+    for part in re.split(r"[;\n]+", raw):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            jar[k.strip()] = v.strip()
+    auth, ct0 = jar.get("auth_token"), jar.get("ct0")
+    if not auth or not ct0:
+        raise ValueError("cookies 中缺少 auth_token 或 ct0（从浏览器 DevTools 复制）")
+    return auth, ct0
+
+
+def fetch_article_graphql(rest_id, cookies):
+    """登录态 GraphQL TweetResultByRestId 抓 Article 本体。返回 result dict 或 None。"""
+    auth, ct0 = load_cookies(cookies)
+    variables = {
+        "tweetId": str(rest_id),
+        "withCommunity": False,
+        "includePromotedContent": False,
+        "withVoice": False,
+    }
+    features = {
+        "articles_preview_enabled": True,
+        "tweetypie_unmention_optimization_enabled": True,
+        "responsive_web_edit_tweet_api_enabled": True,
+        "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
+        "view_counts_everywhere_api_enabled": True,
+        "longform_notetweets_consumption_enabled": True,
+        "responsive_web_twitter_article_tweet_consumption_enabled": True,
+        "tweet_awards_web_tipping_enabled": False,
+        "freedom_of_speech_not_reach_fetch_enabled": True,
+        "standardized_nudges_misinfo": True,
+        "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
+        "rweb_video_timestamps_enabled": True,
+        "longform_notetweets_rich_text_read_enabled": True,
+        "longform_notetweets_inline_media_enabled": True,
+        "responsive_web_graphql_exclude_directive_enabled": True,
+        "verified_phone_label_enabled": False,
+        "responsive_web_media_download_video_enabled": False,
+        "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+        "responsive_web_graphql_timeline_navigation_enabled": True,
+        "responsive_web_enhance_cards_enabled": False,
+    }
+    headers = {
+        "User-Agent": UA,
+        "Accept": "application/json",
+        "Authorization": f"Bearer {_GRAPHQL_BEARER}",
+        "X-Csrf-Token": ct0,
+        "X-Twitter-Auth-Type": "OAuth2Session",
+        "X-Twitter-Active-User": "yes",
+        "Cookie": f"auth_token={auth}; ct0={ct0}",
+    }
+    for query_id in _TWEET_RESULT_QUERY_IDS:
+        url = (
+            f"https://x.com/i/api/graphql/{query_id}/TweetResultByRestId"
+            f"?variables={urllib.parse.quote(json.dumps(variables))}"
+            f"&features={urllib.parse.quote(json.dumps(features))}"
+        )
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                payload = json.loads(resp.read().decode("utf-8", "replace"))
+        except Exception as e:
+            print(f"  ⚠️  GraphQL queryId {query_id} 失败：{e}", file=sys.stderr)
+            continue
+        result = ((payload.get("data") or {}).get("tweetResult") or {}).get("result")
+        if result:
+            return result
+    return None
+
+
+def _blocks_text(content_state):
+    """从 Article 的 content_state blocks 拼接纯文本。"""
+    parts = []
+    for block in (content_state or {}).get("blocks") or []:
+        t = (block.get("text") or "").strip()
+        if t:
+            parts.append(t)
+    return "\n\n".join(parts)
+
+
+def extract_article_text(result):
+    """从 GraphQL tweetResult.result 提取 Article 标题与全文。返回 (title, text)。"""
+    article = (result or {}).get("article") or {}
+    article_result = (article.get("article_results") or {}).get("result") or {}
+    title = (article_result.get("title") or "").strip()
+    text = (article_result.get("plain_text") or "").strip()
+    if not text:
+        text = _blocks_text(article_result.get("content_state"))
+    return title, text
+
+
 def extract_video_url(tw):
     """从推文 JSON 提取最高码率的 mp4 直链。返回 url 或 None。"""
     variants = []
@@ -136,8 +246,10 @@ def parse_tweet(tw):
     # X Article（长文章）：syndication 只给标题+预览+封面，全文需登录另抓
     article = tw.get("article") or {}
     article_title = ""
+    article_rest_id = ""
     if article:
         article_title = (article.get("title") or "").strip()
+        article_rest_id = str(article.get("rest_id") or "")
         preview = (article.get("preview_text") or "").strip()
         if preview:
             text = preview
@@ -169,6 +281,8 @@ def parse_tweet(tw):
         "video_url": video_url,
         "note_type": note_type,
         "article_title": article_title,
+        "article_rest_id": article_rest_id,
+        "article_is_preview": bool(article),
     }
 
 
@@ -285,7 +399,7 @@ def build_markdown(data, url, title, image_refs, transcript=None):
     replies = _safe_count(data.get("replies"))
     stat = f"👍 {likes} · 💬 {replies}"
     body = data["text"] or "（推文无正文）"
-    if data["note_type"] == "article":
+    if data["note_type"] == "article" and data.get("article_is_preview"):
         body = "> 📄 X 长文章，以下为预览，全文见上方 source 链接\n\n" + body
 
     lines = [
@@ -474,6 +588,8 @@ def build_json_fallback_data(payload, title):
         "video_url": None,
         "note_type": "text",
         "article_title": title or "",
+        "article_rest_id": "",
+        "article_is_preview": False,
     }
 
 
@@ -490,6 +606,8 @@ def build_fallback_data(text, title):
         "video_url": None,
         "note_type": "text",
         "article_title": title or "",
+        "article_rest_id": "",
+        "article_is_preview": False,
     }
 
 
@@ -534,6 +652,11 @@ def main():
         "--fallback-json", help="抓取失败时使用结构化推文 JSON 生成标准 Markdown"
     )
     parser.add_argument("--fallback-title", help="fallback 模式下指定标题")
+    parser.add_argument(
+        "--cookies",
+        help="X 登录 cookie（auth_token 与 ct0），可传文件路径或 'k=v; k=v' 字符串；"
+        "也可用环境变量 X_COOKIES。仅用于抓取 X 长文章全文",
+    )
     parser.add_argument(
         "--fallback-only",
         action="store_true",
@@ -595,6 +718,39 @@ def main():
         sys.exit(1)
 
     data = parse_tweet(tw)
+
+    if data["note_type"] == "article" and data.get("article_is_preview"):
+        cookies = args.cookies or os.environ.get("X_COOKIES")
+        if cookies and data.get("article_rest_id"):
+            print("  📄 长文章，尝试登录态抓取全文...", file=sys.stderr)
+            try:
+                result = fetch_article_graphql(data["article_rest_id"], cookies)
+                title, text = extract_article_text(result)
+                if text:
+                    data["text"] = text
+                    data["article_is_preview"] = False
+                    if title and not data["article_title"]:
+                        data["article_title"] = title
+                    print(f"  ✅ 抓到全文（{len(text)} 字）", file=sys.stderr)
+                else:
+                    print(
+                        "  ⚠️  登录态返回中未找到 Article 全文，保留预览",
+                        file=sys.stderr,
+                    )
+            except Exception as e:
+                print(f"  ⚠️  登录态抓取失败：{e}，保留预览", file=sys.stderr)
+        if data.get("article_is_preview"):
+            print(
+                "  ⚠️  这是 X 长文章（Article），syndication 端点只返回开头预览，"
+                "正文全文缺失！",
+                file=sys.stderr,
+            )
+            print(
+                "     补全方式：--cookies 提供登录 cookie 抓全文；"
+                "网络不可达 x.com 时手动复制正文用 --fallback-text",
+                file=sys.stderr,
+            )
+
     title = compute_title(data)
     base = sanitize(title)
     os.makedirs(args.output, exist_ok=True)

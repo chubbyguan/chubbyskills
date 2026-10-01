@@ -1,6 +1,6 @@
 # Platform Status
 
-Generated at: `2026-09-16T16:52:07+08:00`
+Generated at: `2026-10-01T11:18:44+08:00`
 
 This page is generated from `platforms/*.yaml` and `templates/sites/*.yaml`.
 Default checks validate repository structure and template coverage. Run with `--local` to include local dependency readiness.
@@ -17,7 +17,7 @@ Local dependency check: `off`
 | TikTok | tiktok-transcribe | beta | video | region_limit, anti_bot, missing_yt_dlp, ffmpeg_or_funasr_missing, download_blocked | audio transcription after yt-dlp download | yes | Region limits and anti-bot behavior may affect downloads. |
 | WeChat Official Account | wechat-article-ingest | beta | article, pdf | wechat_client_only, html_structure_changed, beautifulsoup_missing, pdf_parser_missing, content_too_short | pdf or saved HTML | yes | HTML structure changes frequently; PDF fallback keeps useful coverage. |
 | Weibo | weibo-transcribe | beta | video | mobile_link_required, anti_bot, missing_yt_dlp, ffmpeg_or_funasr_missing, download_blocked | audio transcription after yt-dlp download | yes | Mobile links are usually more reliable than desktop links. |
-| X Twitter | x-ingest | manual fallback | text, image, video | syndication_unavailable, protected_or_deleted_post, media_download_failed, ffmpeg_or_funasr_missing | manual text via --fallback-text or structured tweet data via --fallback-json | yes | Embed endpoint works for many public posts; text and structured JSON fallbacks protect capture flow. |
+| X Twitter | x-ingest | manual fallback | text, image, video | syndication_unavailable, protected_or_deleted_post, media_download_failed, ffmpeg_or_funasr_missing, article_preview_only | manual text via --fallback-text or structured tweet data via --fallback-json | yes | Embed endpoint works for many public posts; X Articles return preview only — use --cookies (logged-in GraphQL) or --fallback-text for full text; text and structured JSON fallbacks protect capture flow. |
 | Xiaohongshu | xiaohongshu-ingest | manual fallback | text, image, video | missing_cookie, anti_bot, html_structure_changed, image_download_failed, ffmpeg_or_funasr_missing | manual text via --fallback-text | yes | Cookie improves success rate; fallback text keeps the knowledge pipeline moving. |
 | YouTube | youtube-transcribe | stable | video, subtitle | missing_yt_dlp, no_caption, age_or_region_limit, ffmpeg_or_funasr_missing | subtitle-first then audio transcription | yes | Captions provide the fastest path; audio transcription remains available. |
 | Zhihu | zhihu-transcribe | beta | video | embedded_video_unavailable, anti_bot, missing_yt_dlp, ffmpeg_or_funasr_missing, download_blocked | audio transcription after yt-dlp download | yes | Supports standalone video links and embedded answer/article videos. |

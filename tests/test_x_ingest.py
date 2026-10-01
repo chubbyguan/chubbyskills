@@ -112,5 +112,87 @@ class XIngestFallbackTest(unittest.TestCase):
         self.assertIn("replies: \n", markdown)
 
 
+class XArticleTest(unittest.TestCase):
+    def test_parse_syndication_article_marks_preview(self):
+        tw = {
+            "user": {"name": "Ada", "screen_name": "ada"},
+            "text": "https://t.co/abc",
+            "article": {
+                "title": "Long post",
+                "preview_text": "First bullets only",
+                "rest_id": 2102982854732922880,
+                "cover_media": {"media_info": {"original_img_url": "https://img"}},
+            },
+        }
+        data = fetch_tweet.parse_tweet(tw)
+
+        self.assertEqual(data["note_type"], "article")
+        self.assertEqual(data["article_title"], "Long post")
+        self.assertEqual(data["article_rest_id"], "2102982854732922880")
+        self.assertTrue(data["article_is_preview"])
+        self.assertEqual(data["text"], "First bullets only")
+
+        markdown = fetch_tweet.build_markdown(
+            data, "https://x.com/ada/status/1", "Long post", []
+        )
+        self.assertIn("以下为预览", markdown)
+
+    def test_extract_article_text_prefers_plain_text(self):
+        result = {
+            "article": {
+                "article_results": {
+                    "result": {
+                        "title": "Long post",
+                        "plain_text": "Full body here",
+                        "content_state": {"blocks": [{"text": "ignored"}]},
+                    }
+                }
+            }
+        }
+        title, text = fetch_tweet.extract_article_text(result)
+        self.assertEqual((title, text), ("Long post", "Full body here"))
+
+    def test_extract_article_text_falls_back_to_content_state_blocks(self):
+        result = {
+            "article": {
+                "article_results": {
+                    "result": {
+                        "title": "Long post",
+                        "content_state": {
+                            "blocks": [
+                                {"text": "Para one"},
+                                {"text": "  "},
+                                {"text": "Para two"},
+                            ]
+                        },
+                    }
+                }
+            }
+        }
+        title, text = fetch_tweet.extract_article_text(result)
+        self.assertEqual((title, text), ("Long post", "Para one\n\nPara two"))
+
+    def test_extract_article_text_handles_missing_article(self):
+        self.assertEqual(fetch_tweet.extract_article_text(None), ("", ""))
+        self.assertEqual(fetch_tweet.extract_article_text({}), ("", ""))
+
+    def test_load_cookies_from_string_and_file(self):
+        auth, ct0 = fetch_tweet.load_cookies("auth_token=aaa; ct0=bbb")
+        self.assertEqual((auth, ct0), ("aaa", "bbb"))
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".txt", encoding="utf-8", delete=False
+        ) as f:
+            f.write("ct0=t2\nauth_token=a2\n")
+            path = f.name
+        try:
+            self.assertEqual(fetch_tweet.load_cookies(path), ("a2", "t2"))
+        finally:
+            os.unlink(path)
+
+    def test_load_cookies_rejects_missing_keys(self):
+        with self.assertRaisesRegex(ValueError, "auth_token"):
+            fetch_tweet.load_cookies("foo=bar")
+
+
 if __name__ == "__main__":
     unittest.main()

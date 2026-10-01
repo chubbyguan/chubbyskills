@@ -36,6 +36,10 @@ python scripts/fetch_tweet.py "链接" -o ./out --no-images   # 图文：只留�
 python scripts/fetch_tweet.py "链接" -o ./out --no-video    # 视频：不转录，只留视频链接
 python scripts/fetch_tweet.py "链接" -o ./out --fallback-text 手动正文.txt
 python scripts/fetch_tweet.py "链接" -o ./out --fallback-json 推文.json --fallback-only
+
+# X 长文章抓全文（需自己账号的登录 cookie）：
+python scripts/fetch_tweet.py "链接" -o ./out --cookies "auth_token=...; ct0=..."
+X_COOKIES="auth_token=...; ct0=..." python scripts/fetch_tweet.py "链接" -o ./out
 ```
 
 ## 产出
@@ -44,7 +48,9 @@ python scripts/fetch_tweet.py "链接" -o ./out --fallback-json 推文.json --fa
 
 - **图文 / 纯文字推文**：正文 + 图片下载到本地 `<标题>.assets/` 并以 `![]()` 嵌入；`--no-images` 只留链接，单张失败自动回退为链接
 - **视频推文**：提取最高码率 mp4 直链 → ffmpeg 抽音频 → SenseVoice 转录（`language=auto`，X 中英混杂）写入 `## 视频文字稿`；`--no-video` 只留视频链接；缺 funasr/ffmpeg 时自动降级为存链接
-- **X 长文章（Article）**：取文章标题、预览正文、封面图（封面本地化嵌入）。⚠️ syndication 不返回长文章全文，全文需登录另抓。Markdown 会标注「预览，全文见原文链接」
+- **X 长文章（Article）**：取文章标题、正文、封面图（封面本地化嵌入）。⚠️ syndication 不返回长文章全文，默认只能拿到开头预览，采集时会有 stderr 明确告警，Markdown 会标注「预览，全文见原文链接」。补全全文两种方式：
+  - `--cookies`（或环境变量 `X_COOKIES`）提供**自己账号**的 `auth_token` + `ct0`（浏览器 DevTools → Application → Cookies 复制），脚本走登录态 GraphQL `TweetResultByRestId` 抓全文。注意：这是 X 内部接口，queryId 随发版轮换，失效时会告警并回退为预览；且需要网络可达 x.com
+  - 网络不可达 x.com（如部分网络环境）时，手动复制正文用 `--fallback-text`
 
 ## ⚠️ 关于可用性
 
