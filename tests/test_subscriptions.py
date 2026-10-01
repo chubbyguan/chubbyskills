@@ -599,6 +599,46 @@ class SubscriptionTest(unittest.TestCase):
             subscription_adapters.fetch_entries(saved["subscriptions"][0], {})
         self.assertEqual(captured.get("user_agent"), "my-reader/1.0")
 
+    def test_process_respects_lock_but_tick_processes_while_holding_it(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        entry_id, _ = store.insert_entry(
+            "example-feed",
+            subscriptions.asdict(self.entry("e1", "Queued episode", 1)),
+            state="queued",
+        )
+        token = store.acquire_lock("tick", seconds=3600)
+        # A manual process is refused while the scheduler lock is held.
+        code, records = subscriptions.process_entries(self.args, self.config)
+        self.assertEqual((code, records), (0, []))
+        # The tick itself still processes while holding that same lock.
+        record = {
+            "run_id": "r1",
+            "status": "success",
+            "output_path": "",
+            "output_paths": [],
+            "error": "",
+            "source": "https://example.com/e1",
+            "source_hash": "h",
+            "skill": "rss",
+            "content_type": "article",
+        }
+        with patch.object(
+            subscriptions.subscription_executor,
+            "execute_entry",
+            return_value=dict(record),
+        ):
+            code, records = subscriptions.process_entries(
+                self.args, self.config, holds_lock=True
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(len(records), 1)
+        row = next(r for r in store.list_entries() if r["id"] == entry_id)
+        self.assertEqual(row["state"], "succeeded")
+        store.release_lock("tick", token)
+
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()
         store = self.store()
