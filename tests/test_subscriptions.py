@@ -1,4 +1,5 @@
 import io
+import http.client
 import json
 import tempfile
 import types
@@ -638,6 +639,47 @@ class SubscriptionTest(unittest.TestCase):
         row = next(r for r in store.list_entries() if r["id"] == entry_id)
         self.assertEqual(row["state"], "succeeded")
         store.release_lock("tick", token)
+
+    def test_truncated_feed_response_maps_to_network_error(self):
+        class Boom:
+            def open(self, request, timeout=20):
+                raise http.client.IncompleteRead(b"partial")
+
+        with patch.object(
+            subscription_adapters.urllib.request, "build_opener", return_value=Boom()
+        ), patch.object(
+            subscription_adapters.socket,
+            "getaddrinfo",
+            return_value=[(None, None, None, None, ("93.184.216.34", 443))],
+        ):
+            with self.assertRaises(subscription_adapters.AdapterError) as ctx:
+                subscription_adapters.fetch_public_feed("https://example.com/feed.xml")
+        self.assertEqual(ctx.exception.code, "network")
+
+    def test_one_broken_source_does_not_abort_the_batch(self):
+        document = self.document()
+        second = dict(document["subscriptions"][0])
+        second["id"] = "healthy-feed"
+        second["config"] = {"feed_url": "https://healthy.example/feed.xml", "format": "rss"}
+        document["subscriptions"].append(second)
+        subscription_store.save_document(self.subscriptions_path, document)
+
+        def flaky(subscription, state):
+            if subscription["id"] == "example-feed":
+                raise RuntimeError("boom")
+            return self.fetched([self.entry("n1", "New", 3)])
+
+        with patch.object(
+            subscriptions.subscription_adapters, "fetch_entries", side_effect=flaky
+        ):
+            code, summaries = subscriptions.sync_subscriptions(
+                self.args, self.config, force=True
+            )
+        self.assertEqual(code, 1)
+        by_id = {item["id"]: item for item in summaries}
+        self.assertEqual(by_id["example-feed"]["status"], "error")
+        self.assertEqual(by_id["example-feed"]["error_code"], "unexpected")
+        self.assertEqual(by_id["healthy-feed"]["status"], "healthy")
 
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()
