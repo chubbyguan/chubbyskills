@@ -34,7 +34,7 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | 写作时找回证据 | 关键词搜索、可选语义检索、原文读取；采集入库后自动更新索引 |
 | 整理一份选题资料 | 导出 Markdown / JSON 资料包，包含原文摘录、行号、来源和文件摘要 |
 | 让 Agent 使用知识库 | 独立技能包，以及提供搜索、原文读取等工具的可选 MCP 服务 |
-| 持续跟踪可靠来源 | P0 订阅公开 RSS / Atom / JSON Feed 与 YouTube 频道；发现、审核、转录与入库分离 |
+| 持续跟踪可靠来源 | 订阅公开 RSS / Atom / JSON Feed、YouTube 频道与用户自带 Provider 输出；发现、审核、转录与入库分离 |
 
 先看[输出样例](./examples/README.md)，或直接运行下面的本地示例。
 
@@ -49,7 +49,7 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | 抖音 / TikTok / 微博 / 知乎 | 测试·重依赖 | 视频转录需 `funasr` + `ffmpeg` |
 | 播客 | 重依赖 | `faster-whisper`，可选云转录 |
 | X / 小红书 | 手动兜底 | 零依赖采集正文，失败可手动补全文 |
-| RSS / YouTube 频道订阅 | P0 | 公开 Feed；默认只发现，需显式开启自动入库 |
+| RSS / YouTube 频道订阅 | P0 + P1 | 公开 Feed；支持 RSSHub / RSS-Bridge BYO 标签，默认只发现 |
 | 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
 
 <a id="安装方式"></a>
@@ -184,7 +184,7 @@ python3 tools/chubby.py subscribe sync --all    # 首次只建立基线
 python3 tools/chubby.py subscribe pending
 ```
 
-定时运行使用 `python3 tools/chubby.py subscribe tick --due --process-limit 3`，交给 macOS launchd 或 Linux cron 每小时触发。P0 仅支持公开 Feed / YouTube 频道；X、小红书、抖音、B站、公众号账号扫描尚未支持。完整命令、调度、失败恢复和安全边界见[订阅与调度](./docs/subscriptions.md)。
+定时运行使用 `python3 tools/chubby.py subscribe tick --due --process-limit 3`，交给 macOS launchd 或 Linux cron 每小时触发。支持用户自带 RSSHub、RSS-Bridge 或其它 Provider 的最终公开 Feed；该标签不会启用平台抓取、认证或代理。X、小红书、抖音、B站、公众号账号扫描尚未支持。完整命令、调度、Provider 边界和失败恢复见[订阅与调度](./docs/subscriptions.md)，真实兼容性标准见[Provider 7 天验收](./docs/subscription-provider-acceptance.md)。
 
 ## 安装到 Agent
 

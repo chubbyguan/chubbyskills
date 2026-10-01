@@ -15,8 +15,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-SCHEMA_VERSION = 1
+CONFIG_SCHEMA_VERSION = 1
+DATABASE_SCHEMA_VERSION = 2
 SOURCE_KINDS = {"feed", "youtube_channel"}
+PROVIDERS = {"native", "rsshub_byo", "rssbridge_byo", "generic_byo"}
 MODES = {"auto_ingest", "discover_only", "disabled"}
 ENTRY_STATES = {
     "seen",
@@ -49,9 +51,13 @@ def parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def default_provider(kind: str) -> str:
+    return "native" if kind == "youtube_channel" else "generic_byo"
+
+
 def default_document() -> dict[str, Any]:
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": CONFIG_SCHEMA_VERSION,
         "defaults": {
             "poll_minutes": 240,
             "max_new_per_sync": 3,
@@ -219,8 +225,10 @@ def validate_document(data: dict[str, Any]) -> dict[str, Any]:
     _unknown_keys(
         data, {"schema_version", "defaults", "subscriptions"}, "subscription config"
     )
-    if data.get("schema_version") != SCHEMA_VERSION:
-        raise SubscriptionError(f"subscription schema_version must be {SCHEMA_VERSION}")
+    if data.get("schema_version") != CONFIG_SCHEMA_VERSION:
+        raise SubscriptionError(
+            f"subscription schema_version must be {CONFIG_SCHEMA_VERSION}"
+        )
     defaults = data.get("defaults")
     if not isinstance(defaults, dict):
         raise SubscriptionError("defaults must be an object")
@@ -258,7 +266,9 @@ def validate_document(data: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(item, dict):
             raise SubscriptionError(f"{label} must be an object")
         _unknown_keys(
-            item, {"id", "name", "kind", "enabled", "mode", "config", "policy"}, label
+            item,
+            {"id", "name", "kind", "provider", "enabled", "mode", "config", "policy"},
+            label,
         )
         item_id = item.get("id")
         if not isinstance(item_id, str) or not ID_RE.fullmatch(item_id):
@@ -275,6 +285,15 @@ def validate_document(data: dict[str, Any]) -> dict[str, Any]:
         if kind not in SOURCE_KINDS:
             raise SubscriptionError(
                 f"{label}.kind must be one of: {', '.join(sorted(SOURCE_KINDS))}"
+            )
+        provider = item.get("provider", default_provider(kind))
+        if provider not in PROVIDERS:
+            raise SubscriptionError(
+                f"{label}.provider must be one of: {', '.join(sorted(PROVIDERS))}"
+            )
+        if kind == "youtube_channel" and provider != "native":
+            raise SubscriptionError(
+                f"{label}.provider must be native for youtube_channel"
             )
         enabled = item.get("enabled", True)
         if not isinstance(enabled, bool):
@@ -313,6 +332,7 @@ def validate_document(data: dict[str, Any]) -> dict[str, Any]:
                 "id": item_id,
                 "name": name.strip(),
                 "kind": kind,
+                "provider": provider,
                 "enabled": enabled,
                 "mode": mode,
                 "config": source_config,
@@ -322,7 +342,7 @@ def validate_document(data: dict[str, Any]) -> dict[str, Any]:
             }
         )
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": CONFIG_SCHEMA_VERSION,
         "defaults": normalized_defaults,
         "subscriptions": normalized,
     }
@@ -339,8 +359,10 @@ def save_document(path: Path, document: dict[str, Any]) -> dict[str, Any]:
 
 
 def config_digest(subscription: dict[str, Any]) -> str:
+    material = dict(subscription)
+    material.pop("provider", None)
     data = json.dumps(
-        subscription, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        material, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
@@ -404,9 +426,9 @@ class SubscriptionStore:
     def migrate(self) -> None:
         with self.connect() as con:
             version = con.execute("PRAGMA user_version").fetchone()[0]
-            if version > SCHEMA_VERSION:
+            if version > DATABASE_SCHEMA_VERSION:
                 raise SubscriptionError(
-                    f"subscription database version {version} is newer than supported {SCHEMA_VERSION}"
+                    f"subscription database version {version} is newer than supported {DATABASE_SCHEMA_VERSION}"
                 )
             if version == 0:
                 con.executescript("""
@@ -477,6 +499,35 @@ class SubscriptionStore:
                 CREATE INDEX entries_source_idx ON entries(subscription_id, published_at DESC);
                 PRAGMA user_version = 1;
                 """)
+                version = 1
+            if version == 1:
+                con.executescript("""
+                CREATE TABLE IF NOT EXISTS source_checks (
+                  id INTEGER PRIMARY KEY,
+                  subscription_id TEXT NOT NULL,
+                  checked_at TEXT NOT NULL,
+                  provider TEXT NOT NULL,
+                  outcome TEXT NOT NULL CHECK(outcome IN ('success', 'unchanged', 'error')),
+                  http_status INTEGER,
+                  entries_parsed INTEGER NOT NULL DEFAULT 0,
+                  new_entries INTEGER NOT NULL DEFAULT 0,
+                  duplicate_entries INTEGER NOT NULL DEFAULT 0,
+                  queued_entries INTEGER NOT NULL DEFAULT 0,
+                  discovered_entries INTEGER NOT NULL DEFAULT 0,
+                  baseline_entries INTEGER NOT NULL DEFAULT 0,
+                  skipped_entries INTEGER NOT NULL DEFAULT 0,
+                  error_code TEXT,
+                  error TEXT
+                );
+                CREATE INDEX IF NOT EXISTS source_checks_source_time_idx
+                  ON source_checks(subscription_id, checked_at DESC);
+                PRAGMA user_version = 2;
+                """)
+                version = 2
+            if version != DATABASE_SCHEMA_VERSION:
+                raise SubscriptionError(
+                    f"subscription database migration stopped at version {version}"
+                )
 
     def ensure_sources(
         self, subscriptions: Iterable[dict[str, Any]], *, now: str | None = None
@@ -633,6 +684,48 @@ class SubscriptionStore:
             con.execute(
                 "UPDATE source_state SET last_checked_at = ?, next_due_at = ?, error_streak = ?, last_error_code = ?, last_error = ? WHERE subscription_id = ?",
                 (stamp.isoformat(), due, streak, code, message[:800], subscription_id),
+            )
+
+    def record_source_check(
+        self,
+        subscription_id: str,
+        *,
+        provider: str,
+        outcome: str,
+        http_status: int | None = None,
+        entries_parsed: int = 0,
+        new_entries: int = 0,
+        duplicate_entries: int = 0,
+        queued_entries: int = 0,
+        discovered_entries: int = 0,
+        baseline_entries: int = 0,
+        skipped_entries: int = 0,
+        error_code: str = "",
+        error: str = "",
+        now: str | None = None,
+    ) -> None:
+        if outcome not in {"success", "unchanged", "error"}:
+            raise SubscriptionError(f"invalid source check outcome: {outcome}")
+        values = (
+            subscription_id,
+            now or now_iso(),
+            provider,
+            outcome,
+            http_status,
+            entries_parsed,
+            new_entries,
+            duplicate_entries,
+            queued_entries,
+            discovered_entries,
+            baseline_entries,
+            skipped_entries,
+            error_code or None,
+            error[:800] or None,
+        )
+        with self.connect() as con:
+            con.execute(
+                "INSERT INTO source_checks(subscription_id, checked_at, provider, outcome, http_status, entries_parsed, new_entries, duplicate_entries, queued_entries, discovered_entries, baseline_entries, skipped_entries, error_code, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                values,
             )
 
     def is_initialized(self, subscription_id: str) -> bool:
@@ -861,6 +954,9 @@ class SubscriptionStore:
         self, subscriptions: Iterable[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         source_map = {source["id"]: source for source in subscriptions}
+        since = (
+            (datetime.now(UTC) - timedelta(days=7)).replace(microsecond=0).isoformat()
+        )
         with self.connect() as con:
             states = {
                 row["subscription_id"]: dict(row)
@@ -872,21 +968,41 @@ class SubscriptionStore:
                     "SELECT subscription_id, COUNT(*) AS count FROM entries WHERE state IN ('queued', 'discovered', 'retry_wait', 'index_retry') GROUP BY subscription_id"
                 ).fetchall()
             }
+            check_counts = {
+                row["subscription_id"]: dict(row)
+                for row in con.execute(
+                    "SELECT subscription_id, COUNT(*) AS checks_7d, SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS error_checks_7d FROM source_checks WHERE checked_at >= ? GROUP BY subscription_id",
+                    (since,),
+                ).fetchall()
+            }
+            latest_checks = {}
+            for row in con.execute(
+                "SELECT * FROM source_checks ORDER BY subscription_id ASC, id DESC"
+            ).fetchall():
+                latest_checks.setdefault(row["subscription_id"], dict(row))
         rows = []
         for item_id, subscription in source_map.items():
             state = states.get(item_id, {})
+            checks = check_counts.get(item_id, {})
+            latest = latest_checks.get(item_id, {})
             rows.append(
                 {
                     "id": item_id,
                     "name": subscription["name"],
                     "kind": subscription["kind"],
+                    "provider": subscription["provider"],
                     "enabled": subscription["enabled"],
                     "mode": subscription["mode"],
                     "pending": counts.get(item_id, 0),
                     "next_due_at": state.get("next_due_at", ""),
                     "last_success_at": state.get("last_success_at", ""),
                     "error_streak": state.get("error_streak", 0),
+                    "last_error_code": state.get("last_error_code", ""),
                     "last_error": state.get("last_error", ""),
+                    "checks_7d": int(checks.get("checks_7d", 0)),
+                    "error_checks_7d": int(checks.get("error_checks_7d", 0)),
+                    "last_check_outcome": latest.get("outcome", ""),
+                    "last_http_status": latest.get("http_status"),
                 }
             )
         return rows

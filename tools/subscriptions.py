@@ -21,6 +21,35 @@ class SubscribeCommandError(RuntimeError):
     pass
 
 
+PROVIDER_ERROR_ACTIONS = {
+    "http_401": "检查 Provider 是否公开最终 Feed；不要向 Chubby 写入凭据。",
+    "http_403": "检查 Provider 访问控制或上游风控；Chubby 不会抓取源站网页。",
+    "http_404": "最终 Feed URL 已失效；更新 Provider route 后再 resume。",
+    "http_429": "Provider 限流；等待退避并降低上游刷新频率。",
+    "http_5xx": "Provider 或上游暂时异常；等待恢复后重试。",
+    "parse": "Provider 输出不再是受支持 Feed；修复 Provider 模板。",
+    "body_too_large": "Provider 输出超过限制；改用分页或精简 Feed。",
+}
+PAUSE_ERROR_CODES = {
+    "http_401",
+    "http_403",
+    "http_404",
+    "http_4xx",
+    "invalid_config",
+    "parse",
+    "unsafe_url",
+    "invalid_url",
+    "body_too_large",
+    "redirect_limit",
+}
+
+
+def provider_error_action(code: str) -> str:
+    return PROVIDER_ERROR_ACTIONS.get(
+        code, "检查最终 Feed URL 与 Provider 日志；不要回退抓取源站。"
+    )
+
+
 def _chubby():
     try:
         from tools import chubby
@@ -116,13 +145,19 @@ def _sync_one(
     lease = store.acquire_source_lease(subscription["id"])
     summary = {
         "id": subscription["id"],
+        "provider": subscription["provider"],
         "status": "skipped",
+        "parsed": 0,
         "new": 0,
+        "duplicates": 0,
         "queued": 0,
         "discovered": 0,
         "skipped": 0,
         "baseline": 0,
         "unchanged": 0,
+        "http_status": None,
+        "error_code": "",
+        "error_action": "",
         "error": "",
     }
     if not lease:
@@ -130,6 +165,7 @@ def _sync_one(
         return summary
     try:
         result, found = subscription_adapters.fetch_entries(subscription, state)
+        summary["http_status"] = result.status_code
         if result.not_modified:
             if not dry_run:
                 store.mark_source_success(
@@ -138,8 +174,15 @@ def _sync_one(
                     last_modified=result.last_modified,
                     not_modified=True,
                 )
+                store.record_source_check(
+                    subscription["id"],
+                    provider=subscription["provider"],
+                    outcome="unchanged",
+                    http_status=result.status_code,
+                )
             summary.update(status="unchanged", unchanged=1)
             return summary
+        summary["parsed"] = len(found)
         first_sync = not bool(state.get("initialized_at"))
         queue_budget = (
             backfill
@@ -151,6 +194,7 @@ def _sync_one(
             [_entry_from_adapter(item, subscription) for item in found]
         ):
             if store.has_entry(subscription["id"], entry):
+                summary["duplicates"] += 1
                 continue
             if (
                 first_sync
@@ -194,19 +238,45 @@ def _sync_one(
             store.mark_source_success(
                 subscription, etag=result.etag, last_modified=result.last_modified
             )
+            store.record_source_check(
+                subscription["id"],
+                provider=subscription["provider"],
+                outcome="success",
+                http_status=result.status_code,
+                entries_parsed=summary["parsed"],
+                new_entries=summary["new"],
+                duplicate_entries=summary["duplicates"],
+                queued_entries=summary["queued"],
+                discovered_entries=summary["discovered"],
+                baseline_entries=summary["baseline"],
+                skipped_entries=summary["skipped"],
+            )
         summary["status"] = "healthy"
         return summary
     except subscription_adapters.AdapterError as exc:
+        summary.update(
+            status="error",
+            http_status=exc.http_status,
+            error_code=exc.code,
+            error_action=provider_error_action(exc.code),
+            error=f"{exc.code}: {exc}",
+        )
         if not dry_run:
             store.mark_source_error(
                 subscription["id"],
                 exc.code,
                 str(exc),
                 retry_after=exc.retry_after,
-                pause=exc.code
-                in {"auth", "invalid_config", "parse", "unsafe_url", "invalid_url"},
+                pause=exc.code in PAUSE_ERROR_CODES,
             )
-        summary.update(status="error", error=f"{exc.code}: {exc}")
+            store.record_source_check(
+                subscription["id"],
+                provider=subscription["provider"],
+                outcome="error",
+                http_status=exc.http_status,
+                error_code=exc.code,
+                error=str(exc),
+            )
         return summary
     finally:
         store.release_source_lease(subscription["id"], lease)
@@ -239,16 +309,30 @@ def sync_subscriptions(
     )
     if summaries:
         _print_table(
-            ["id", "status", "new", "queued", "discovered", "baseline", "error"],
+            [
+                "id",
+                "provider",
+                "status",
+                "parsed",
+                "new",
+                "duplicates",
+                "queued",
+                "discovered",
+                "error code",
+                "action",
+            ],
             [
                 [
                     item["id"],
+                    item["provider"],
                     item["status"],
+                    item["parsed"],
                     item["new"],
+                    item["duplicates"],
                     item["queued"],
                     item["discovered"],
-                    item["baseline"],
-                    item["error"],
+                    item["error_code"],
+                    item["error_action"] or item["error"],
                 ]
                 for item in summaries
             ],
@@ -297,6 +381,7 @@ def process_entries(
         )
         record["subscription_id"] = subscription["id"]
         record["subscription_entry_id"] = entry["id"]
+        record["subscription_provider"] = subscription["provider"]
         chubby.append_record(config, record)
         records.append(record)
         if record.get("status") == "success" and record.get("index_status") != "failed":
@@ -345,6 +430,7 @@ def _add(args: Any, config: dict[str, Any]) -> int:
         "id": args.id,
         "name": args.name,
         "kind": kind,
+        "provider": args.provider or subscription_store.default_provider(kind),
         "enabled": True,
         "mode": args.mode or document["defaults"]["mode"],
         "config": source_config,
@@ -360,7 +446,7 @@ def _add(args: Any, config: dict[str, Any]) -> int:
     document["subscriptions"].append(item)
     subscription_store.save_document(path, document)
     print(
-        f"✅ 已添加订阅：{args.id}（默认 {item['mode']}，首次 {'回填' if args.backfill else '只建立基线'}）"
+        f"✅ 已添加订阅：{args.id}（provider={item['provider']}，默认 {item['mode']}，首次 {'回填' if args.backfill else '只建立基线'}）"
     )
     return 0
 
@@ -400,12 +486,13 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         if action == "list":
             _, document, _ = _context(args, config)
             _print_table(
-                ["id", "name", "kind", "enabled", "mode", "poll(min)"],
+                ["id", "name", "kind", "provider", "enabled", "mode", "poll(min)"],
                 [
                     [
                         item["id"],
                         item["name"],
                         item["kind"],
+                        item["provider"],
                         item["enabled"],
                         item["mode"],
                         item["policy"]["poll_minutes"],
@@ -417,28 +504,40 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         if action == "status":
             _, document, store = _context(args, config)
             rows = store.status_rows(document["subscriptions"])
+            for row in rows:
+                row["error_action"] = (
+                    provider_error_action(row["last_error_code"])
+                    if row["last_error_code"]
+                    else ""
+                )
             if getattr(args, "json", False):
                 print(json.dumps(rows, ensure_ascii=False, indent=2))
             else:
                 _print_table(
                     [
                         "id",
+                        "provider",
                         "enabled",
                         "mode",
                         "pending",
+                        "checks(7d)",
                         "next due",
                         "streak",
-                        "last error",
+                        "error code",
+                        "action",
                     ],
                     [
                         [
                             row["id"],
+                            row["provider"],
                             row["enabled"],
                             row["mode"],
                             row["pending"],
+                            f"{row['checks_7d']}/{row['error_checks_7d']}",
                             row["next_due_at"],
                             row["error_streak"],
-                            row["last_error"],
+                            row["last_error_code"],
+                            row["error_action"],
                         ]
                         for row in rows
                     ],
@@ -452,10 +551,16 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
             )
             if not subscription:
                 raise SubscribeCommandError(f"subscription not found: {args.id}")
-            result, items = subscription_adapters.fetch_entries(
-                subscription, store.state_for(subscription["id"])
-            )
+            try:
+                result, items = subscription_adapters.fetch_entries(
+                    subscription, store.state_for(subscription["id"])
+                )
+            except subscription_adapters.AdapterError as exc:
+                print(f"❌ Provider 测试失败：{exc.code}: {exc}", file=sys.stderr)
+                print(f"处理建议：{provider_error_action(exc.code)}", file=sys.stderr)
+                return 1
             print(f"✅ HTTP {result.status_code}; parsed {len(items)} entries")
+            print(f"Provider：{subscription['provider']}")
             _print_table(
                 ["title", "url", "published", "enclosure"],
                 [

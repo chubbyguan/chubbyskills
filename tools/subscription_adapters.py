@@ -35,10 +35,18 @@ FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 class AdapterError(RuntimeError):
     """A source fetch or parsing failure with a stable machine-readable code."""
 
-    def __init__(self, code: str, message: str, *, retry_after: int | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retry_after: int | None = None,
+        http_status: int | None = None,
+    ):
         super().__init__(message)
         self.code = code
         self.retry_after = retry_after
+        self.http_status = http_status
 
 
 @dataclass(frozen=True)
@@ -142,6 +150,20 @@ def _validate_public_https(url: str) -> urllib.parse.SplitResult:
     return parsed
 
 
+def classify_http_error(status: int) -> tuple[str, bool]:
+    """Return the stable code and whether the source needs manual repair."""
+
+    if status in {401, 403, 404}:
+        return f"http_{status}", True
+    if status == 429:
+        return "http_429", False
+    if 500 <= status <= 599:
+        return "http_5xx", False
+    if 400 <= status <= 499:
+        return "http_4xx", True
+    return "http", False
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -202,18 +224,12 @@ def fetch_public_feed(
                 retry_after = max(0, int(exc.headers.get("Retry-After", "")))
             except ValueError:
                 retry_after = None
-            if exc.code in {401, 403}:
-                raise AdapterError(
-                    "auth", f"feed request returned HTTP {exc.code}"
-                ) from exc
-            if exc.code == 429 or exc.code >= 500:
-                raise AdapterError(
-                    "transient_http",
-                    f"feed request returned HTTP {exc.code}",
-                    retry_after=retry_after,
-                ) from exc
+            error_code, _ = classify_http_error(exc.code)
             raise AdapterError(
-                "http", f"feed request returned HTTP {exc.code}"
+                error_code,
+                f"feed request returned HTTP {exc.code}",
+                retry_after=retry_after,
+                http_status=exc.code,
             ) from exc
         except AdapterError:
             raise
