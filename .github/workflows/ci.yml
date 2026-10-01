@@ -28,6 +28,12 @@ jobs:
       - name: Install test and MCP dependencies
         run: python -m pip install -r requirements-dev.txt -r knowledge-base-management/requirements-mcp.txt
 
+      - name: Editable install exposes the chubby CLI
+        run: |
+          python -m pip install -e .
+          chubby --version
+          chubby --help
+
       - name: Python syntax check
         run: |
           find . -name "*.py" -type f -not -path "./.git/*" -not -path "./.venv/*" -print0 \

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chubbyskills"
+dynamic = ["version"]
+description = "Ingest Chinese platform content into a personal knowledge base: 14 agent skills plus a CLI for capture, indexing, search and source briefs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["agent-skills", "knowledge-base", "transcription", "mcp"]
+
+# Core CLI is standard-library only. Platform capabilities opt into extras.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["PyYAML>=6,<7", "ruff>=0.12,<1"]
+video = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
+podcast = ["faster-whisper>=0.10.0"]
+wechat = ["beautifulsoup4>=4.12.0", "markitdown>=0.0.1", "pymupdf>=1.23.0"]
+
+[project.scripts]
+chubby = "tools.chubby:main"
+
+[project.urls]
+Homepage = "https://github.com/chubbyguan/chubbyskills"
+Issues = "https://github.com/chubbyguan/chubbyskills/issues"
+Changelog = "https://github.com/chubbyguan/chubbyskills/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["tools", "chubby_common"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
