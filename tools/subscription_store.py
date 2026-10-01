@@ -16,9 +16,12 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 CONFIG_SCHEMA_VERSION = 1
-DATABASE_SCHEMA_VERSION = 2
+DATABASE_SCHEMA_VERSION = 3
 SOURCE_KINDS = {"feed", "youtube_channel"}
 PROVIDERS = {"native", "rsshub_byo", "rssbridge_byo", "generic_byo"}
+# Claims are liveness-based: a worker heartbeats while transcribing, so the
+# stale threshold only fires after a real crash, not a long transcription.
+CLAIM_STALE_SECONDS = 6 * 3600
 MODES = {"auto_ingest", "discover_only", "disabled"}
 ENTRY_STATES = {
     "seen",
@@ -49,6 +52,14 @@ def now_iso() -> str:
 
 def parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def jitter_seconds(seed: str, span_seconds: int) -> int:
+    """Deterministic per-source jitter in [0, span_seconds], anti-thundering-herd."""
+    if span_seconds <= 0:
+        return 0
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % (span_seconds + 1)
 
 
 def default_provider(kind: str) -> str:
@@ -184,6 +195,7 @@ def _validate_policy(
             "exclude_title_regex",
             "content_profile",
             "initial_sync",
+            "user_agent",
         },
         f"{label}.policy",
     )
@@ -218,6 +230,12 @@ def _validate_policy(
             f"{label}.policy.initial_sync must be from_now or backfill"
         )
     result["initial_sync"] = initial_sync
+    user_agent = result.get("user_agent", "")
+    if user_agent is None:
+        user_agent = ""
+    if not isinstance(user_agent, str) or len(user_agent.strip()) > 200:
+        raise SubscriptionError(f"{label}.policy.user_agent must be a string up to 200 characters")
+    result["user_agent"] = user_agent.strip()
     return result
 
 
@@ -360,7 +378,13 @@ def save_document(path: Path, document: dict[str, Any]) -> dict[str, Any]:
 
 def config_digest(subscription: dict[str, Any]) -> str:
     material = dict(subscription)
+    # Provider provenance and the optional user_agent default do not change
+    # content identity; upgrading must not reset existing cursors.
     material.pop("provider", None)
+    policy = dict(material.get("policy") or {})
+    if not policy.get("user_agent"):
+        policy.pop("user_agent", None)
+    material["policy"] = policy
     data = json.dumps(
         material, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
@@ -475,6 +499,8 @@ class SubscriptionStore:
                   output_path TEXT,
                   last_error_code TEXT,
                   last_error TEXT,
+                  claim_token TEXT,
+                  heartbeat_at TEXT,
                   UNIQUE(subscription_id, entry_key)
                 );
                 CREATE TABLE entry_attempts (
@@ -524,6 +550,17 @@ class SubscriptionStore:
                 PRAGMA user_version = 2;
                 """)
                 version = 2
+            if version == 2:
+                columns = {
+                    row["name"]
+                    for row in con.execute("PRAGMA table_info(entries)").fetchall()
+                }
+                if "claim_token" not in columns:
+                    con.execute("ALTER TABLE entries ADD COLUMN claim_token TEXT")
+                if "heartbeat_at" not in columns:
+                    con.execute("ALTER TABLE entries ADD COLUMN heartbeat_at TEXT")
+                con.execute("PRAGMA user_version = 3")
+                version = 3
             if version != DATABASE_SCHEMA_VERSION:
                 raise SubscriptionError(
                     f"subscription database migration stopped at version {version}"
@@ -537,6 +574,16 @@ class SubscriptionStore:
             for subscription in subscriptions:
                 item_id = subscription["id"]
                 digest = config_digest(subscription)
+                # Spread first syncs per source; a fresh batch of subscriptions
+                # must not fire at the same second.
+                first_due = (
+                    parse_iso(stamp)
+                    + timedelta(
+                        seconds=jitter_seconds(
+                            item_id, subscription["policy"]["poll_minutes"] * 60
+                        )
+                    )
+                ).isoformat()
                 row = con.execute(
                     "SELECT config_hash FROM source_state WHERE subscription_id = ?",
                     (item_id,),
@@ -544,12 +591,12 @@ class SubscriptionStore:
                 if row is None:
                     con.execute(
                         "INSERT INTO source_state (subscription_id, config_hash, next_due_at) VALUES (?, ?, ?)",
-                        (item_id, digest, stamp),
+                        (item_id, digest, first_due),
                     )
                 elif row["config_hash"] != digest:
                     con.execute(
                         "UPDATE source_state SET config_hash = ?, next_due_at = ?, etag = NULL, last_modified = NULL, error_streak = 0, last_error_code = NULL, last_error = NULL WHERE subscription_id = ?",
-                        (digest, stamp, item_id),
+                        (digest, first_due, item_id),
                     )
 
     def state_for(self, subscription_id: str) -> dict[str, Any]:
@@ -641,8 +688,13 @@ class SubscriptionStore:
         now: str | None = None,
     ) -> None:
         stamp = parse_iso(now or now_iso())
+        poll_seconds = subscription["policy"]["poll_minutes"] * 60
         due = (
-            stamp + timedelta(minutes=subscription["policy"]["poll_minutes"])
+            stamp
+            + timedelta(
+                seconds=poll_seconds
+                + jitter_seconds(subscription["id"], poll_seconds // 10)
+            )
         ).isoformat()
         with self.connect() as con:
             con.execute(
@@ -680,6 +732,8 @@ class SubscriptionStore:
                 delay_seconds = max(delay_seconds, retry_after)
             if pause:
                 delay_seconds = 365 * 24 * 3600
+            else:
+                delay_seconds += jitter_seconds(subscription_id, delay_seconds // 10)
             due = (stamp + timedelta(seconds=delay_seconds)).isoformat()
             con.execute(
                 "UPDATE source_state SET last_checked_at = ?, next_due_at = ?, error_streak = ?, last_error_code = ?, last_error = ? WHERE subscription_id = ?",
@@ -820,13 +874,23 @@ class SubscriptionStore:
 
     def reclaim_expired_claims(self, *, now: str | None = None) -> int:
         stamp = parse_iso(now or now_iso())
-        stale_before = (stamp - timedelta(minutes=10)).isoformat()
+        stale_before = (stamp - timedelta(seconds=CLAIM_STALE_SECONDS)).isoformat()
         with self.connect() as con:
             con.execute(
-                "UPDATE entries SET state='retry_wait', next_retry_at=?, last_error_code='lease_expired', last_error='previous entry claim expired' WHERE state='ingesting' AND claimed_at < ?",
+                "UPDATE entries SET state='retry_wait', next_retry_at=?, last_error_code='lease_expired', last_error='previous entry claim expired' WHERE state='ingesting' AND COALESCE(heartbeat_at, claimed_at) < ?",
                 (stamp.isoformat(), stale_before),
             )
             return con.execute("SELECT changes()").fetchone()[0]
+
+    def heartbeat(self, entry_id: int, token: str, *, now: str | None = None) -> bool:
+        if not token:
+            return False
+        with self.connect() as con:
+            con.execute(
+                "UPDATE entries SET heartbeat_at=? WHERE id=? AND claim_token=? AND state='ingesting'",
+                (now or now_iso(), entry_id, token),
+            )
+            return con.execute("SELECT changes()").fetchone()[0] == 1
 
     def claim_entries(
         self,
@@ -857,9 +921,10 @@ class SubscriptionStore:
             claimed = []
             for row in rows:
                 attempt = int(row["attempt_count"]) + 1
+                token = uuid.uuid4().hex
                 con.execute(
-                    "UPDATE entries SET state='ingesting', claimed_at=?, attempt_count=? WHERE id=? AND state IN ('queued','retry_wait','index_retry')",
-                    (stamp, attempt, row["id"]),
+                    "UPDATE entries SET state='ingesting', claimed_at=?, heartbeat_at=?, claim_token=?, attempt_count=? WHERE id=? AND state IN ('queued','retry_wait','index_retry')",
+                    (stamp, stamp, token, attempt, row["id"]),
                 )
                 if con.execute("SELECT changes()").fetchone()[0]:
                     con.execute(
@@ -869,6 +934,7 @@ class SubscriptionStore:
                     updated = dict(row)
                     updated["attempt_count"] = attempt
                     updated["state_before_claim"] = row["state"]
+                    updated["claim_token"] = token
                     claimed.append(updated)
         return claimed
 
@@ -903,7 +969,7 @@ class SubscriptionStore:
                     stamp + timedelta(minutes=15 * (2 ** (attempts - 1)))
                 ).isoformat()
             con.execute(
-                "UPDATE entries SET state=?, completed_at=?, next_retry_at=?, last_run_id=?, output_path=COALESCE(NULLIF(?, ''), output_path), last_error_code=?, last_error=? WHERE id=?",
+                "UPDATE entries SET state=?, completed_at=?, next_retry_at=?, last_run_id=?, output_path=COALESCE(NULLIF(?, ''), output_path), last_error_code=?, last_error=?, claim_token=NULL, heartbeat_at=NULL WHERE id=?",
                 (
                     state,
                     stamp.isoformat()

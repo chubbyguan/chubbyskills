@@ -199,7 +199,11 @@ class SubscriptionTest(unittest.TestCase):
         store.ensure_sources([changed], now="2026-10-01T02:00:00+00:00")
         state = store.state_for(subscription["id"])
         self.assertEqual(state["etag"], '"cursor"')
-        self.assertEqual(state["next_due_at"], "2026-10-01T02:00:00+00:00")
+        # next_due carries deterministic jitter within 10% of the poll interval.
+        due = subscription_store.parse_iso(state["next_due_at"])
+        base = subscription_store.parse_iso("2026-10-01T01:00:00+00:00")
+        self.assertLessEqual(3600, (due - base).total_seconds())
+        self.assertGreaterEqual(3600 * 1.1, (due - base).total_seconds())
 
     def test_classifies_provider_http_errors(self):
         cases = {
@@ -467,6 +471,9 @@ class SubscriptionTest(unittest.TestCase):
                   lease_token TEXT,
                   lease_expires_at TEXT
                 );
+                CREATE TABLE entries (
+                  id INTEGER PRIMARY KEY
+                );
                 INSERT INTO source_state(subscription_id, config_hash, next_due_at, etag)
                   VALUES ('legacy', 'hash', '2026-10-01T00:00:00+00:00', '"old"');
                 PRAGMA user_version = 1;
@@ -481,14 +488,116 @@ class SubscriptionTest(unittest.TestCase):
             checks_table = con.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='source_checks'"
             ).fetchone()
-        self.assertEqual(version, 2)
+        self.assertEqual(version, subscription_store.DATABASE_SCHEMA_VERSION)
         self.assertEqual(legacy["etag"], '"old"')
         self.assertIsNotNone(checks_table)
         with store.connect() as con:
             con.execute("PRAGMA user_version = 1")
         store.migrate()
         with store.connect() as con:
-            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(
+                con.execute("PRAGMA user_version").fetchone()[0],
+                subscription_store.DATABASE_SCHEMA_VERSION,
+            )
+            columns = {
+                row["name"]
+                for row in con.execute("PRAGMA table_info(entries)").fetchall()
+            }
+        self.assertIn("claim_token", columns)
+        self.assertIn("heartbeat_at", columns)
+
+    def test_heartbeat_keeps_claim_alive_and_stale_claim_is_reclaimed(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        entry_id, _ = store.insert_entry(
+            "example-feed",
+            subscriptions.asdict(self.entry("e1", "Long episode", 1)),
+            state="queued",
+        )
+        claimed = store.claim_entries(1, now="2026-10-01T00:00:00+00:00")
+        token = claimed[0]["claim_token"]
+        self.assertTrue(token)
+
+        store.heartbeat(entry_id, token, now="2026-10-01T01:00:00+00:00")
+        # A long transcription with heartbeats is never reclaimed.
+        self.assertEqual(
+            store.reclaim_expired_claims(now="2026-10-01T05:00:00+00:00"), 0
+        )
+        # A crashed worker stops heartbeating and is reclaimed after the threshold.
+        self.assertEqual(
+            store.reclaim_expired_claims(now="2026-10-01T07:01:00+00:00"), 1
+        )
+        row = next(r for r in store.list_entries() if r["id"] == entry_id)
+        self.assertEqual(row["state"], "retry_wait")
+        # Finishing clears the claim token and heartbeat.
+        store.finish_entry(entry_id, outcome="succeeded")
+        self.assertFalse(store.heartbeat(entry_id, token))
+
+    def test_jitter_spreads_due_times_deterministically(self):
+        document = self.document()
+        second = dict(document["subscriptions"][0])
+        second["id"] = "other-feed"
+        second["config"] = {"feed_url": "https://other.example/feed.xml", "format": "rss"}
+        document["subscriptions"].append(second)
+        saved = subscription_store.save_document(self.subscriptions_path, document)
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(saved["subscriptions"], now="2026-10-01T00:00:00+00:00")
+        first_due = subscription_store.parse_iso(store.state_for("example-feed")["next_due_at"])
+        second_due = subscription_store.parse_iso(store.state_for("other-feed")["next_due_at"])
+        self.assertNotEqual(first_due, second_due)
+        base = subscription_store.parse_iso("2026-10-01T00:00:00+00:00")
+        for due in (first_due, second_due):
+            self.assertLessEqual(0, (due - base).total_seconds())
+            self.assertGreaterEqual(3600, (due - base).total_seconds())
+        # Re-ensuring with the same config keeps the original schedule.
+        store.ensure_sources(saved["subscriptions"], now="2026-10-01T00:05:00+00:00")
+        self.assertEqual(store.state_for("example-feed")["next_due_at"], first_due.isoformat())
+
+    def test_resolve_youtube_channel_id(self):
+        html = b'<html><script>{"channelId":"UCYO_jab_esuFRV4b17AJtAw"}</script></html>'
+        result = subscription_adapters.FetchResult(
+            200, html, "", "", "https://www.youtube.com/@3blue1brown"
+        )
+        with patch.object(
+            subscription_adapters, "fetch_public_feed", return_value=result
+        ):
+            self.assertEqual(
+                subscription_adapters.resolve_youtube_channel_id("@3blue1brown"),
+                "UCYO_jab_esuFRV4b17AJtAw",
+            )
+        self.assertEqual(
+            subscription_adapters.resolve_youtube_channel_id("UCYO_jab_esuFRV4b17AJtAw"),
+            "UCYO_jab_esuFRV4b17AJtAw",
+        )
+        with self.assertRaises(subscription_adapters.AdapterError):
+            subscription_adapters.resolve_youtube_channel_id("not-a-channel")
+        empty = subscription_adapters.FetchResult(
+            200, b"<html>no id here</html>", "", "", "https://www.youtube.com/@x"
+        )
+        with patch.object(
+            subscription_adapters, "fetch_public_feed", return_value=empty
+        ):
+            with self.assertRaises(subscription_adapters.AdapterError):
+                subscription_adapters.resolve_youtube_channel_id("@x")
+
+    def test_user_agent_override_is_forwarded_to_fetch(self):
+        document = self.document()
+        document["subscriptions"][0]["policy"]["user_agent"] = "my-reader/1.0"
+        saved = subscription_store.save_document(self.subscriptions_path, document)
+        captured = {}
+
+        def fake_fetch(url, **kwargs):
+            captured.update(kwargs)
+            return subscription_adapters.FetchResult(200, RSS_FIXTURE, "", "", url)
+
+        with patch.object(
+            subscription_adapters, "fetch_public_feed", side_effect=fake_fetch
+        ):
+            subscription_adapters.fetch_entries(saved["subscriptions"][0], {})
+        self.assertEqual(captured.get("user_agent"), "my-reader/1.0")
 
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()

@@ -9,6 +9,7 @@ from __future__ import annotations
 import email.utils
 import ipaddress
 import json
+import re
 import socket
 import ssl
 import sys
@@ -172,7 +173,13 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def fetch_public_feed(
-    url: str, *, etag: str = "", last_modified: str = "", timeout: int = 20
+    url: str,
+    *,
+    etag: str = "",
+    last_modified: str = "",
+    timeout: int = 20,
+    user_agent: str = "",
+    max_bytes: int = MAX_BODY_BYTES,
 ) -> FetchResult:
     """Fetch one public feed with conditional headers and validated redirects."""
 
@@ -183,7 +190,7 @@ def fetch_public_feed(
     for _ in range(MAX_REDIRECTS + 1):
         _validate_public_https(current_url)
         headers = {
-            "User-Agent": USER_AGENT,
+            "User-Agent": user_agent or USER_AGENT,
             "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/json, text/xml, application/xml;q=0.9, */*;q=0.1",
         }
         if etag:
@@ -194,10 +201,10 @@ def fetch_public_feed(
         try:
             response = opener.open(request, timeout=timeout)
             try:
-                body = response.read(MAX_BODY_BYTES + 1)
-                if len(body) > MAX_BODY_BYTES:
+                body = response.read(max_bytes + 1)
+                if len(body) > max_bytes:
                     raise AdapterError(
-                        "body_too_large", f"feed exceeds {MAX_BODY_BYTES} bytes"
+                        "body_too_large", f"feed exceeds {max_bytes} bytes"
                     )
                 status = getattr(response, "status", 200)
                 return FetchResult(
@@ -245,6 +252,38 @@ def youtube_feed_url(channel_id: str) -> str:
     if not channel or any(char.isspace() for char in channel):
         raise AdapterError("invalid_config", "youtube channel_id is required")
     return f"https://www.youtube.com/feeds/videos.xml?channel_id={urllib.parse.quote(channel, safe='_-')}"
+
+
+CHANNEL_ID_RE = re.compile(r"UC[A-Za-z0-9_-]{22}")
+
+
+def resolve_youtube_channel_id(value: str) -> str:
+    """Resolve a channel_id from a raw UC id, @handle, or channel page URL."""
+    raw = (value or "").strip()
+    if CHANNEL_ID_RE.fullmatch(raw):
+        return raw
+    if raw.startswith("@"):
+        url = f"https://www.youtube.com/{raw}"
+    elif "youtube.com" in raw or "youtu.be" in raw:
+        url = raw if raw.startswith("http") else "https://" + raw
+    else:
+        raise AdapterError(
+            "invalid_config",
+            "unrecognized YouTube channel: pass a channel_id, @handle or channel URL",
+        )
+    # Channel pages are heavier than feeds; the id appears early in the HTML.
+    result = fetch_public_feed(url, max_bytes=8 * 1024 * 1024)
+    text = result.body.decode("utf-8", "replace")
+    for pattern in (
+        r'"channelId"\s*:\s*"(UC[A-Za-z0-9_-]{22})"',
+        r'rel="canonical" href="https://www\.youtube\.com/channel/(UC[A-Za-z0-9_-]{22})"',
+    ):
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    raise AdapterError(
+        "parse", "no channel_id found in the page (not a channel page?)"
+    )
 
 
 def _entry_from_json(item: dict[str, Any]) -> DiscoveredEntry:
@@ -397,7 +436,10 @@ def fetch_entries(
             "invalid_config", f"unsupported P0 subscription kind: {kind}"
         )
     result = fetch_public_feed(
-        url, etag=state.get("etag", ""), last_modified=state.get("last_modified", "")
+        url,
+        etag=state.get("etag", ""),
+        last_modified=state.get("last_modified", ""),
+        user_agent=(subscription.get("policy") or {}).get("user_agent", ""),
     )
     return result, [] if result.not_modified else parse_feed(
         result.body, declared_format=declared_format
