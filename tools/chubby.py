@@ -680,9 +680,20 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
                     validation_errors.append(f"expected Markdown output: {output_path}")
                     continue
                 try:
-                    if not path.is_file():
-                        validation_errors.append(f"missing output file: {output_path}")
-                        continue
+                    # stat() surfaces invalid filenames (e.g. over the
+                    # filesystem's name limit) instead of reporting them
+                    # as merely "missing" — is_file() swallows OSError.
+                    path.stat()
+                except FileNotFoundError:
+                    validation_errors.append(f"missing output file: {output_path}")
+                    continue
+                except OSError as exc:
+                    validation_errors.append(f"cannot validate output {output_path}: {exc}")
+                    continue
+                if not path.is_file():
+                    validation_errors.append(f"missing output file: {output_path}")
+                    continue
+                try:
                     item = dict(record, output_path=output_path)
                     if stamp_pipeline_metadata(item):
                         record["stamped_paths"].append(output_path)
