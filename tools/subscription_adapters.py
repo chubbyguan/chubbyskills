@@ -7,6 +7,7 @@ The module never writes state or starts ingestion; callers own policy and queues
 from __future__ import annotations
 
 import email.utils
+import http.client
 import ipaddress
 import json
 import re
@@ -244,6 +245,9 @@ def fetch_public_feed(
             raise
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise AdapterError("network", f"feed request failed: {exc}") from exc
+        except (http.client.HTTPException, ConnectionError) as exc:
+            # Truncated chunked bodies surface as IncompleteRead, not URLError.
+            raise AdapterError("network", f"feed response failed: {exc}") from exc
     raise AdapterError("redirect_limit", f"feed exceeded {MAX_REDIRECTS} redirects")
 
 

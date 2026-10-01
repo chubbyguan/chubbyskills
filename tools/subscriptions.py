@@ -293,6 +293,24 @@ def _sync_one(
                 error=str(exc),
             )
         return summary
+    except Exception as exc:  # noqa: BLE001
+        # One source must never abort the batch: record and move on.
+        summary.update(
+            status="error",
+            error_code="unexpected",
+            error_action=provider_error_action("unexpected"),
+            error=f"unexpected: {exc}",
+        )
+        if not dry_run:
+            store.mark_source_error(subscription["id"], "unexpected", str(exc))
+            store.record_source_check(
+                subscription["id"],
+                provider=subscription["provider"],
+                outcome="error",
+                error_code="unexpected",
+                error=str(exc),
+            )
+        return summary
     finally:
         store.release_source_lease(subscription["id"], lease)
 
