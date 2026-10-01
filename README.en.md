@@ -30,7 +30,7 @@ Your library stays in ordinary Markdown files. The repository provides import, p
 | A growing Markdown library | Local keyword search and lightweight semantic retrieval |
 | A writing or research question | A Markdown/JSON brief with exact excerpts, source links, line numbers, and file hashes |
 | An agent that supports skills or MCP | Reusable workflows and direct access to your own source material |
-| Public feeds and YouTube channels | P0 subscription discovery, review queue, controlled transcription, and Markdown ingestion |
+| Public feeds, YouTube channels, and BYO Provider output | Subscription discovery, review queue, controlled transcription, and Markdown ingestion |
 
 **New in [v0.13.0](./docs/release-0.13.0.md):** unified local document import, experimental Atlas/MuAPI podcast transcription with saved task recovery, and portable installation bundles for the new tools.
 
@@ -47,7 +47,7 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 | Douyin / TikTok / Weibo / Zhihu | Beta, heavy deps | Video transcription needs `funasr` + `ffmpeg` |
 | Podcasts | Heavy deps | `faster-whisper`, optional cloud transcription |
 | X / Xiaohongshu | Manual fallback | Zero-dependency capture, manual text fallback |
-| RSS / YouTube channel subscriptions | P0 | Public feeds; discovery-only is the safe default |
+| RSS / YouTube channel subscriptions | P0 + P1 | Public feeds; BYO RSSHub/RSS-Bridge provenance labels; discovery-only is the safe default |
 | Local documents | Stable | Zero dependency, Markdown/TXT/PDF text layer |
 
 ## Try the local workflow
@@ -172,7 +172,7 @@ python3 tools/chubby.py subscribe sync --all
 python3 tools/chubby.py subscribe pending
 ```
 
-Schedule `python3 tools/chubby.py subscribe tick --due --process-limit 3` through launchd or cron. P0 accepts public RSS / Atom / JSON feeds and official YouTube channel feeds. It does not claim unattended account scanning for X, Xiaohongshu, Douyin, Bilibili, or WeChat. See [subscription and scheduling (Chinese)](./docs/subscriptions.md) for commands, recovery behavior, and safety limits.
+Schedule `python3 tools/chubby.py subscribe tick --due --process-limit 3` through launchd or cron. The workflow consumes public RSS / Atom / JSON feeds and official YouTube channel feeds, including final public output from a user-managed RSSHub, RSS-Bridge, or another provider. A Provider label never enables platform crawling, authentication, or proxying. It does not claim unattended account scanning for X, Xiaohongshu, Douyin, Bilibili, or WeChat. See [subscription and scheduling (Chinese)](./docs/subscriptions.md) and the [7-day Provider acceptance](./docs/subscription-provider-acceptance.md) guide.
 
 ## Install skills for your agent
 

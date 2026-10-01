@@ -1,6 +1,9 @@
+import io
+import json
 import tempfile
 import types
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -140,6 +143,83 @@ class SubscriptionTest(unittest.TestCase):
         with self.assertRaises(subscription_store.SubscriptionError):
             subscription_store.validate_document(data)
 
+    def test_legacy_config_gets_provider_defaults_and_digest_stays_stable(self):
+        legacy = self.document()
+        legacy_source = legacy["subscriptions"][0]
+        original_digest = subscription_store.config_digest(legacy_source)
+        normalized = subscription_store.validate_document(legacy)
+        source = normalized["subscriptions"][0]
+        self.assertEqual(source["provider"], "generic_byo")
+        self.assertEqual(subscription_store.config_digest(source), original_digest)
+
+        youtube = self.document()
+        youtube["subscriptions"][0].update(
+            {
+                "kind": "youtube_channel",
+                "config": {"channel_id": "UCYO_jab_esuFRV4b17AJtAw"},
+            }
+        )
+        self.assertEqual(
+            subscription_store.validate_document(youtube)["subscriptions"][0][
+                "provider"
+            ],
+            "native",
+        )
+
+    def test_provider_validation_is_kind_aware(self):
+        data = self.document()
+        data["subscriptions"][0]["provider"] = "unknown"
+        with self.assertRaises(subscription_store.SubscriptionError):
+            subscription_store.validate_document(data)
+
+        data = self.document()
+        data["subscriptions"][0].update(
+            {
+                "kind": "youtube_channel",
+                "provider": "rsshub_byo",
+                "config": {"channel_id": "UCYO_jab_esuFRV4b17AJtAw"},
+            }
+        )
+        with self.assertRaises(subscription_store.SubscriptionError):
+            subscription_store.validate_document(data)
+
+    def test_provider_change_does_not_reset_source_cursor(self):
+        subscription = self.write_document()["subscriptions"][0]
+        store = self.store()
+        store.migrate()
+        store.ensure_sources([subscription], now="2026-10-01T00:00:00+00:00")
+        store.mark_source_success(
+            subscription,
+            etag='"cursor"',
+            last_modified="Wed, 01 Oct 2026 00:00:00 GMT",
+            now="2026-10-01T01:00:00+00:00",
+        )
+        changed = dict(subscription)
+        changed["provider"] = "rsshub_byo"
+        store.ensure_sources([changed], now="2026-10-01T02:00:00+00:00")
+        state = store.state_for(subscription["id"])
+        self.assertEqual(state["etag"], '"cursor"')
+        self.assertEqual(state["next_due_at"], "2026-10-01T02:00:00+00:00")
+
+    def test_classifies_provider_http_errors(self):
+        cases = {
+            401: ("http_401", True),
+            403: ("http_403", True),
+            404: ("http_404", True),
+            429: ("http_429", False),
+            500: ("http_5xx", False),
+            503: ("http_5xx", False),
+            418: ("http_4xx", True),
+        }
+        for status, expected in cases.items():
+            with self.subTest(status=status):
+                self.assertEqual(
+                    subscription_adapters.classify_http_error(status), expected
+                )
+
+    def test_public_feed_user_agent_matches_the_actual_urllib_client(self):
+        self.assertRegex(subscription_adapters.USER_AGENT, r"^Python-urllib/\d+\.\d+$")
+
     def test_fake_ip_proxy_dns_is_allowed_but_private_network_is_rejected(self):
         fake_ip = [(2, 1, 6, "", ("198.18.0.3", 443))]
         with patch.object(
@@ -272,7 +352,143 @@ class SubscriptionTest(unittest.TestCase):
             )
             text = Path(output).read_text(encoding="utf-8")
             self.assertIn('subscription_id: "example-feed"', text)
+            self.assertIn('subscription_provider: "generic_byo"', text)
             self.assertNotIn("alert(1)", text)
+
+    def test_sync_records_success_duplicate_and_http_error_checks(self):
+        self.write_document()
+        baseline = [self.entry("old", "Old", 1)]
+        with patch.object(
+            subscriptions.subscription_adapters,
+            "fetch_entries",
+            return_value=self.fetched(baseline),
+        ):
+            code, summary = subscriptions.sync_subscriptions(
+                self.args, self.config, force=True
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(summary[0]["parsed"], 1)
+        self.assertEqual(summary[0]["baseline"], 1)
+
+        with patch.object(
+            subscriptions.subscription_adapters,
+            "fetch_entries",
+            return_value=self.fetched(baseline),
+        ):
+            _, summary = subscriptions.sync_subscriptions(
+                self.args, self.config, force=True
+            )
+        self.assertEqual(summary[0]["duplicates"], 1)
+
+        error = subscription_adapters.AdapterError(
+            "http_429",
+            "feed request returned HTTP 429",
+            retry_after=60,
+            http_status=429,
+        )
+        with patch.object(
+            subscriptions.subscription_adapters, "fetch_entries", side_effect=error
+        ):
+            code, summary = subscriptions.sync_subscriptions(
+                self.args, self.config, force=True
+            )
+        self.assertEqual(code, 1)
+        self.assertEqual(summary[0]["error_code"], "http_429")
+        self.assertIn("限流", summary[0]["error_action"])
+
+        with self.store().connect() as con:
+            checks = [
+                dict(row)
+                for row in con.execute(
+                    "SELECT * FROM source_checks ORDER BY id ASC"
+                ).fetchall()
+            ]
+        self.assertEqual(
+            [row["outcome"] for row in checks], ["success", "success", "error"]
+        )
+        self.assertEqual(checks[1]["duplicate_entries"], 1)
+        self.assertEqual(checks[2]["http_status"], 429)
+        self.assertEqual(checks[2]["error_code"], "http_429")
+        row = self.store().status_rows(self.write_document()["subscriptions"])[0]
+        self.assertEqual(row["checks_7d"], 3)
+        self.assertEqual(row["error_checks_7d"], 1)
+        self.assertEqual(row["last_http_status"], 429)
+        status_args = types.SimpleNamespace(
+            subscribe_command="status",
+            subscriptions=str(self.subscriptions_path),
+            json=True,
+        )
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            self.assertEqual(
+                subscriptions.command_subscribe(status_args, self.config), 0
+            )
+        status_json = json.loads(stdout.getvalue())
+        self.assertEqual(status_json[0]["last_error_code"], "http_429")
+        self.assertIn("限流", status_json[0]["error_action"])
+
+    def test_not_modified_sync_records_unchanged_check(self):
+        self.write_document()
+        unchanged = subscription_adapters.FetchResult(
+            304, b"", '"test"', "", "https://example.com/feed.xml", not_modified=True
+        )
+        with patch.object(
+            subscriptions.subscription_adapters,
+            "fetch_entries",
+            return_value=(unchanged, []),
+        ):
+            code, summary = subscriptions.sync_subscriptions(
+                self.args, self.config, force=True
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(summary[0]["status"], "unchanged")
+        with self.store().connect() as con:
+            check = con.execute("SELECT * FROM source_checks").fetchone()
+        self.assertEqual(check["outcome"], "unchanged")
+        self.assertEqual(check["http_status"], 304)
+
+    def test_v1_database_migrates_to_v2_without_losing_source_state(self):
+        store = self.store()
+        with store.connect() as con:
+            con.executescript(
+                """
+                CREATE TABLE source_state (
+                  subscription_id TEXT PRIMARY KEY,
+                  config_hash TEXT NOT NULL,
+                  initialized_at TEXT,
+                  last_checked_at TEXT,
+                  last_success_at TEXT,
+                  next_due_at TEXT NOT NULL,
+                  etag TEXT,
+                  last_modified TEXT,
+                  error_streak INTEGER NOT NULL DEFAULT 0,
+                  last_error_code TEXT,
+                  last_error TEXT,
+                  lease_token TEXT,
+                  lease_expires_at TEXT
+                );
+                INSERT INTO source_state(subscription_id, config_hash, next_due_at, etag)
+                  VALUES ('legacy', 'hash', '2026-10-01T00:00:00+00:00', '"old"');
+                PRAGMA user_version = 1;
+                """
+            )
+        store.migrate()
+        with store.connect() as con:
+            version = con.execute("PRAGMA user_version").fetchone()[0]
+            legacy = con.execute(
+                "SELECT etag FROM source_state WHERE subscription_id = 'legacy'"
+            ).fetchone()
+            checks_table = con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='source_checks'"
+            ).fetchone()
+        self.assertEqual(version, 2)
+        self.assertEqual(legacy["etag"], '"old"')
+        self.assertIsNotNone(checks_table)
+        with store.connect() as con:
+            con.execute("PRAGMA user_version = 1")
+        store.migrate()
+        with store.connect() as con:
+            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 2)
 
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()

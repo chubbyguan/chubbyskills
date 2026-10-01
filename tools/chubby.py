@@ -1394,6 +1394,11 @@ def build_parser():
     subscribe_add.add_argument("--id", required=True, help="Stable subscription id")
     subscribe_add.add_argument("--name", required=True, help="Human-readable source name")
     subscribe_add.add_argument("--kind", required=True, choices=["feed", "youtube_channel"])
+    subscribe_add.add_argument(
+        "--provider",
+        choices=["native", "rsshub_byo", "rssbridge_byo", "generic_byo"],
+        help="Diagnostic provenance only; does not run or configure a provider",
+    )
     subscribe_add.add_argument("--feed", help="Public HTTPS RSS/Atom/JSON Feed URL")
     subscribe_add.add_argument("--format", choices=["auto", "rss", "atom", "json"], default="auto")
     subscribe_add.add_argument("--channel-id", help="YouTube channel_id for official Atom feed")

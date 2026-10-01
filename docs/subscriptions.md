@@ -1,6 +1,6 @@
-# 订阅与调度（P0）
+# 订阅与调度（P0 + Provider 兼容层）
 
-> **状态：P0 本地功能。** 支持公开 HTTPS RSS / Atom / JSON Feed 和 YouTube 的官方频道 Atom Feed。X、小红书、抖音、B站、公众号账号扫描不在 P0 支持范围。
+> **状态：P0 本地功能 + P1 外部 Feed Provider 兼容层。** 支持公开 HTTPS RSS / Atom / JSON Feed、YouTube 的官方频道 Atom Feed，以及用户自带的 RSSHub、RSS-Bridge 或其它 Provider 的最终公开 Feed。X、小红书、抖音、B站、公众号账号扫描不在支持范围。
 
 订阅模块把“发现更新”和“下载/转录”拆开：同步时只请求 Feed、去重和入队；只有显式启用 `auto_ingest` 或手动 `promote` 后，条目才进入现有的转录与入库管线。
 
@@ -74,6 +74,38 @@ python3 tools/chubby.py subscribe add \
 ```
 
 Feed 提供 `content` / `content:encoded` 时，P0 将其存为 Markdown；只有 `summary` 时，产物会写 `content_completeness: summary` 并保留原文链接。P0 不抓网页详情页，不能把 Feed 摘要误报为全文。
+
+### 外部 Feed Provider（BYO）
+
+RSSHub、RSS-Bridge 或其它工具可以将公开内容输出为标准 Feed。Chubby 只消费**最终只读 Feed URL**；`byo` 表示 *bring your own*，由你负责部署、帐号授权、平台条款、升级、代理和上游风控。
+
+```bash
+python3 tools/chubby.py subscribe add \
+  --id creator-rsshub \
+  --name "某创作者（自建 RSSHub）" \
+  --kind feed \
+  --provider rsshub_byo \
+  --feed "https://feeds.example.net/creator.atom" \
+  --format atom \
+  --content-profile auto \
+  --mode discover_only
+```
+
+| Provider 标签 | 适用范围 | Chubby 的行为 |
+|---|---|---|
+| `native` | 原生 Feed 与 YouTube 官方 Atom | 只请求最终公开 Feed |
+| `rsshub_byo` | 用户自管的 RSSHub 最终 Feed | 只作为来源归因；不调用 RSSHub API 或管理端 |
+| `rssbridge_byo` | 用户自管的 RSS-Bridge 输出 | 只作为来源归因；不发现 Bridge 或其路由 |
+| `generic_byo` | 其它自管 Feed Provider | 只作为来源归因；不执行专用抓取逻辑 |
+
+| 必须遵守 | 原因 |
+|---|---|
+| 填最终 RSS / Atom / JSON Feed URL，不能填平台主页、Provider 控制台或管理 API | Chubby 没有网页列表抓取器，也不会猜路由 |
+| URL 必须是公开 HTTPS，且不能含 `token`、`cookie`、`secret`、密码或用户名 | P1 没有秘密托管、权限审计或认证 Feed 支持 |
+| 私密关注不要使用公共 Provider 实例 | Provider 可能看到订阅 URL 与访问频率 |
+| Provider 故障后先修 Provider 或 Feed URL | Chubby 会记录、退避或暂停；不会回退抓取平台源站 |
+
+`provider` 是诊断标签，不控制请求头、代理、认证、解析器或调度频率。变更标签不会清 ETag、重置退避或重新建立历史基线；最终 Markdown 与 `runs.jsonl` 会记录 `subscription_provider`。
 
 ## 首次启用：先建立基线
 
@@ -173,10 +205,14 @@ python3 tools/chubby.py subscribe resume yt-3blue1brown
 | 情况 | 行为 |
 |---|---|
 | HTTP 304 | 更新检查时间，不产生新任务 |
-| 网络超时、429、5xx | 指数退避，最长 24 小时；不推进成功游标 |
-| 401 / 403、格式错误、危险 URL | 自动停止该 source 的请求，修复配置后 `resume` |
+| HTTP 401 / 403 | 暂停 source；检查 Provider 是否真的公开最终 Feed，不能向 Chubby 粘贴凭据 |
+| HTTP 404 / 其他 4xx | 暂停 source；更新失效 Provider route 后 `resume` |
+| HTTP 429、5xx、网络超时 | 指数退避，最长 24 小时；不推进成功游标 |
+| XML / JSON 解析失败、响应过大、危险 URL | 暂停 source；修复 Provider 输出或配置后 `resume` |
 | 转录失败 | 进入 `retry_wait`；最多三次，再变 `failed_terminal` |
 | 素材写入成功、索引失败 | 只重试索引，不重新下载或转录媒体 |
 | 进程中断 | 过期 lease 由后续 tick 回收；已成功素材不会重复转录 |
+
+`subscribe status --json` 会输出最近 7 天的检查次数、错误次数、最后一次 HTTP 状态和错误代码。Provider 兼容性的真实放行标准见 [Provider 7 天验收](./subscription-provider-acceptance.md)。
 
 > 调度依赖设备在线。Mac 睡眠或关机期间不会执行；恢复后下一次 tick 会根据 Feed identity 补查新增内容。真正 24/7 需要持续运行的设备或后续部署到持久环境。

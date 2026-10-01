@@ -70,6 +70,7 @@ def _subscription_fields(
     return {
         "subscription_id": chubby.yaml_quote(subscription["id"]),
         "subscription_name": chubby.yaml_quote(subscription["name"]),
+        "subscription_provider": chubby.yaml_quote(subscription["provider"]),
         "subscription_entry_id": str(entry["id"]),
         "source_feed": chubby.yaml_quote(_source_url(subscription)),
     }
@@ -197,6 +198,7 @@ def _materialize_feed_entry(
         "source_feed": chubby.yaml_quote(_source_url(subscription)),
         "subscription_id": chubby.yaml_quote(subscription["id"]),
         "subscription_name": chubby.yaml_quote(subscription["name"]),
+        "subscription_provider": chubby.yaml_quote(subscription["provider"]),
         "subscription_entry_id": str(entry["id"]),
         "content_completeness": completeness,
     }
@@ -235,6 +237,7 @@ def _materialize_feed_entry(
             "output_paths": [published] if final == published else [published, final],
             "output_dir": str(output_dir),
             "vault_dir": str(vault or ""),
+            "subscription_provider": subscription["provider"],
             "subscription_entry_id": entry["id"],
         }
         index_vault, index_db = chubby.index_context(vault, config)
@@ -298,6 +301,7 @@ def execute_entry(
         return _materialize_feed_entry(chubby, subscription, entry, config, batch_id)
     record["subscription_entry_id"] = entry["id"]
     record["subscription_id"] = subscription["id"]
+    record["subscription_provider"] = subscription["provider"]
     record["source_feed"] = _source_url(subscription)
     for output in record.get("output_paths") or [record.get("output_path")]:
         if output:
