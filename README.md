@@ -9,7 +9,7 @@
 把视频、播客、文章和本地文档保存为 Markdown，整理成能搜索、能回查来源、能交给 Agent 使用的素材库。
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.13.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.0)
+[![Version](https://img.shields.io/badge/Version-0.13.1-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.1)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -187,7 +187,7 @@ python3 tools/install_skill.py --all --dest /path/to/agent/skills
 
 Claude Code、OpenCode、OpenClaw、Hermes 等客户端使用各自实际配置的 skills 目录作为 `--dest`，并按客户端方式启用技能。运行环境中的 Python 和系统依赖仍需另外配置。
 
-安装器会打包仓库内依赖，生成可独立搬移的技能目录；`setup.sh` 负责安装运行依赖。已有同名技能时安装器会拒绝覆盖，升级时先安装到临时目录核对自己的修改。请使用安装器或 [Release 技能包](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.0)，避免只下载单个源码目录漏掉公共模块。[完整安装指南](./docs/installation.md)
+安装器会打包仓库内依赖，生成可独立搬移的技能目录；`setup.sh` 负责安装运行依赖。已有同名技能时安装器会拒绝覆盖，升级时先安装到临时目录核对自己的修改。请使用安装器或 [Release 技能包](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.1)，避免只下载单个源码目录漏掉公共模块。[完整安装指南](./docs/installation.md)
 
 首页的 `tools/chubby.py` 统一流程需要完整仓库。独立知识库技能使用其自带的 `tools/import_document.py`、`tools/vault_index.py` 和 `tools/evidence_brief.py`，命令见[文档导入](./docs/document-import.md)。
 
@@ -271,7 +271,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [MCP 配置](./docs/mcp-workflow.md) | 将知识库接入 Agent |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
 | [可选集成](./docs/integrations.md) | 外部解析工具的 Markdown 交接 |
-| [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.13.0** |
+| [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.13.1** |
 
 ## 使用范围与许可
 
