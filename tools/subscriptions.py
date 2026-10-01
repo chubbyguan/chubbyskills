@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,20 @@ except ModuleNotFoundError:
 
 class SubscribeCommandError(RuntimeError):
     pass
+
+
+# One tick may transcribe long media (a 2h podcast on CPU can take ~1h), so the
+# scheduler lock must outlive the slowest single run rather than the cron period.
+TICK_LOCK_SECONDS = 4 * 3600
+HEARTBEAT_INTERVAL_SECONDS = 60
+
+
+def _heartbeat_loop(store, entry_id: int, token: str, stop: threading.Event) -> None:
+    while not stop.wait(HEARTBEAT_INTERVAL_SECONDS):
+        try:
+            store.heartbeat(entry_id, token)
+        except Exception:
+            pass
 
 
 PROVIDER_ERROR_ACTIONS = {
@@ -353,6 +368,25 @@ def process_entries(
     )
     if requested < 1 or requested > 10:
         raise SubscribeCommandError("--limit must be between 1 and 10")
+    # Manual processing shares the scheduler lock with tick so the two can
+    # never transcribe the same entry concurrently.
+    lock_token = store.acquire_lock("tick", seconds=TICK_LOCK_SECONDS)
+    if not lock_token:
+        print("已有订阅任务执行中，稍后再试。")
+        return 0, []
+    try:
+        return _process_claimed(args, config, document, store, requested)
+    finally:
+        store.release_lock("tick", lock_token)
+
+
+def _process_claimed(
+    args: Any,
+    config: dict[str, Any],
+    document: dict[str, Any],
+    store,
+    requested: int,
+) -> tuple[int, list[dict[str, Any]]]:
     store.reclaim_expired_claims()
     entries = store.claim_entries(
         requested,
@@ -376,9 +410,19 @@ def process_entries(
                 error="subscription no longer exists",
             )
             continue
-        record = subscription_executor.execute_entry(
-            subscription, entry, config, args, batch_id
+        stop_heartbeat = threading.Event()
+        heartbeat_thread = threading.Thread(
+            target=_heartbeat_loop,
+            args=(store, entry["id"], entry.get("claim_token") or "", stop_heartbeat),
+            daemon=True,
         )
+        heartbeat_thread.start()
+        try:
+            record = subscription_executor.execute_entry(
+                subscription, entry, config, args, batch_id
+            )
+        finally:
+            stop_heartbeat.set()
         record["subscription_id"] = subscription["id"]
         record["subscription_entry_id"] = entry["id"]
         record["subscription_provider"] = subscription["provider"]
@@ -421,10 +465,14 @@ def process_entries(
 def _add(args: Any, config: dict[str, Any]) -> int:
     path, document, _ = _context(args, config)
     kind = args.kind
+    channel_id = args.channel_id
+    if kind == "youtube_channel" and not channel_id and args.resolve:
+        channel_id = subscription_adapters.resolve_youtube_channel_id(args.resolve)
+        print(f"  🔎 已解析 channel_id: {channel_id}")
     source_config = (
         {"feed_url": args.feed, "format": args.format}
         if kind == "feed"
-        else {"channel_id": args.channel_id}
+        else {"channel_id": channel_id or ""}
     )
     item = {
         "id": args.id,
@@ -441,6 +489,7 @@ def _add(args: Any, config: dict[str, Any]) -> int:
             "initial_sync": "backfill" if args.backfill else "from_now",
             "include_title_regex": args.include_title or [],
             "exclude_title_regex": args.exclude_title or [],
+            "user_agent": args.user_agent or "",
         },
     }
     document["subscriptions"].append(item)
@@ -604,7 +653,7 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
             return process_entries(args, config)[0]
         if action == "tick":
             _, document, store = _context(args, config)
-            token = store.acquire_lock("tick", seconds=1800)
+            token = store.acquire_lock("tick", seconds=TICK_LOCK_SECONDS)
             if not token:
                 print("已有订阅任务执行中，当前 tick 跳过。")
                 return 0

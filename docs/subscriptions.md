@@ -46,6 +46,14 @@ python3 tools/chubby.py subscribe add \
   --exclude-title '(?i)shorts'
 ```
 
+不知道 `channel_id` 时，可用 `--resolve` 传频道 URL 或 `@handle`，从公开页面解析：
+
+```bash
+python3 tools/chubby.py subscribe add \
+  --id yt-3blue1brown --name "3Blue1Brown" --kind youtube_channel \
+  --resolve "https://www.youtube.com/@3blue1brown" --content-profile video
+```
+
 ### 播客 RSS
 
 播客是 `feed`，`content_profile` 才决定新条目由 podcast pipeline 处理：
@@ -74,6 +82,14 @@ python3 tools/chubby.py subscribe add \
 ```
 
 Feed 提供 `content` / `content:encoded` 时，P0 将其存为 Markdown；只有 `summary` 时，产物会写 `content_completeness: summary` 并保留原文链接。P0 不抓网页详情页，不能把 Feed 摘要误报为全文。
+
+请求默认使用 urllib 标准身份（`Python-urllib/x.y`，如实声明，不伪装浏览器）。个别 host 拉黑该身份时，可按来源覆盖：
+
+```bash
+python3 tools/chubby.py subscribe add ... --user-agent "my-feed-reader/1.0"
+```
+
+`--provider`（native / rsshub_byo / rssbridge_byo / generic_byo）只记录来源渠道用于健康统计，不改变抓取行为；BYO 表示你自己准备 RSSHub / RSS-Bridge 实例并把它的 feed URL 当普通 feed 订阅。
 
 ### 外部 Feed Provider（BYO）
 
@@ -159,7 +175,7 @@ python3 tools/chubby.py subscribe process --retry-failed --limit 3
 
 ## 定时调度
 
-订阅 CLI 不启动常驻服务。每小时由系统定时器触发一次；每个来源仍按自身 `poll_minutes` 决定是否实际请求。
+订阅 CLI 不启动常驻服务。每小时由系统定时器触发一次；每个来源仍按自身 `poll_minutes` 决定是否实际请求。每个来源的下一次到期时间带按来源哈希的确定性抖动（约 ±10%），批量添加的源不会在同一秒集中请求同一个 host。
 
 ```bash
 python3 tools/chubby.py subscribe tick --due --process-limit 3
@@ -191,7 +207,7 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/im.chubby.chubbyskills
 launchctl print "gui/$(id -u)/im.chubby.chubbyskills.subscribe"
 ```
 
-SQLite 内部 lease 负责阻止重叠 tick；launchd / cron 的重复触发不会并行转录同一条内容。
+SQLite 内部 lease 负责阻止重叠 tick；launchd / cron 的重复触发不会并行转录同一条内容。手动 `process` 与定时 `tick` 共用同一把调度锁（4 小时，按最长单条转录时长设定）。条目被领取后，执行线程每 60 秒写一次心跳；只有心跳停止超过 6 小时（即进程崩溃）条目才会被回收重试——长时间转录不会被误判为卡死。
 
 ## 状态与故障处理
 

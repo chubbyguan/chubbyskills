@@ -1402,6 +1402,8 @@ def build_parser():
     subscribe_add.add_argument("--feed", help="Public HTTPS RSS/Atom/JSON Feed URL")
     subscribe_add.add_argument("--format", choices=["auto", "rss", "atom", "json"], default="auto")
     subscribe_add.add_argument("--channel-id", help="YouTube channel_id for official Atom feed")
+    subscribe_add.add_argument("--resolve", help="YouTube channel URL or @handle; the channel_id is resolved from the public page")
+    subscribe_add.add_argument("--user-agent", help="Override this source's request User-Agent (default: urllib standard identity)")
     subscribe_add.add_argument("--mode", choices=["auto_ingest", "discover_only"])
     subscribe_add.add_argument("--content-profile", choices=["auto", "video", "podcast", "article"], default="auto")
     subscribe_add.add_argument("--poll-minutes", type=int, default=240)
