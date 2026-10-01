@@ -30,6 +30,7 @@ Your library stays in ordinary Markdown files. The repository provides import, p
 | A growing Markdown library | Local keyword search and lightweight semantic retrieval |
 | A writing or research question | A Markdown/JSON brief with exact excerpts, source links, line numbers, and file hashes |
 | An agent that supports skills or MCP | Reusable workflows and direct access to your own source material |
+| Public feeds and YouTube channels | P0 subscription discovery, review queue, controlled transcription, and Markdown ingestion |
 
 **New in [v0.13.0](./docs/release-0.13.0.md):** unified local document import, experimental Atlas/MuAPI podcast transcription with saved task recovery, and portable installation bundles for the new tools.
 
@@ -46,6 +47,7 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 | Douyin / TikTok / Weibo / Zhihu | Beta, heavy deps | Video transcription needs `funasr` + `ffmpeg` |
 | Podcasts | Heavy deps | `faster-whisper`, optional cloud transcription |
 | X / Xiaohongshu | Manual fallback | Zero-dependency capture, manual text fallback |
+| RSS / YouTube channel subscriptions | P0 | Public feeds; discovery-only is the safe default |
 | Local documents | Stable | Zero dependency, Markdown/TXT/PDF text layer |
 
 ## Try the local workflow
@@ -155,6 +157,22 @@ python3 tools/chubby.py retry --all-failed
 ```
 
 The index updates after ingestion and before unified searches. See the [creator workflow](./docs/creator-workflow.md) for retry behavior and [knowledge automation](./docs/knowledge-automation.md) for index migration or rebuilding.
+
+### Subscribe to feeds, podcasts, and YouTube channels (P0)
+
+Subscriptions keep source discovery separate from expensive media work. The first sync creates a seen baseline; new entries enter a review queue by default. Once a source proves reliable, `auto_ingest` can route its YouTube videos or podcast enclosures through the existing subtitle-first / transcription pipeline.
+
+```bash
+python3 tools/chubby.py subscribe init
+python3 tools/chubby.py subscribe add \
+  --id yt-3blue1brown --name "3Blue1Brown" \
+  --kind youtube_channel --channel-id UCYO_jab_esuFRV4b17AJtAw \
+  --content-profile video --mode discover_only
+python3 tools/chubby.py subscribe sync --all
+python3 tools/chubby.py subscribe pending
+```
+
+Schedule `python3 tools/chubby.py subscribe tick --due --process-limit 3` through launchd or cron. P0 accepts public RSS / Atom / JSON feeds and official YouTube channel feeds. It does not claim unattended account scanning for X, Xiaohongshu, Douyin, Bilibili, or WeChat. See [subscription and scheduling (Chinese)](./docs/subscriptions.md) for commands, recovery behavior, and safety limits.
 
 ## Install skills for your agent
 
