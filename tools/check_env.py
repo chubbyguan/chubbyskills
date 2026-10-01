@@ -88,6 +88,11 @@ def report_all():
     print("   YouTube/B站优先抓字幕，命中时也无需 funasr。只有「视频/播客转录」才需要 funasr / whisper。")
     print("\n   安装运行依赖：bash setup.sh [skill-name ...]")
     print("   只验所需路径：python3 tools/check_env.py --platform <platform-id>")
+    print("\n【下一步】")
+    print("  零依赖跑通本地链路（导入 → 搜索 → 资料包）：")
+    print("    python3 tools/chubby.py init --vault ./creator-vault")
+    print("    python3 tools/chubby.py import <你的笔记.md> --no-enrich")
+    print("    python3 tools/chubby.py search \"关键词\"")
     return 0
 
 
@@ -155,6 +160,9 @@ def main(argv=None):
                 print("  安装提示：" + item["install_hint"])
             if item["missing_optional"]:
                 print("  可选路径尚缺：" + ", ".join(item["missing_optional"]))
+            if item["ready"] and item["platform"] != "document":
+                print("  下一步：python3 tools/chubby.py ingest \"<真实链接>\" --skill "
+                      + item["platform"] + " --no-enrich")
         print("此检查不访问真实平台；字幕、登录态和网络仍影响采集。")
     return 1 if args.platform and any(not item["ready"] for item in report["platforms"]) else 0
 

@@ -37,6 +37,19 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 
 先看[输出样例](./examples/README.md)，或直接运行下面的本地示例。
 
+### 平台可用性速览
+
+声明能力（非实时探测），最近逐平台实测见[真实平台验证](./docs/live-verification.md)，完整失败模式见[平台状态](./docs/platform-status.md)：
+
+| 平台 | 状态 | 轻量路径 |
+|---|---|---|
+| B站 / YouTube | 稳定 | 字幕优先，仅需 `yt-dlp` |
+| 公众号 | 测试 | HTML 需 `beautifulsoup4`，PDF 兜底 |
+| 抖音 / TikTok / 微博 / 知乎 | 测试·重依赖 | 视频转录需 `funasr` + `ffmpeg` |
+| 播客 | 重依赖 | `faster-whisper`，可选云转录 |
+| X / 小红书 | 手动兜底 | 零依赖采集正文，失败可手动补全文 |
+| 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
+
 <a id="安装方式"></a>
 
 ## 快速开始
