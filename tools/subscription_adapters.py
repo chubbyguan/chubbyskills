@@ -25,7 +25,7 @@ from typing import Any
 # standard client identity that urllib actually uses. Keep this accurate instead
 # of impersonating a browser or sending a project-branded UA.
 USER_AGENT = f"Python-urllib/{sys.version_info.major}.{sys.version_info.minor}"
-MAX_BODY_BYTES = 2 * 1024 * 1024
+MAX_BODY_BYTES = 16 * 1024 * 1024  # large podcast feeds with full content commonly exceed 2 MiB
 MAX_REDIRECTS = 3
 # Clash and similar local proxy clients use this IANA benchmarking range as a
 # synthetic DNS answer. The domain name remains part of the HTTP request and
