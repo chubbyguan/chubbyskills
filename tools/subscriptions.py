@@ -356,7 +356,11 @@ def sync_subscriptions(
 
 
 def process_entries(
-    args: Any, config: dict[str, Any], *, limit: int | None = None
+    args: Any,
+    config: dict[str, Any],
+    *,
+    limit: int | None = None,
+    holds_lock: bool = False,
 ) -> tuple[int, list[dict[str, Any]]]:
     _, document, store = _context(args, config)
     requested = (
@@ -369,7 +373,9 @@ def process_entries(
     if requested < 1 or requested > 10:
         raise SubscribeCommandError("--limit must be between 1 and 10")
     # Manual processing shares the scheduler lock with tick so the two can
-    # never transcribe the same entry concurrently.
+    # never transcribe the same entry concurrently. A tick already holds it.
+    if holds_lock:
+        return _process_claimed(args, config, document, store, requested)
     lock_token = store.acquire_lock("tick", seconds=TICK_LOCK_SECONDS)
     if not lock_token:
         print("已有订阅任务执行中，稍后再试。")
@@ -669,6 +675,7 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
                     config,
                     limit=args.process_limit
                     or document["defaults"]["process_limit_per_tick"],
+                    holds_lock=True,
                 )
                 return 1 if sync_code or process_code else 0
             finally:
