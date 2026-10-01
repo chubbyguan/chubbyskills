@@ -1,6 +1,6 @@
 # Release Checklist
 
-Current version: `0.13.0`. Release notes: [0.13.0](release-0.13.0.md).
+Current version: `0.13.1`. Release notes: [0.13.1](release-0.13.1.md).
 
 ## Install Verification
 

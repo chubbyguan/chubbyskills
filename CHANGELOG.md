@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1 - 2026-10-01
+
+- x-ingest: X Articles (long-form posts) now warn explicitly when only the syndication preview was captured, and `--cookies` / `X_COOKIES` fetches the full article text through the logged-in GraphQL TweetResultByRestId endpoint (plain_text first, content_state blocks fallback, rotating queryId list, graceful fallback to preview). `platforms/x.yaml` registers `article_preview_only`. Reported in [#11](https://github.com/chubbyguan/chubbyskills/issues/11), fixed in [#12](https://github.com/chubbyguan/chubbyskills/pull/12).
+- chubby CLI: output validation distinguishes invalid filenames (e.g. over the filesystem name limit) from missing files, restoring the regression contract. ([#13](https://github.com/chubbyguan/chubbyskills/pull/13))
+- Onboarding: README (zh/en) gained a platform availability table next to the quick start, and `check_env` now prints a zero-dependency init → import → search walkthrough plus a ready-to-run ingest command per platform. ([#17](https://github.com/chubbyguan/chubbyskills/pull/17))
+- Packaging: `pip install -e .` provides the `chubby` console command; core stays standard-library only with video/podcast/wechat extras. CI smokes the editable install on Linux and macOS. Non-editable installs remain unsupported; see [#16](https://github.com/chubbyguan/chubbyskills/issues/16). ([#18](https://github.com/chubbyguan/chubbyskills/pull/18))
+
 ## 0.13.0 - 2026-09-17
 
 - Added local Markdown/text/PDF import with source provenance, referenced-asset handling, safe publication, attachment-aware reuse and automatic indexing.
