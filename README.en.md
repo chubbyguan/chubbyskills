@@ -35,6 +35,19 @@ Your library stays in ordinary Markdown files. The repository provides import, p
 
 See [sample outputs](./examples/README.md) to inspect the files before installing. Most detailed guides are currently in Chinese.
 
+### Platform availability at a glance
+
+Declared capability (not live probing); dated real-source evidence lives in [live verification](./docs/live-verification.md), full failure modes in [platform status](./docs/platform-status.md):
+
+| Platform | Status | Lightweight path |
+|---|---|---|
+| Bilibili / YouTube | Stable | Subtitle-first, only needs `yt-dlp` |
+| WeChat OA | Beta | HTML needs `beautifulsoup4`, PDF fallback |
+| Douyin / TikTok / Weibo / Zhihu | Beta, heavy deps | Video transcription needs `funasr` + `ffmpeg` |
+| Podcasts | Heavy deps | `faster-whisper`, optional cloud transcription |
+| X / Xiaohongshu | Manual fallback | Zero-dependency capture, manual text fallback |
+| Local documents | Stable | Zero dependency, Markdown/TXT/PDF text layer |
+
 ## Try the local workflow
 
 We recommend Python 3.11 or 3.12 and a macOS/Linux shell. The following example imports a small document you create yourself, searches it, and exports a brief. **No pip packages, API keys, or models are needed for this Markdown/TXT workflow.**
