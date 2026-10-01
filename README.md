@@ -63,6 +63,7 @@ git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
 python3 -m venv .venv
 source .venv/bin/activate
+python3 -m pip install -e .   # 可选：获得 chubby 命令，等价于 python3 tools/chubby.py
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
 ```
 
