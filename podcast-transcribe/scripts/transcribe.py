@@ -218,6 +218,7 @@ def main(argv=None):
     parser.add_argument("source", help="音频 URL 或本地文件")
     parser.add_argument("output_dir", nargs="?", default=".", help="Markdown 输出目录")
     parser.add_argument("--source-url", help="批量模式保留原始音频来源")
+    parser.add_argument("--title", help="覆盖节目标题（订阅源已提供标题时使用）")
     settings = _sibling("provider_config")
     settings.add_provider_arguments(parser)
     args = parser.parse_args(argv)
@@ -237,6 +238,8 @@ def main(argv=None):
                 if urlsplit(args.source).scheme not in ("http", "https"):
                     raise ValueError("Source must be an existing audio file or HTTP(S) URL")
                 audio_path, title = download_audio(args.source, temporary)
+            if args.title:
+                title = args.title.strip() or title
             output_path = _output_path(args.output_dir, title, audio_path, config)
             elapsed, count = transcribe_audio(
                 audio_path, output_path, title, args.source_url or args.source,
