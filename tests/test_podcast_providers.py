@@ -397,6 +397,40 @@ class SafeDownloadAddressTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 safe_download.public_url("https://cdn.example.com/a.m4a")
 
+    def test_redirect_chain_is_chased_with_per_hop_validation(self):
+        safe_download = load_script("safe_download")
+        public = [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+        def probe(command, **kwargs):
+            if "track" in command[-1]:
+                return subprocess.CompletedProcess(command, 0, "302\thttps://cdn.example.com/final.m4a", "")
+            return subprocess.CompletedProcess(command, 0, "200\t", "")
+
+        with patch.object(
+            safe_download.socket, "getaddrinfo", return_value=public
+        ), patch.object(safe_download.subprocess, "run", side_effect=probe):
+            final = safe_download.resolve_redirects(
+                "https://dts-api.example.com/track/abc/media.m4a"
+            )
+        self.assertEqual(final, "https://cdn.example.com/final.m4a")
+
+    def test_redirect_to_private_address_is_rejected(self):
+        safe_download = load_script("safe_download")
+
+        def probe(command, **kwargs):
+            return subprocess.CompletedProcess(command, 0, "302\thttps://evil.example/x.m4a", "")
+
+        def resolve_private(host, port, type=None):
+            if "evil" in host:
+                return [(2, 1, 6, "", ("127.0.0.1", 443))]
+            return [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+        with patch.object(
+            safe_download.socket, "getaddrinfo", side_effect=resolve_private
+        ), patch.object(safe_download.subprocess, "run", side_effect=probe):
+            with self.assertRaises(ValueError):
+                safe_download.resolve_redirects("https://dts-api.example.com/track/abc")
+
 
 if __name__ == "__main__":
     unittest.main()

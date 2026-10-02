@@ -8,7 +8,7 @@ from pathlib import Path
 import socket
 import subprocess
 import tempfile
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 # Clash-style fake-IP DNS answers sit in an IANA benchmarking range; the
 # OS-level proxy maps them back to the real domain, so they are reachable
@@ -19,6 +19,49 @@ FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 def _is_routable(address: str) -> bool:
     ip = ipaddress.ip_address(address)
     return ip.is_global or ip in FAKE_IP_NETWORK
+
+
+def _probe(url: str, host: str, port: int, address: str, timeout: float) -> tuple[str, str]:
+    """HEAD-probe one validated URL with curl; returns (http_status, redirect_url)."""
+    pinned = f"[{address}]" if ":" in address else address
+    command = ["curl", "--disable", "--silent", "--show-error",
+               "--proto", "=http,https", "--proto-redir", "=http,https",
+               "--max-redirs", "0", "--noproxy", "*",
+               "--head", "--connect-timeout", "15", "--max-time", str(timeout),
+               "--output", os.devnull,
+               "--write-out", "%{http_code}\t%{redirect_url}",
+               "--header", "User-Agent: Mozilla/5.0",
+               "--resolve", f"{host}:{port}:{pinned}", "--", url]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout + 5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        raise RuntimeError("Podcast download probe failed") from None
+    parts = result.stdout.rsplit("\t", 1)
+    status = parts[0].strip()
+    location = parts[1].strip() if len(parts) == 2 else ""
+    return status, location
+
+
+def resolve_redirects(url: str, *, max_hops: int = 5, timeout: float = 15) -> str:
+    """Follow redirects hop by hop, re-validating every target with public_url.
+
+    Feed enclosures are often tracking redirectors (e.g. xiaoyuzhou's
+    dts-api … /track/ URLs). Each hop is validated and DNS-pinned before the
+    next request, so a redirect can never smuggle in a private target.
+    """
+    current = url
+    for _ in range(max_hops):
+        normalized, host, port, address = public_url(current)
+        status, location = _probe(normalized, host, port, address, timeout)
+        if status.startswith("3"):
+            if not location:
+                raise RuntimeError("Podcast download redirect had no Location header")
+            current = urljoin(normalized, html.unescape(location))
+            continue
+        if status.startswith("2") or status == "405":  # 405: HEAD unsupported, GET decides
+            return normalized
+        raise RuntimeError(f"Podcast download probe failed with HTTP {status or 'error'}")
+    raise RuntimeError("Podcast download exceeded the redirect limit")
 
 
 def public_url(value: str) -> tuple[str, str, int, str]:
@@ -58,7 +101,8 @@ def public_url(value: str) -> tuple[str, str, int, str]:
 
 
 def download(url: str, output_path, *, timeout: float = 1800, max_bytes: int = 512 * 1024 * 1024) -> None:
-    """Create output exclusively; reject 3xx and pin DNS, bypassing environment proxies."""
+    """Create output exclusively; redirects are chased with per-hop validation."""
+    url = resolve_redirects(url)
     url, host, port, address = public_url(url)
     output = Path(output_path)
     if output.exists() or output.is_symlink():
