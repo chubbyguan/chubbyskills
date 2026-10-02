@@ -290,9 +290,14 @@ def execute_entry(
             return _record_error(
                 chubby, entry, "podcast entry has no enclosure or episode URL", batch_id
             )
+        process_args = _process_args(args, "podcast")
+        # The feed already knows the episode title; a bare enclosure URL would
+        # otherwise materialize as "Podcast Episode".
+        if entry.get("title"):
+            process_args.extra = ["--title", str(entry["title"])]
         record = chubby.run_ingest_source(
             source,
-            _process_args(args, "podcast"),
+            process_args,
             config,
             batch_id=batch_id,
             skill="podcast",

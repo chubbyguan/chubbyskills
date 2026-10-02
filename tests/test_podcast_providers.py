@@ -252,6 +252,16 @@ class PodcastProviderTests(unittest.TestCase):
         self.assertEqual(len(list(self.root.glob("*.md"))), 2)
         self.assertEqual(outputs[0].read_text(), "user changes")
 
+    def test_title_override_uses_subscription_episode_title(self):
+        import types
+        transcribe = load_script("transcribe")
+        segment = types.SimpleNamespace(start=0, end=1, text="本地转写")
+        whisper = types.SimpleNamespace(WhisperModel=lambda *args, **kwargs: types.SimpleNamespace(transcribe=lambda *args, **kwargs: ([segment], None)))
+        with patch.dict(sys.modules, {"faster_whisper": whisper}):
+            self.assertEqual(transcribe.main([str(self.audio), str(self.root), "--provider", "local", "--title", "EP.04 美元人民币汇率同涨真相"]), 0)
+        output = next(self.root.glob("*.md"))
+        self.assertIn('title: "EP.04 美元人民币汇率同涨真相"', output.read_text())
+
     def test_ambiguous_crash_marker_and_active_lock_block_duplicate_post(self):
         import fcntl
         with patch.object(cloud, "request_json", side_effect=KeyboardInterrupt):
