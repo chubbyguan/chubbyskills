@@ -385,5 +385,18 @@ class PodcastProviderTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class SafeDownloadAddressTest(unittest.TestCase):
+    def test_fake_ip_dns_answers_are_allowed_but_private_addresses_rejected(self):
+        safe_download = load_script("safe_download")
+        fake = [(2, 1, 6, "", ("198.18.0.3", 443))]
+        private = [(2, 1, 6, "", ("10.0.0.8", 443))]
+        with patch.object(safe_download.socket, "getaddrinfo", return_value=fake):
+            _, host, _, address = safe_download.public_url("https://cdn.example.com/a.m4a")
+            self.assertEqual((host, address), ("cdn.example.com", "198.18.0.3"))
+        with patch.object(safe_download.socket, "getaddrinfo", return_value=private):
+            with self.assertRaises(ValueError):
+                safe_download.public_url("https://cdn.example.com/a.m4a")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,16 @@ import subprocess
 import tempfile
 from urllib.parse import urlsplit, urlunsplit
 
+# Clash-style fake-IP DNS answers sit in an IANA benchmarking range; the
+# OS-level proxy maps them back to the real domain, so they are reachable
+# despite not being globally routable literals.
+FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+
+
+def _is_routable(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return ip.is_global or ip in FAKE_IP_NETWORK
+
 
 def public_url(value: str) -> tuple[str, str, int, str]:
     """Validate and resolve once; curl is pinned to this verified public address."""
@@ -37,7 +47,7 @@ def public_url(value: str) -> tuple[str, str, int, str]:
             raise RuntimeError("Could not resolve podcast host") from None
     else:
         addresses = {str(literal)}
-    if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
+    if not addresses or any(not _is_routable(address) for address in addresses):
         raise ValueError("Podcast downloads cannot access private, loopback or reserved addresses")
     address = sorted(addresses, key=lambda item: (":" in item, item))[0]
     authority = f"[{host}]" if ":" in host else host
