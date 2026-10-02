@@ -1,6 +1,8 @@
+import gc
 import io
 import http.client
 import json
+import os
 import tempfile
 import types
 import unittest
@@ -680,6 +682,27 @@ class SubscriptionTest(unittest.TestCase):
         self.assertEqual(by_id["example-feed"]["status"], "error")
         self.assertEqual(by_id["example-feed"]["error_code"], "unexpected")
         self.assertEqual(by_id["healthy-feed"]["status"], "healthy")
+
+    def test_repeated_operations_do_not_leak_connections(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        entry_id, _ = store.insert_entry(
+            "example-feed",
+            subscriptions.asdict(self.entry("e1", "Long episode", 1)),
+            state="queued",
+        )
+        token = store.claim_entries(1)[0]["claim_token"]
+
+        def fd_count():
+            gc.collect()
+            return len(os.listdir("/dev/fd"))
+
+        baseline = fd_count()
+        for _ in range(200):
+            store.heartbeat(entry_id, token)
+        self.assertLess(fd_count() - baseline, 50)
 
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()

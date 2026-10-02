@@ -10,6 +10,7 @@ import sqlite3
 import tempfile
 import uuid
 from collections.abc import Iterable
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -447,8 +448,23 @@ class SubscriptionStore:
         connection.execute("PRAGMA busy_timeout = 5000")
         return connection
 
+    @contextmanager
+    def session(self):
+        """commit-on-success connection that is always closed.
+
+        `with self.connect()` only commits — the connection (and its file
+        descriptor) stays open until GC. Long ticks with a heartbeat thread
+        otherwise leak descriptors into launchd's low file limit.
+        """
+        connection = self.connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def migrate(self) -> None:
-        with self.connect() as con:
+        with self.session() as con:
             version = con.execute("PRAGMA user_version").fetchone()[0]
             if version > DATABASE_SCHEMA_VERSION:
                 raise SubscriptionError(
@@ -570,7 +586,7 @@ class SubscriptionStore:
         self, subscriptions: Iterable[dict[str, Any]], *, now: str | None = None
     ) -> None:
         stamp = now or now_iso()
-        with self.connect() as con:
+        with self.session() as con:
             for subscription in subscriptions:
                 item_id = subscription["id"]
                 digest = config_digest(subscription)
@@ -600,7 +616,7 @@ class SubscriptionStore:
                     )
 
     def state_for(self, subscription_id: str) -> dict[str, Any]:
-        with self.connect() as con:
+        with self.session() as con:
             row = con.execute(
                 "SELECT * FROM source_state WHERE subscription_id = ?",
                 (subscription_id,),
@@ -631,7 +647,7 @@ class SubscriptionStore:
         stamp = parse_iso(now or now_iso())
         token = uuid.uuid4().hex
         expires = (stamp + timedelta(seconds=seconds)).isoformat()
-        with self.connect() as con:
+        with self.session() as con:
             row = con.execute(
                 "SELECT expires_at FROM scheduler_locks WHERE name = ?", (name,)
             ).fetchone()
@@ -644,7 +660,7 @@ class SubscriptionStore:
         return token
 
     def release_lock(self, name: str, token: str) -> None:
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "DELETE FROM scheduler_locks WHERE name = ? AND owner_token = ?",
                 (name, token),
@@ -656,7 +672,7 @@ class SubscriptionStore:
         stamp = parse_iso(now or now_iso())
         token = uuid.uuid4().hex
         expires = (stamp + timedelta(seconds=seconds)).isoformat()
-        with self.connect() as con:
+        with self.session() as con:
             row = con.execute(
                 "SELECT lease_expires_at FROM source_state WHERE subscription_id = ?",
                 (subscription_id,),
@@ -672,7 +688,7 @@ class SubscriptionStore:
         return token
 
     def release_source_lease(self, subscription_id: str, token: str) -> None:
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "UPDATE source_state SET lease_token = NULL, lease_expires_at = NULL WHERE subscription_id = ? AND lease_token = ?",
                 (subscription_id, token),
@@ -696,7 +712,7 @@ class SubscriptionStore:
                 + jitter_seconds(subscription["id"], poll_seconds // 10)
             )
         ).isoformat()
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "UPDATE source_state SET initialized_at = COALESCE(initialized_at, ?), last_checked_at = ?, last_success_at = ?, next_due_at = ?, etag = ?, last_modified = ?, error_streak = 0, last_error_code = NULL, last_error = NULL WHERE subscription_id = ?",
                 (
@@ -721,7 +737,7 @@ class SubscriptionStore:
         now: str | None = None,
     ) -> None:
         stamp = parse_iso(now or now_iso())
-        with self.connect() as con:
+        with self.session() as con:
             state = con.execute(
                 "SELECT error_streak FROM source_state WHERE subscription_id = ?",
                 (subscription_id,),
@@ -776,7 +792,7 @@ class SubscriptionStore:
             error_code or None,
             error[:800] or None,
         )
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "INSERT INTO source_checks(subscription_id, checked_at, provider, outcome, http_status, entries_parsed, new_entries, duplicate_entries, queued_entries, discovered_entries, baseline_entries, skipped_entries, error_code, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 values,
@@ -786,7 +802,7 @@ class SubscriptionStore:
         return bool(self.state_for(subscription_id).get("initialized_at"))
 
     def has_entry(self, subscription_id: str, entry: dict[str, Any]) -> bool:
-        with self.connect() as con:
+        with self.session() as con:
             row = con.execute(
                 "SELECT 1 FROM entries WHERE subscription_id = ? AND entry_key = ?",
                 (subscription_id, entry_key(entry)),
@@ -814,7 +830,7 @@ class SubscriptionStore:
         completeness = "full" if content else "summary"
         content_kind = str(entry.get("content_kind") or "article")
         url = canonical_url(str(entry.get("url") or ""))
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "INSERT OR IGNORE INTO entries(subscription_id, entry_key, external_id, canonical_url, title, author, published_at, updated_at, content_kind, completeness, content_html, summary_html, enclosure_url, raw_payload_json, discovered_at, state, skip_reason, queued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -851,7 +867,7 @@ class SubscriptionStore:
         if not ids:
             return 0
         placeholders = ",".join("?" for _ in ids)
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 f"UPDATE entries SET state='queued', queued_at=?, skip_reason=NULL, next_retry_at=NULL WHERE id IN ({placeholders}) AND state IN ('discovered', 'retry_wait', 'index_retry')",
                 (stamp, *ids),
@@ -865,7 +881,7 @@ class SubscriptionStore:
         if not ids:
             return 0
         placeholders = ",".join("?" for _ in ids)
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 f"UPDATE entries SET state='skipped', skip_reason=?, completed_at=? WHERE id IN ({placeholders}) AND state IN ('discovered', 'queued', 'retry_wait')",
                 (reason[:240], now or now_iso(), *ids),
@@ -875,7 +891,7 @@ class SubscriptionStore:
     def reclaim_expired_claims(self, *, now: str | None = None) -> int:
         stamp = parse_iso(now or now_iso())
         stale_before = (stamp - timedelta(seconds=CLAIM_STALE_SECONDS)).isoformat()
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "UPDATE entries SET state='retry_wait', next_retry_at=?, last_error_code='lease_expired', last_error='previous entry claim expired' WHERE state='ingesting' AND COALESCE(heartbeat_at, claimed_at) < ?",
                 (stamp.isoformat(), stale_before),
@@ -885,7 +901,7 @@ class SubscriptionStore:
     def heartbeat(self, entry_id: int, token: str, *, now: str | None = None) -> bool:
         if not token:
             return False
-        with self.connect() as con:
+        with self.session() as con:
             con.execute(
                 "UPDATE entries SET heartbeat_at=? WHERE id=? AND claim_token=? AND state='ingesting'",
                 (now or now_iso(), entry_id, token),
@@ -913,7 +929,7 @@ class SubscriptionStore:
             filter_sql = " AND subscription_id = ?"
             params.append(subscription_id)
         params.append(limit)
-        with self.connect() as con:
+        with self.session() as con:
             rows = con.execute(
                 f"SELECT * FROM entries WHERE (state='queued'{retry_clause}) {filter_sql} ORDER BY queued_at ASC, id ASC LIMIT ?",
                 tuple(params),
@@ -950,7 +966,7 @@ class SubscriptionStore:
         now: str | None = None,
     ) -> None:
         stamp = parse_iso(now or now_iso())
-        with self.connect() as con:
+        with self.session() as con:
             row = con.execute(
                 "SELECT attempt_count FROM entries WHERE id = ?", (entry_id,)
             ).fetchone()
@@ -1013,7 +1029,7 @@ class SubscriptionStore:
             params.append(state)
         query += " ORDER BY discovered_at DESC, id DESC LIMIT ?"
         params.append(limit)
-        with self.connect() as con:
+        with self.session() as con:
             return [dict(row) for row in con.execute(query, params).fetchall()]
 
     def status_rows(
@@ -1023,7 +1039,7 @@ class SubscriptionStore:
         since = (
             (datetime.now(UTC) - timedelta(days=7)).replace(microsecond=0).isoformat()
         )
-        with self.connect() as con:
+        with self.session() as con:
             states = {
                 row["subscription_id"]: dict(row)
                 for row in con.execute("SELECT * FROM source_state").fetchall()
