@@ -152,5 +152,54 @@ class DepsTest(unittest.TestCase):
             deps.check_python_module("chubby_definitely_not_a_module_xyz", "pip install x")
 
 
+class YtdlpEnvFlagsTest(unittest.TestCase):
+    def _cfg(self):
+        return PlatformConfig(
+            id="youtube", name="YouTube", tag="YouTube", default_title="视频"
+        )
+
+    def _captured_cmd(self, env):
+        from unittest.mock import patch
+
+        from chubby_common import ytdlp
+
+        captured = {}
+
+        class Result:
+            stdout = ""
+            returncode = 0
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return Result()
+
+        with patch.dict(os.environ, env, clear=False), patch(
+            "chubby_common.deps.ensure_ytdlp"
+        ), patch("chubby_common.ytdlp.subprocess.run", side_effect=fake_run):
+            ytdlp.run_ydl(self._cfg(), ["--get-title", "https://x"], timeout=5)
+        return captured["cmd"]
+
+    def test_browser_cookie_and_remote_components_flags(self):
+        cmd = self._captured_cmd(
+            {
+                "YTDLP_COOKIES_FROM_BROWSER": "chrome",
+                "YTDLP_REMOTE_COMPONENTS": "ejs:github",
+            }
+        )
+        self.assertIn("--cookies-from-browser", cmd)
+        self.assertIn("chrome", cmd)
+        self.assertIn("--remote-components", cmd)
+        self.assertIn("ejs:github", cmd)
+
+    def test_no_flags_without_env(self):
+        env = {
+            key: ""
+            for key in ("YTDLP_COOKIES_FROM_BROWSER", "YTDLP_REMOTE_COMPONENTS")
+        }
+        cmd = self._captured_cmd(env)
+        self.assertNotIn("--cookies-from-browser", cmd)
+        self.assertNotIn("--remote-components", cmd)
+
+
 if __name__ == "__main__":
     unittest.main()
