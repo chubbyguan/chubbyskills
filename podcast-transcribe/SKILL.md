@@ -14,7 +14,7 @@ metadata:
 
 将播客音频下载并转录为 Markdown。支持小宇宙、喜马拉雅、直接音频地址、本地音频和 RSS 批量流程。
 
-默认在本地使用 `faster-whisper`。Atlas Cloud、MuAPI 是用户明确选择后才启用的 **experimental** 云端后端；音频会发送至第三方服务并可能计费，本版本尚未完成真实付费服务验收。
+默认在本地使用 SenseVoice-Small（与视频类技能共用的 `chubby_common/funasr.py` 封装）。可选云端后端为阿里云百炼 DashScope 的 `qwen3-asr-flash` 和 Groq 的 `whisper-large-v3-turbo`，用户明确选择后才启用；音频会发送至云端并可能计费。
 
 ## 环境要求
 
@@ -23,12 +23,12 @@ metadata:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install faster-whisper
+python3 -m pip install -r requirements.txt
 # macOS: brew install ffmpeg
 # Ubuntu: sudo apt install ffmpeg
 ```
 
-本地模型首次使用时需要下载。仅使用云端后端不需要 `faster-whisper`；Atlas 容器转换仍可能需要 `ffmpeg`。云端密钥通过安全环境配置，不能写入命令参数、转录稿或版本库。
+本地模型首次使用时需要下载。仅使用云端后端不需要 funasr 本地依赖；不支持的音频容器转换仍可能需要 `ffmpeg`。云端密钥通过安全环境配置，不能写入命令参数、转录稿或版本库。
 
 ## 单集与批量
 
@@ -36,7 +36,7 @@ python3 -m pip install faster-whisper
 python3 scripts/transcribe.py "https://www.xiaoyuzhoufm.com/episode/xxxxx" ./output \
   --provider local
 python3 scripts/transcribe.py "/你的音频目录/episode.mp3" ./output \
-  --provider local --model small --language zh
+  --provider local --language zh
 python3 scripts/batch_transcribe.py --rss-url "替换为实际 RSS 地址" \
   --output ./output --count 10 --provider local
 ```
@@ -45,28 +45,51 @@ python3 scripts/batch_transcribe.py --rss-url "替换为实际 RSS 地址" \
 
 自动下载仅接受公网 HTTP(S) 直连地址，禁用代理和重定向，拒绝本地/私网地址。需要跳转或代理的来源，请先自行下载音频，再传入本地文件路径。
 
+## 本地模型选择：SenseVoice-Small vs Qwen3-ASR-0.6B
+
+`--provider local` 支持两个本地模型：`SenseVoiceSmall`（默认）和 `qwen3-asr-0.6b`：
+
+```bash
+python3 scripts/transcribe.py "/你的音频目录/episode.mp3" ./output --provider local
+python3 scripts/transcribe.py "/你的音频目录/episode.mp3" ./output --provider local --model qwen3-asr-0.6b
+```
+
+`qwen3-asr-0.6b` 是可选重依赖，不在默认安装内，需自行 `pip install qwen-asr transformers torch`。
+
+以下对比数据来自 2026-10 在 MacBook Pro（Apple M3 Pro，纯 CPU）上对 5 分钟中文播客的实测：
+
+| | SenseVoice-Small（默认） | Qwen3-ASR-0.6B（可选） |
+|---|---|---|
+| 速度 | RTF 0.11（5 分钟音频约 33 秒） | RTF 0.80（约 4 分钟，慢约 7 倍） |
+| 专有名词 | 一般（"岩茶"误作"盐茶"，人名前后不一致） | 更稳（"岩茶"、人名识别一致） |
+| 主要风险 | 输出混入情感标签，正式文稿需清洗 | 有幻觉式改写风险（"黄金加工厂"→"皇帝家族"）；无 ITN，数字输出为全文字 |
+| 长音频 | VAD 自动分段，稳定 | 整段进模型；本后端已把 `max_new_tokens` 调到 4096 避免截断 |
+| 适用场景 | CPU 默认选择，长播客友好 | GPU 机器，或对专名/人名准确性敏感的内容 |
+
+两者质量互有胜负、没有代差。CPU 场景请保持默认 SenseVoice-Small；有 GPU 或专名敏感时再选 Qwen3-ASR-0.6B。
+
 ## 可选云端转录
 
 | 后端 | 凭据环境变量 | 默认模型 |
 |---|---|---|
-| `local` | 无 | `small` |
-| `atlas` | `ATLAS_API_KEY`，兼容 `ATLAS_CLOUD_API_KEY` | `bytedance/seed-asr-2.0` |
-| `muapi` | `MUAPI_API_KEY`，兼容 `MU_API_KEY` | `openai-whisper` |
+| `local` | 无 | `SenseVoiceSmall`（仅用于元数据记录） |
+| `dashscope` | `DASHSCOPE_API_KEY` | `qwen3-asr-flash` |
+| `groq` | `GROQ_API_KEY` | `whisper-large-v3-turbo` |
 
-配置所选服务凭据后：
+配置 `DASHSCOPE_API_KEY` 或 `GROQ_API_KEY` 后：
 
 ```bash
 python3 scripts/transcribe.py "/你的音频目录/episode.mp3" ./output \
-  --provider atlas --cloud-timeout 1800 \
+  --provider dashscope --cloud-timeout 1800 \
   --state-dir "$HOME/.local/state/chubbyskills/podcast"
 python3 scripts/transcribe.py "/你的音频目录/episode.mp3" ./output \
-  --provider muapi --cloud-timeout 1800 \
+  --provider groq --cloud-timeout 1800 \
   --state-dir "$HOME/.local/state/chubbyskills/podcast"
 ```
 
 `--provider` 优先于 `PODCAST_TRANSCRIBE_PROVIDER`，都未指定时使用 `local`。批量入口支持同样的 provider、模型、语言、等待和状态目录参数，并把最终选项显式传给单集进程。
 
-MuAPI 音频必须小于 25 MiB，超限在上传前拒绝。Atlas 对不支持的容器先在本机转换为 MP3，再提交音频。
+两个云端后端都是同步接口，一次请求直接返回全文。DashScope 限制为**编码后不超过 10MB、时长不超过 5 分钟**（客户端在原始文件超过 7 MiB 时拒绝）；Groq 免费层**文件上限 25MB**（达到 25 MiB 时拒绝），并返回分段时间戳作为附录。超限都会提示改用本地 SenseVoice-Small——云端只适合短音频，长播客请用 `--provider local`。不支持的音频容器先在本机用 `ffmpeg` 转为 MP3 再提交。
 
 ## 云端任务恢复
 
@@ -82,17 +105,19 @@ MuAPI 音频必须小于 25 MiB，超限在上传前拒绝。Atlas 对不支持�
 
 产物为带 frontmatter、来源和转录后端标记的 Markdown。后端返回可用分段时保留时间戳；没有时间信息时不编造时间轴。
 
-- 本地 CPU 推理耗时受音频长度、模型和机器配置影响。
+- 本地 SenseVoice-Small 只输出纯文本全文，不生成逐段时间戳（段数记为 1）。
+- 本地 CPU 推理耗时受音频长度和机器配置影响。
 - 转录可能有专有名词、数字或断句错误，引用前核对原始音频。
 - 云端真实可用性、账号权限、音频兼容性和费用尚需独立验收。
 - 本 skill 不提供通用说话人分离保证。
 
 ## 贡献与参考
 
-可选云端转录需求分别来自 [binyangzhu000-sudo 的 PR #3](https://github.com/chubbyguan/chubbyskills/pull/3) 和 [Anil-matcha 的 PR #5](https://github.com/chubbyguan/chubbyskills/pull/5)。本项目基于共同接口重新实现，保留贡献归属。
+可选云端转录需求最初来自 [binyangzhu000-sudo 的 PR #3](https://github.com/chubbyguan/chubbyskills/pull/3) 和 [Anil-matcha 的 PR #5](https://github.com/chubbyguan/chubbyskills/pull/5)（Atlas / MuAPI 实验后端，现已被 DashScope 后端取代，归属保留）。
 
-- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-- [OpenAI Whisper](https://github.com/openai/whisper)
+- [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
+- [阿里云百炼 Qwen-ASR API 参考](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)
+- [Groq Speech to Text 文档](https://console.groq.com/docs/speech-to-text)
 
 ## 合规声明
 

@@ -161,7 +161,7 @@ python3 tools/chubby.py subscribe process --limit 2
 - 全局每次处理最多 3 条；
 - 标题正则可在添加来源时设定 `--include-title` / `--exclude-title`；
 - YouTube 沿用字幕优先、缺字幕才走本地转录；
-- 播客沿用现有 provider 设置，默认本地 `faster-whisper`；
+- 播客沿用现有 provider 设置，默认本地 SenseVoice-Small（funasr）；
 - 成功条目通过 URL / GUID / enclosure identity 去重，重复同步不会重复转录。
 
 恢复暂态失败：

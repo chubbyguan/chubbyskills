@@ -34,7 +34,7 @@ class PlatformDoctorTest(unittest.TestCase):
     def test_audio_path_requires_its_own_dependencies(self):
         code, report = self.run_doctor("podcast", {"cmd:ffmpeg"})
         self.assertEqual(code, 1)
-        self.assertEqual(report["platforms"][0]["missing_required"], ["faster_whisper"])
+        self.assertEqual(report["platforms"][0]["missing_required"], ["funasr"])
 
 
 if __name__ == "__main__":

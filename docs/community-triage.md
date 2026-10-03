@@ -7,8 +7,8 @@
 | 贡献 | 值得吸收的需求 | 本项目的处理 |
 |---|---|---|
 | [PR #1：安装依赖路由](https://github.com/chubbyguan/chubbyskills/pull/1) | 区分运行依赖安装与 Agent skill 注册，完整名称路由和轻量依赖边界 | v0.11.1 已以当前安装器等效解决；本轮说明对应关系并关闭旧 PR |
-| [PR #3：Atlas Cloud 播客转录](https://github.com/chubbyguan/chubbyskills/pull/3)，[binyangzhu000-sudo](https://github.com/binyangzhu000-sudo) | 为不便运行本地模型的用户提供可选云端转录 | 在统一 provider 接口上重新实现，加入任务恢复和安全请求；保留本地默认，标记 experimental |
-| [PR #5：MuAPI 播客转录](https://github.com/chubbyguan/chubbyskills/pull/5)，[Anil-matcha](https://github.com/Anil-matcha) | 可选托管转录、上传、轮询和统一 Markdown | 与 Atlas 共用恢复和输出约定，修复显式本地选择失效等问题；标记 experimental |
+| [PR #3：Atlas Cloud 播客转录](https://github.com/chubbyguan/chubbyskills/pull/3)，[binyangzhu000-sudo](https://github.com/binyangzhu000-sudo) | 为不便运行本地模型的用户提供可选云端转录 | 在统一 provider 接口上重新实现，加入任务恢复和安全请求；保留本地默认，标记 experimental（该 Atlas 后端现已被 DashScope `qwen3-asr-flash` 后端取代，归属保留） |
+| [PR #5：MuAPI 播客转录](https://github.com/chubbyguan/chubbyskills/pull/5)，[Anil-matcha](https://github.com/Anil-matcha) | 可选托管转录、上传、轮询和统一 Markdown | 与 Atlas 共用恢复和输出约定，修复显式本地选择失效等问题；标记 experimental（该 MuAPI 后端现已被 DashScope `qwen3-asr-flash` 后端取代，归属保留） |
 | [PR #6：cue-omni-reader 文档入口](https://github.com/chubbyguan/chubbyskills/pull/6)，[huhoo](https://github.com/huhoo) | 让站外文档或外部解析结果能进入知识库 | 增加通用本地文档导入和[可选集成页](./integrations.md)，保留第三方解析待验证状态；未原样合入 README 推荐段落 |
 
 ## 为什么重新实现云端接入

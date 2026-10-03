@@ -172,7 +172,7 @@ def save_evidence(item, source, directory):
     item["source"] = source
     item["human_verified"] = False
     item["runtime"] = {"python": runtime_platform.python_version(), "system": runtime_platform.system()}
-    for package in ("yt-dlp", "beautifulsoup4", "faster-whisper", "mcp"):
+    for package in ("yt-dlp", "beautifulsoup4", "funasr", "mcp"):
         try:
             item["runtime"][package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:

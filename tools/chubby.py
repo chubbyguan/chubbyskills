@@ -592,7 +592,7 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
     safe_source, source_secrets = chubby_ingest.redact_url(source)
     secrets.extend(source_secrets)
     if detected_skill == "podcast":
-        secrets.extend(os.environ[key] for key in ("ATLAS_API_KEY", "ATLAS_CLOUD_API_KEY", "MUAPI_API_KEY", "MU_API_KEY") if os.environ.get(key))
+        secrets.extend(os.environ[key] for key in ("DASHSCOPE_API_KEY", "GROQ_API_KEY") if os.environ.get(key))
     if source_secrets:
         retry_requires.append("--source")
     safe_command, _, command_secrets = chubby_ingest.redact_arguments(cmd)
@@ -639,7 +639,7 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
                           artifact_files=previous.get("artifact_files", []),
                           reused=True, reused_from=previous["run_id"])
             return finish_record(record, secrets)
-    if detected_skill == "podcast" and extra_option_value(args.extra, "--provider") in {"atlas", "muapi"} and not args.dry_run:
+    if detected_skill == "podcast" and extra_option_value(args.extra, "--provider") in {"dashscope", "groq"} and not args.dry_run:
         # A killed parent must not leave an older success eligible for reuse
         # while the provider's newer job still needs recovery.
         append_record(config, dict(record, status="running", error="Cloud capture started; final state not recorded yet"))
@@ -1347,7 +1347,7 @@ def build_parser():
     doctor = sub.add_parser("doctor", help="Show config and dependency health")
     doctor.set_defaults(handler=command_doctor)
     doctor.add_argument("--platform", choices=sorted(chubby_ingest.SKILL_COMMANDS))
-    doctor.add_argument("--provider", choices=["local", "atlas", "muapi"], help="Podcast provider to check")
+    doctor.add_argument("--provider", choices=["local", "dashscope", "groq"], help="Podcast provider to check")
 
     quickstart = sub.add_parser("quickstart", help="Run the first-use offline acceptance flow")
     quickstart.add_argument("--force-init", action="store_true", help="Overwrite chubby.yaml before checks")

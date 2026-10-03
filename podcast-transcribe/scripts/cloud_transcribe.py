@@ -1,7 +1,7 @@
-"""Resumable optional cloud ASR providers, using standard-library HTTPS only.
+"""Resumable optional cloud ASR providers (DashScope qwen3-asr-flash, Groq Whisper), using standard-library HTTPS only.
 
-Atlas endpoint/schema adapted from PR #3 by @binyangzhu000-sudo.
-MuAPI upload/Whisper endpoint adapted from PR #5 by @Anil-matcha.
+Earlier Atlas/MuAPI experimental adapters were adapted from PR #3 by @binyangzhu000-sudo
+and PR #5 by @Anil-matcha; they have been superseded by the DashScope and Groq backends.
 The persistent lifecycle, authentication boundaries and cache are shared here.
 """
 from __future__ import annotations
@@ -18,7 +18,6 @@ import subprocess
 import tempfile
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 import uuid
 
@@ -150,22 +149,58 @@ def _transcript(payload) -> dict | None:
     return None
 
 
+DASHSCOPE_MIME_TYPES = {
+    "mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4", "aac": "audio/aac",
+    "flac": "audio/flac", "ogg": "audio/ogg", "opus": "audio/ogg",
+}
+
+# Base64 inflates payloads by 4/3; keep the raw file small enough that the encoded
+# data URL stays below the documented 10 MB input limit of qwen3-asr-flash.
+DASHSCOPE_MAX_AUDIO_BYTES = 7 * 1024 * 1024
+
+GROQ_FORMATS = {"flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"}
+
+# Groq's free tier accepts files up to 25 MB; anything at or above is refused before upload.
+GROQ_MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
+
+def _convert_to_mp3(audio_path: Path, deadline: float, label: str) -> bytes:
+    """Convert an unsupported container with ffmpeg and return MP3 bytes."""
+    with tempfile.TemporaryDirectory(prefix=f"podcast-{label}-") as temporary:
+        converted = Path(temporary) / "audio.mp3"
+        try:
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(audio_path), "-codec:a", "libmp3lame", str(converted)], capture_output=True, check=True, timeout=_remaining(deadline, 1800))
+        except (OSError, subprocess.SubprocessError):
+            raise RuntimeError(f"{label} container conversion requires working ffmpeg") from None
+        return converted.read_bytes()
+
+
+def _multipart(fields: dict, filename: str, content: bytes) -> tuple:
+    boundary = "----chubbyskills-" + uuid.uuid4().hex
+    parts = []
+    for name, value in fields.items():
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    # Fixed safe multipart filename avoids leaking paths or injecting headers.
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode() + content + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    return boundary, b"".join(parts)
+
+
 class CloudProvider:
+    """Synchronous cloud ASR: DashScope qwen3-asr-flash or Groq whisper-large-v3-turbo."""
+
+    KEY_ENVS = {"dashscope": "DASHSCOPE_API_KEY", "groq": "GROQ_API_KEY"}
+
     def __init__(self, config: dict):
         self.config = config
+        self.provider = config["provider"]
         self.base_url = config["base_url"]
         self.model = config["model"]
         self.language = config["language"]
-        if config["provider"] == "atlas":
-            key = os.environ.get("ATLAS_API_KEY") or os.environ.get("ATLAS_CLOUD_API_KEY")
-            self.auth_header = "Authorization"
-            self.auth_value = f"Bearer {key}" if key else ""
-            key_hint = "ATLAS_API_KEY"
-        else:
-            key = os.environ.get("MUAPI_API_KEY") or os.environ.get("MU_API_KEY")
-            self.auth_header = "x-api-key"
-            self.auth_value = key or ""
-            key_hint = "MUAPI_API_KEY"
+        key_hint = self.KEY_ENVS[self.provider]
+        key = os.environ.get(key_hint) or ""
+        self.auth_header = "Authorization"
+        self.auth_value = f"Bearer {key}" if key else ""
         if not key:
             raise ValueError(f"Cloud provider requires {key_hint}")
         if any(ord(char) < 32 or ord(char) == 127 for char in key):
@@ -182,46 +217,87 @@ class CloudProvider:
         return request_json(request, _remaining(deadline))
 
     def submit(self, payload, deadline):
-        endpoint = "model/generateAudio" if self.config["provider"] == "atlas" else self.model
-        return self.request(endpoint, deadline, payload)
+        if self.provider == "groq":
+            boundary, body = _multipart(payload["fields"], payload["filename"], payload["content"])
+            response = self.request("audio/transcriptions", deadline, body=body, content_type=f"multipart/form-data; boundary={boundary}")
+        else:
+            response = self.request("chat/completions", deadline, payload)
+            # qwen3-asr-flash returns the transcript in the chat completion response.
+            choices = response.get("choices")
+            if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                raise RuntimeError("DashScope returned an invalid completion response")
+            message = choices[0].get("message")
+            text = message.get("content") if isinstance(message, dict) else None
+            if isinstance(text, list):
+                text = "".join(part.get("text", "") for part in text if isinstance(part, dict))
+            response = {"text": text, "segments": []}
+        text = response.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise RuntimeError(f"{self.provider} completed without transcript text")
+        result = {"status": "completed", "text": text.strip()}
+        if isinstance(response.get("segments"), list):
+            result["segments"] = response["segments"]
+        return result
 
     def poll(self, task_id, deadline):
-        encoded_id = quote(task_id, safe="")
-        endpoint = f"model/prediction/{encoded_id}" if self.config["provider"] == "atlas" else f"predictions/{encoded_id}/result"
-        return self.request(endpoint, deadline)
+        raise RuntimeError(f"{self.provider} transcription is synchronous and has no polling endpoint")
 
     def prepare(self, audio_path: Path, deadline: float) -> dict:
-        if self.config["provider"] == "atlas":
-            audio_format = audio_path.suffix.lower().lstrip(".")
-            if audio_format not in {"mp3", "wav", "ogg", "raw"}:
-                # Convert in a private temporary directory; hash identity stays on original input.
-                with tempfile.TemporaryDirectory(prefix="podcast-atlas-") as temporary:
-                    converted = Path(temporary) / "audio.mp3"
-                    try:
-                        subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(audio_path), "-codec:a", "libmp3lame", str(converted)], capture_output=True, check=True, timeout=_remaining(deadline, 1800))
-                    except (OSError, subprocess.SubprocessError):
-                        raise RuntimeError("Atlas container conversion requires working ffmpeg") from None
-                    return self.prepare(converted, deadline)
-            if audio_path.stat().st_size > 100 * 1024 * 1024:
-                raise ValueError("Atlas inline audio is limited to 100 MiB by this client")
-            payload = {"model": self.model, "audio_url": base64.b64encode(audio_path.read_bytes()).decode("ascii"), "format": audio_format, "enable_itn": True, "enable_punc": True, "show_utterances": False}
+        if self.provider == "groq":
+            return self._prepare_groq(audio_path, deadline)
+        return self._prepare_dashscope(audio_path, deadline)
+
+    def _prepare_dashscope(self, audio_path: Path, deadline: float) -> dict:
+        audio_format = audio_path.suffix.lower().lstrip(".")
+        if audio_format not in DASHSCOPE_MIME_TYPES:
+            # Convert in a private temporary directory; hash identity stays on original input.
+            content = _convert_to_mp3(audio_path, deadline, "dashscope")
+            audio_format, mime = "mp3", DASHSCOPE_MIME_TYPES["mp3"]
+            raw_size = len(content)
         else:
-            if audio_path.stat().st_size >= 25 * 1024 * 1024:
-                raise ValueError("MuAPI requires an audio file smaller than 25 MiB")
-            boundary = "----chubbyskills-" + uuid.uuid4().hex
-            # Fixed safe multipart filename avoids leaking paths or injecting headers.
-            suffix = audio_path.suffix.lower() if audio_path.suffix.lower() in {".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac", ".mp4"} else ".bin"
-            body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio{suffix}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode() + audio_path.read_bytes() + f"\r\n--{boundary}--\r\n".encode())
-            try:
-                result = self.request("upload_file", deadline, body=body, content_type=f"multipart/form-data; boundary={boundary}")
-                audio_url = result.get("url") or result.get("audio_url")
-                audio_url = _config_module().validate_https_url(audio_url)
-            except (ValueError, RuntimeError, HTTPError, URLError, TimeoutError, OSError):
-                raise RuntimeError("MuAPI audio upload failed or returned an invalid HTTPS URL; no transcription job was submitted") from None
-            payload = {"audio_url": audio_url, "response_format": "verbose_json"}
+            mime = DASHSCOPE_MIME_TYPES[audio_format]
+            raw_size = audio_path.stat().st_size
+            if raw_size > DASHSCOPE_MAX_AUDIO_BYTES:
+                raise ValueError(
+                    "音频超过 DashScope qwen3-asr-flash 的输入上限（base64 编码后不超过 10MB，"
+                    "且仅支持不超过 5 分钟的录音）；请改用本地 SenseVoice-Small（--provider local）转录长播客")
+            content = audio_path.read_bytes()
+        if raw_size > DASHSCOPE_MAX_AUDIO_BYTES:
+            raise ValueError(
+                "音频超过 DashScope qwen3-asr-flash 的输入上限（base64 编码后不超过 10MB，"
+                "且仅支持不超过 5 分钟的录音）；请改用本地 SenseVoice-Small（--provider local）转录长播客")
+        data_url = f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": [
+                {"type": "input_audio", "input_audio": {"data": data_url, "format": audio_format}},
+            ]}],
+            "stream": False,
+            "asr_options": {"enable_itn": True},
+        }
         if self.language:
-            payload["language"] = self.language
+            payload["asr_options"]["language"] = self.language
         return payload
+
+    def _prepare_groq(self, audio_path: Path, deadline: float) -> dict:
+        audio_format = audio_path.suffix.lower().lstrip(".")
+        if audio_format not in GROQ_FORMATS:
+            # Convert in a private temporary directory; hash identity stays on original input.
+            content = _convert_to_mp3(audio_path, deadline, "groq")
+            audio_format = "mp3"
+        else:
+            if audio_path.stat().st_size >= GROQ_MAX_AUDIO_BYTES:
+                raise ValueError(
+                    "音频达到 Groq 免费层 25MB 文件上限；请改用本地 SenseVoice-Small（--provider local）转录长播客")
+            content = audio_path.read_bytes()
+        if len(content) >= GROQ_MAX_AUDIO_BYTES:
+            raise ValueError(
+                "音频达到 Groq 免费层 25MB 文件上限；请改用本地 SenseVoice-Small（--provider local）转录长播客")
+        fields = {"model": self.model, "response_format": "verbose_json"}
+        if self.language and self.language != "auto":
+            # Groq expects an ISO-639-1 code such as zh/en.
+            fields["language"] = self.language
+        return {"fields": fields, "filename": f"audio.{audio_format}", "content": content}
 
 
 def transcribe_cloud(audio_path, *, provider, model=None, language=None, base_url=None,
@@ -230,7 +306,7 @@ def transcribe_cloud(audio_path, *, provider, model=None, language=None, base_ur
     settings = _config_module()
     config = settings.resolve_provider_config(provider, model, language, base_url, state_dir)
     if config["provider"] == "local":
-        raise ValueError("Cloud transcription requires atlas or muapi")
+        raise ValueError("Cloud transcription requires dashscope or groq")
     cloud_timeout = settings.positive_seconds(cloud_timeout, "cloud-timeout")
     poll_interval = settings.positive_seconds(poll_interval, "poll-interval", maximum=60)
     audio_path = Path(audio_path)

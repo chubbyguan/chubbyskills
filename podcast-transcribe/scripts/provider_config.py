@@ -7,8 +7,9 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit, urlunsplit
 
-DEFAULT_MODELS = {"local": "small", "atlas": "bytedance/seed-asr-2.0", "muapi": "openai-whisper"}
-DEFAULT_BASE_URLS = {"local": "", "atlas": "https://api.atlascloud.ai/api/v1", "muapi": "https://api.muapi.ai/api/v1"}
+DEFAULT_MODELS = {"local": "SenseVoiceSmall", "dashscope": "qwen3-asr-flash", "groq": "whisper-large-v3-turbo"}
+LOCAL_MODELS = ("SenseVoiceSmall", "qwen3-asr-0.6b")
+DEFAULT_BASE_URLS = {"local": "", "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1", "groq": "https://api.groq.com/openai/v1"}
 
 
 def validate_https_url(value: str, *, base: bool = False) -> str:
@@ -40,12 +41,12 @@ def positive_seconds(value: float, label: str, maximum: float = 86400) -> float:
 def resolve_provider_config(provider=None, model=None, language=None, base_url=None, state_dir=None) -> dict:
     provider = provider or os.environ.get("PODCAST_TRANSCRIBE_PROVIDER") or "local"
     if provider not in DEFAULT_MODELS:
-        raise ValueError("provider must be local, atlas or muapi")
+        raise ValueError("provider must be local, dashscope or groq")
     model = model or DEFAULT_MODELS[provider]
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]{0,199}", model) or ".." in model:
         raise ValueError("Invalid transcription model")
-    if provider == "muapi" and "/" in model:
-        raise ValueError("MuAPI model must be a single endpoint name")
+    if provider == "local" and model not in LOCAL_MODELS:
+        raise ValueError("local model must be SenseVoiceSmall or qwen3-asr-0.6b")
     language = "zh" if language is None else language
     if not isinstance(language, str) or not re.fullmatch(r"[A-Za-z-]{0,32}", language):
         raise ValueError("language must be a language code or empty for automatic detection")
@@ -60,7 +61,7 @@ def resolve_provider_config(provider=None, model=None, language=None, base_url=N
 
 def add_provider_arguments(parser) -> None:
     parser.add_argument("--provider", choices=tuple(DEFAULT_MODELS), default=None, help="Transcription provider (default: local; PODCAST_TRANSCRIBE_PROVIDER supported)")
-    parser.add_argument("--model", default=None, help="Provider model (small / bytedance/seed-asr-2.0 / openai-whisper)")
+    parser.add_argument("--model", default=None, help="Provider model (SenseVoiceSmall / qwen3-asr-flash / whisper-large-v3-turbo)")
     parser.add_argument("--language", default=None, help="Language code, default zh; empty enables automatic detection")
     parser.add_argument("--base-url", default=None, help="Explicit HTTPS API endpoint; persists across retries")
     parser.add_argument("--cloud-timeout", type=float, default=1800, help="Bounded cloud operation timeout in seconds")

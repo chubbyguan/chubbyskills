@@ -47,8 +47,8 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | B站 / YouTube | 稳定 | 字幕优先，仅需 `yt-dlp` |
 | 公众号 | 测试 | HTML 需 `beautifulsoup4`，PDF 兜底 |
 | 抖音 / TikTok / 微博 / 知乎 | 测试·重依赖 | 视频转录需 `funasr` + `ffmpeg` |
-| 播客 | 重依赖 | `faster-whisper`，可选云转录 |
-| X / 小红书 | 手动兜底 | 零依赖采集正文，失败可手动补全文 |
+| 播客 | 重依赖 | `funasr`（SenseVoice-Small），可选 DashScope / Groq 云转录 |
+| X / 小红书 | 手动兜底 | 零依赖采集正文；X 长文章可配 `X_COOKIES` 抓登录态全文，失败可手动补全文 |
 | RSS / YouTube 频道订阅 | P0 + P1 | 公开 Feed；支持 RSSHub / RSS-Bridge BYO 标签，默认只发现 |
 | 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
 
@@ -127,11 +127,15 @@ python3 tools/chubby.py search "原文中的关键词"
 | X / 小红书图文 | Python 标准库；`bash setup.sh light` 检查环境，登录态与平台限制仍可能影响采集 |
 | B站 / YouTube 字幕 | `python3 -m pip install yt-dlp` |
 | 本地视频转录 | `bash setup.sh video`；需要系统 `ffmpeg`，本地模型首次使用会下载 |
-| 本地播客转录 | `bash setup.sh podcast`；使用 `faster-whisper`，默认模型 `small` |
+| 本地播客转录 | `bash setup.sh podcast`；使用 SenseVoice-Small（与视频转录共用 funasr 依赖） |
 | 公众号及其 PDF 路径 | `bash setup.sh wechat` |
 | 通用 PDF 文字层导入 | `python3 -m pip install 'pymupdf>=1.24'` |
 
 平台抓取受 Cookie、字幕、地区和页面变化影响。失败时查看[平台状态](./docs/platform-status.md)和[替代处理方式](./docs/platform-fallbacks.md)，也可以保存正文后走本地导入。支持范围与最近的实测结果分开记录，见[真实平台验证](./docs/live-verification.md)。
+
+YouTube 在部分出口 IP 上要求登录证明（`Sign in to confirm you are not a bot`）。两个环境变量会透传到所有平台技能的 yt-dlp 调用：`YTDLP_COOKIES_FROM_BROWSER`（如 `chrome`，对应 `--cookies-from-browser`）和 `YTDLP_REMOTE_COMPONENTS`（如 `ejs:github`，让 yt-dlp 下载 JS 挑战求解组件）。两者均为可选，按需配置。
+
+X 长文章（Articles）默认只能抓到预览文本并给出警告；配置 `--cookies` 或 `X_COOKIES`（自己账号的 `auth_token` + `ct0`）后走登录态接口抓全文，失效时回退为预览。详见 [x-ingest](./x-ingest/SKILL.md)。
 
 ### 本地文档与 PDF
 
@@ -152,7 +156,9 @@ python3 tools/chubby.py ingest "/你的音频目录/episode.mp3" \
   --skill podcast --provider local --no-enrich
 ```
 
-v0.13.0 新增 **Atlas Cloud / MuAPI 实验后端**。需要主动选择 provider 并配置对应凭据；云服务会接收音频并可能计费。任务 ID 和完成结果持久保存，轮询失败或进程中断后可恢复；`--resubmit` 会明确创建新任务，可能再次计费。
+本地模型默认 SenseVoice-Small，也可选 Qwen3-ASR-0.6B（`--provider local --model qwen3-asr-0.6b`，需自行 `pip install qwen-asr transformers torch`）。2026-10 在 M3 Pro CPU 上的实测：SenseVoice RTF 0.11、Qwen RTF 0.80（慢约 7 倍）；质量互有胜负——Qwen 专名/人名更稳但有幻觉改写风险且无 ITN，SenseVoice 输出带情感标签需清洗。CPU 场景保持默认，GPU 或专名敏感时选 Qwen。详见 [podcast-transcribe](./podcast-transcribe/SKILL.md)。
+
+可选云端后端为 **阿里云百炼 DashScope 的 `qwen3-asr-flash`**（`--provider dashscope`，需 `DASHSCOPE_API_KEY`）和 **Groq 的 `whisper-large-v3-turbo`**（`--provider groq`，需 `GROQ_API_KEY`，免费层文件上限 25MB 且有速率限制）。音频发送至云端并可能计费；DashScope 限制为编码后不超过 10MB、时长不超过 5 分钟。超限都会在提交前拒绝并提示改用本地 SenseVoice-Small，长播客请用本地转录。完成结果持久保存，进程中断后可恢复；`--resubmit` 会明确创建新任务，可能再次计费。
 
 播客自动下载仅接受公网 HTTP(S) 直连地址，不跟随重定向，也不使用代理。需要跳转或代理的资源，先自行下载，再传本地文件。配置和恢复方法见[云转录说明](./docs/cloud-transcription.md)。云服务的真实转录尚未完成验收。
 
@@ -228,10 +234,10 @@ MCP 提供搜索、语义检索、读取原文、最近笔记、重新索引和�
 | 视频 | [tiktok-transcribe](./tiktok-transcribe/SKILL.md) | TikTok 视频转录 |
 | 视频 | [weibo-transcribe](./weibo-transcribe/SKILL.md) | 微博视频转录 |
 | 视频 | [zhihu-transcribe](./zhihu-transcribe/SKILL.md) | 知乎视频转录 |
-| 播客 | [podcast-transcribe](./podcast-transcribe/SKILL.md) | 单集、RSS、本地音频；可选实验云后端 |
+| 播客 | [podcast-transcribe](./podcast-transcribe/SKILL.md) | 单集、RSS、本地音频；可选 DashScope / Groq 云后端 |
 | 图文 | [wechat-article-ingest](./wechat-article-ingest/SKILL.md) | 公众号文章和 PDF 转 Markdown |
 | 图文 | [xiaohongshu-ingest](./xiaohongshu-ingest/SKILL.md) | 小红书图文、视频及可选内容分析 |
-| 图文 | [x-ingest](./x-ingest/SKILL.md) | X / Twitter 正文、图片和视频 |
+| 图文 | [x-ingest](./x-ingest/SKILL.md) | X / Twitter 正文、长文章（支持登录态全文）、图片和视频 |
 | 加工 | [content-enrich](./content-enrich/SKILL.md) | 可选的摘要、要点和标签加工 |
 | 知识库 | [knowledge-base-management](./knowledge-base-management/SKILL.md) | 文档导入、索引、资料包、归档与 MCP |
 | 工作流 | [industry-intelligence-radar](./industry-intelligence-radar/SKILL.md) | 多源情报扫描和趋势简报 |
@@ -244,11 +250,12 @@ MCP 提供搜索、语义检索、读取原文、最近笔记、重新索引和�
 | 功能 | 处理位置与配置 |
 |---|---|
 | 文档导入、关键词搜索、`semantic-lite`、资料包 | 本地；本地导入不抓取远程附件 |
-| 平台采集 | 访问来源平台；小红书可按需配置自己的 `XHS_COOKIE` |
+| 平台采集 | 访问来源平台；小红书可按需配置自己的 `XHS_COOKIE`，X 长文章可配 `X_COOKIES`，yt-dlp 路径可配 `YTDLP_COOKIES_FROM_BROWSER` 使用本机浏览器登录态 |
 | 本地音视频转录 | 本机推理；首次运行可能需要下载模型 |
 | 内容加工、翻译、学习笔记提取 | 可选 `DEEPSEEK_API_KEY`，内容发送至对应 API |
 | OpenAI 向量检索 | 可选 `OPENAI_API_KEY`，参与向量化的内容发送至 API |
-| Atlas / MuAPI 转录 | 可选 `ATLAS_API_KEY` / `MUAPI_API_KEY`，音频发送至服务商 |
+| DashScope 播客云转录 | 可选 `DASHSCOPE_API_KEY`，音频发送至阿里云百炼 |
+| Groq 播客云转录 | 可选 `GROQ_API_KEY`，音频发送至 Groq |
 | 云端 Agent 读取素材 | 被读取的内容进入该 Agent 的模型上下文 |
 
 API 服务可能计费，密钥和 Cookie 不要写入笔记或提交到仓库。外部解析工具可以把完整 Markdown 交给本地导入；cue-omni-reader 等入口及其验证状态见[可选集成](./docs/integrations.md)。
@@ -288,6 +295,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [订阅与调度（P0）](./docs/subscriptions.md) | 公开 Feed / YouTube 订阅、队列、调度、故障恢复与限制 |
 | [知识库自动化](./docs/knowledge-automation.md) | 索引、向量检索、归档和知识卡片 |
 | [MCP 配置](./docs/mcp-workflow.md) | 将知识库接入 Agent |
+| [社区推广 / 榜单提交指南](./docs/community-promotion-submission-guide.zh-CN.md) | 旧版推广草稿；外发前需将“13 个 Skills”等内容对齐当前 14 个 Skills 版本 |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
 | [可选集成](./docs/integrations.md) | 外部解析工具的 Markdown 交接 |
 | [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.13.1** |
@@ -301,7 +309,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 <details>
 <summary>致谢</summary>
 
-感谢 [Agent Skills](https://agentskills.io)、[yt-dlp](https://github.com/yt-dlp/yt-dlp)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)、[faster-whisper](https://github.com/SYSTRAN/faster-whisper)、[Whisper](https://github.com/openai/whisper)、[MarkItDown](https://github.com/microsoft/markitdown)、[PyMuPDF](https://github.com/pymupdf/PyMuPDF)、[Obsidian](https://obsidian.md/)、[GraphRAG](https://github.com/microsoft/graphrag)、[DeepSeek](https://platform.deepseek.com/) 以及 [khazix-skills](https://github.com/KKKKhazix/khazix-skills) 提供工具、标准和参考。
+感谢 [Agent Skills](https://agentskills.io)、[yt-dlp](https://github.com/yt-dlp/yt-dlp)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)、[阿里云百炼 Qwen-ASR](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)、[MarkItDown](https://github.com/microsoft/markitdown)、[PyMuPDF](https://github.com/pymupdf/PyMuPDF)、[Obsidian](https://obsidian.md/)、[GraphRAG](https://github.com/microsoft/graphrag)、[DeepSeek](https://platform.deepseek.com/) 以及 [khazix-skills](https://github.com/KKKKhazix/khazix-skills) 提供工具、标准和参考。
 
 </details>
 

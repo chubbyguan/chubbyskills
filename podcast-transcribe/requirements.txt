@@ -1,4 +1,4 @@
-faster-whisper>=0.10.0
-# faster-whisper passes metadata_errors to av.open; av 19 removed that kwarg.
-# av 15.x still accepts it and ships Python 3.14 wheels.
-av>=11,<16
+funasr>=1.0.0
+modelscope>=1.10.0
+torch>=2.0.0
+torchaudio>=2.0.0

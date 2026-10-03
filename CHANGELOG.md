@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Podcast local transcription now uses SenseVoice-Small through the shared `chubby_common/funasr.py` wrapper, the same stack as the video skills; faster-whisper (and its `av` pin) has been removed. SenseVoice returns plain full text, so podcast transcripts no longer carry per-segment timestamps.
+- The experimental Atlas Cloud / MuAPI podcast cloud backends have been replaced by Alibaba Cloud Model Studio's DashScope `qwen3-asr-flash` (`--provider dashscope`, `DASHSCOPE_API_KEY`, OpenAI-compatible `chat/completions` with inline base64 audio). The synchronous response is normalized into the existing resumable state machine; audio over 7 MiB raw (10 MB encoded / 5-minute service limit) is rejected before submission with a pointer to local SenseVoice. Attribution for the original cloud-transcription requests (PR #3 / PR #5) is retained.
+- `setup.sh podcast`, `check_env`/`doctor`, `platforms/podcast.yaml`, packaging extras and docs were updated to the funasr + DashScope stack.
+- Local podcast transcription now offers Qwen3-ASR-0.6B as an opt-in model (`--provider local --model qwen3-asr-0.6b`) via a new `local_qwen_asr.py` backend (official `qwen-asr` package, transformers CPU float32, `max_new_tokens=4096` to avoid truncation). SenseVoice-Small remains the default; local model names are whitelist-validated. The optional `qwen-asr` dependency is not part of the default install. Measured comparison (M3 Pro CPU, 2026-10): SenseVoice RTF 0.11 vs Qwen RTF 0.80; Qwen is steadier on proper nouns but can hallucinate and lacks ITN.
+- Added a second synchronous cloud provider `groq` (Groq `whisper-large-v3-turbo` via the OpenAI-compatible `audio/transcriptions` multipart endpoint, `GROQ_API_KEY`). `verbose_json` segment timestamps are kept as a Markdown appendix; files at or above the 25 MB free-tier limit are rejected before upload with a pointer to local SenseVoice.
+
 ## 0.13.1 - 2026-10-01
 
 - x-ingest: X Articles (long-form posts) now warn explicitly when only the syndication preview was captured, and `--cookies` / `X_COOKIES` fetches the full article text through the logged-in GraphQL TweetResultByRestId endpoint (plain_text first, content_state blocks fallback, rotating queryId list, graceful fallback to preview). `platforms/x.yaml` registers `article_preview_only`. Reported in [#11](https://github.com/chubbyguan/chubbyskills/issues/11), fixed in [#12](https://github.com/chubbyguan/chubbyskills/pull/12).

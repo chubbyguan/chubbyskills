@@ -9,8 +9,7 @@ torchaudio>=2.0.0
 
 # 播客转录 (podcast-transcribe)
 # ------------------------------
-faster-whisper>=0.10.0
-av>=11,<16  # av 19 removed metadata_errors which faster-whisper passes to av.open
+# 播客本地转录已统一为 SenseVoice-Small，与上方视频转录共用 funasr 依赖。
 
 # 公众号处理 (wechat-article-ingest)
 # ------------------------------------

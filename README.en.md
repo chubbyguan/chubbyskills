@@ -45,8 +45,8 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 | Bilibili / YouTube | Stable | Subtitle-first, only needs `yt-dlp` |
 | WeChat OA | Beta | HTML needs `beautifulsoup4`, PDF fallback |
 | Douyin / TikTok / Weibo / Zhihu | Beta, heavy deps | Video transcription needs `funasr` + `ffmpeg` |
-| Podcasts | Heavy deps | `faster-whisper`, optional cloud transcription |
-| X / Xiaohongshu | Manual fallback | Zero-dependency capture, manual text fallback |
+| Podcasts | Heavy deps | `funasr` (SenseVoice-Small), optional DashScope/Groq cloud transcription |
+| X / Xiaohongshu | Manual fallback | Zero-dependency capture; X long-form articles support logged-in full text via `X_COOKIES`; manual text fallback |
 | RSS / YouTube channel subscriptions | P0 + P1 | Public feeds; BYO RSSHub/RSS-Bridge provenance labels; discovery-only is the safe default |
 | Local documents | Stable | Zero dependency, Markdown/TXT/PDF text layer |
 
@@ -109,7 +109,7 @@ Choose the runtime dependencies for the content you need. Run installation comma
 | X/Xiaohongshu text and image posts | `bash setup.sh light` checks Python and prints configuration guidance; it does not install packages |
 | Bilibili/YouTube captions | `python3 -m pip install yt-dlp` |
 | Local video transcription | `bash setup.sh video`; requires system `ffmpeg` and installs transcription dependencies |
-| Local podcast transcription | `bash setup.sh podcast`; installs `faster-whisper` dependencies |
+| Local podcast transcription | `bash setup.sh podcast`; installs the SenseVoice-Small (funasr) transcription dependencies |
 | WeChat article/PDF processing | `bash setup.sh wechat` |
 
 `setup.sh` handles runtime checks and selected dependencies; `tools/install_skill.py` builds skill directories. See [installation](./docs/installation.md) for all profiles, agent paths, and upgrade details.
@@ -131,6 +131,10 @@ Platform capture is implemented for Bilibili, YouTube, Douyin, TikTok, Weibo, Zh
 
 These are supported code paths, not a guarantee that every live link works. See [platform status](./docs/platform-status.md), the [dated live verification report](./docs/live-verification.md), and [failure/fallback guidance](./docs/platform-fallbacks.md).
 
+YouTube may demand sign-in proof on flagged exit IPs (`Sign in to confirm you are not a bot`). Two optional environment variables pass through to every yt-dlp call across all platform skills: `YTDLP_COOKIES_FROM_BROWSER` (e.g. `chrome`, maps to `--cookies-from-browser`) and `YTDLP_REMOTE_COMPONENTS` (e.g. `ejs:github`, lets yt-dlp download its JS challenge solver).
+
+X long-form articles only return preview text by default, with an explicit warning. Setting `--cookies` or `X_COOKIES` (your own account's `auth_token` + `ct0`) fetches the full text through the logged-in GraphQL endpoint, falling back to the preview when it fails. See [x-ingest](./x-ingest/SKILL.md).
+
 ### Podcasts and optional cloud transcription
 
 To transcribe local audio with the local provider:
@@ -140,9 +144,11 @@ python3 tools/chubby.py ingest "/path/to/episode.mp3" \
   --skill podcast --provider local --no-enrich
 ```
 
-Podcast transcription defaults to local `faster-whisper`. Atlas Cloud and MuAPI are **experimental, opt-in** providers. Their request lifecycle, saved task recovery, and error handling are tested with simulated responses; **real paid-service transcription has not been validated for v0.13.0**.
+The local provider defaults to SenseVoice-Small; Qwen3-ASR-0.6B is an optional alternative (`--provider local --model qwen3-asr-0.6b`, requires a manual `pip install qwen-asr transformers torch`). Measured on an M3 Pro CPU with a 5-minute Chinese podcast (2026-10): SenseVoice RTF 0.11 vs Qwen RTF 0.80 (about 7x slower). Quality is a trade-off — Qwen is steadier on proper nouns and names but can hallucinate rewrites and has no ITN (numbers come out as words); SenseVoice output needs emotion-tag cleanup. Keep the SenseVoice default on CPU; pick Qwen on GPU machines or when proper-noun accuracy matters. See [podcast-transcribe](./podcast-transcribe/SKILL.md).
 
-Cloud mode sends audio to the selected provider and may incur charges. Ordinary recovery resumes a saved task; `--resubmit` explicitly creates a new task and may charge again. Follow the [cloud transcription guide](./docs/cloud-transcription.md) for credentials, configuration, limits, and recovery.
+Podcast transcription defaults to local SenseVoice-Small (via `funasr`). Alibaba Cloud Model Studio's DashScope `qwen3-asr-flash` (`--provider dashscope`, requires `DASHSCOPE_API_KEY`) and Groq's `whisper-large-v3-turbo` (`--provider groq`, requires `GROQ_API_KEY`; free tier limits files to 25 MB plus rate limits) are **optional, opt-in** cloud providers. Its request lifecycle, saved result recovery, and error handling are tested with simulated responses; **real paid-service transcription has not been validated**.
+
+Cloud mode sends audio to the selected provider and may incur charges. DashScope inputs are limited to 10 MB after base64 encoding and at most 5 minutes of audio; Groq free-tier uploads are capped at 25 MB. Oversized files are rejected before submission with a hint to use the local SenseVoice-Small provider instead — use local transcription for long podcasts. Completed results are persisted and reused after interruptions; `--resubmit` explicitly creates a new task and may charge again. Follow the [cloud transcription guide](./docs/cloud-transcription.md) for credentials, configuration, limits, and recovery.
 
 Automatic podcast/RSS downloads accept only direct public HTTP(S) addresses, without redirects or proxies. For a source requiring either, download the audio yourself first and pass its local file path.
 
@@ -220,10 +226,10 @@ Configure your actual client with the server command and `VAULT_DIR` pointing to
 | [weibo-transcribe](./weibo-transcribe/SKILL.md) | Weibo video transcription |
 | [zhihu-transcribe](./zhihu-transcribe/SKILL.md) | Zhihu video transcription |
 | [youtube-transcribe](./youtube-transcribe/SKILL.md) | YouTube captions, transcription, optional translation |
-| [podcast-transcribe](./podcast-transcribe/SKILL.md) | Podcasts, RSS, and local audio; optional cloud providers |
+| [podcast-transcribe](./podcast-transcribe/SKILL.md) | Podcasts, RSS, and local audio; optional DashScope/Groq cloud providers |
 | [wechat-article-ingest](./wechat-article-ingest/SKILL.md) | WeChat articles and PDF ingestion |
 | [xiaohongshu-ingest](./xiaohongshu-ingest/SKILL.md) | Xiaohongshu text, images, and video |
-| [x-ingest](./x-ingest/SKILL.md) | X/Twitter text, images, and video |
+| [x-ingest](./x-ingest/SKILL.md) | X/Twitter text, long-form articles (logged-in full text), images, and video |
 | [content-enrich](./content-enrich/SKILL.md) | Optional API-based summaries, key points, and tags |
 | [knowledge-base-management](./knowledge-base-management/SKILL.md) | Document import, indexing, briefs, and MCP |
 | [industry-intelligence-radar](./industry-intelligence-radar/SKILL.md) | Multi-source research workflow |
@@ -236,11 +242,12 @@ Source material is stored locally by default. Network access depends on the oper
 | Operation | Where content is processed |
 |---|---|
 | Local import, keyword search, semantic-lite, briefs | Local; document import does not fetch remote attachments |
-| Platform capture | The source platform; some paths need your own login state |
+| Platform capture | The source platform; some paths need your own login state (`XHS_COOKIE`, `X_COOKIES`, or `YTDLP_COOKIES_FROM_BROWSER` for yt-dlp paths) |
 | Local transcription | Local inference; the first run may download a model |
 | Optional enrichment, translation, learning-note extraction | The configured API, using `DEEPSEEK_API_KEY` |
 | Optional OpenAI embeddings | OpenAI API, using `OPENAI_API_KEY` |
-| Atlas/MuAPI transcription | The selected provider, using `ATLAS_API_KEY` or `MUAPI_API_KEY` |
+| DashScope podcast transcription | Alibaba Cloud Model Studio, using `DASHSCOPE_API_KEY` |
+| Groq podcast transcription | Groq, using `GROQ_API_KEY` |
 | A cloud agent reading notes | The material it reads enters that agent's model context |
 
 API services may charge. Keep credentials and cookies out of notes and version control. Other parsers can hand off Markdown to the local importer; see [optional integrations](./docs/integrations.md) for cue-omni-reader and its current verification status.
@@ -277,7 +284,8 @@ Most detailed guides are currently in Chinese.
 | [Document import](./docs/document-import.md) | File formats, attachments, provenance, and PDF limits |
 | [Installation](./docs/installation.md) | Runtime dependencies and portable skill installation |
 | [MCP configuration](./docs/mcp-workflow.md) | Connect an agent to your library |
-| [Cloud transcription](./docs/cloud-transcription.md) | Atlas/MuAPI configuration and task recovery |
+| [Cloud transcription](./docs/cloud-transcription.md) | DashScope (qwen3-asr-flash) / Groq (whisper-large-v3-turbo) configuration and task recovery |
+| [Subscription and scheduling (Chinese)](./docs/subscriptions.md) | Public feeds / YouTube subscriptions, queue, scheduling, and recovery |
 | [Knowledge automation](./docs/knowledge-automation.md) | Retrieval, optional embeddings, and archive/card workflows |
 | [Optional integrations](./docs/integrations.md) | Import Markdown produced by other tools |
 | [Community triage](./docs/community-triage.md) | Contribution attribution and adoption decisions |
