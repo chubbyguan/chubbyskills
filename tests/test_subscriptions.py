@@ -3,6 +3,7 @@ import io
 import http.client
 import json
 import os
+import subprocess
 import tempfile
 import types
 import unittest
@@ -703,6 +704,55 @@ class SubscriptionTest(unittest.TestCase):
         for _ in range(200):
             store.heartbeat(entry_id, token)
         self.assertLess(fd_count() - baseline, 50)
+
+    def test_youtube_feed_failure_falls_back_to_ytdlp_listing(self):
+        subscription = {
+            "kind": "youtube_channel",
+            "config": {"channel_id": "UC123"},
+            "policy": {"user_agent": ""},
+        }
+
+        def gated_feed(*args, **kwargs):
+            raise subscription_adapters.AdapterError(
+                "http_404", "feed request returned HTTP 404", http_status=404
+            )
+
+        listing = json.dumps(
+            {"channel": "Naval", "entries": [{"id": "abc123XYZ-_", "title": "Video"}]}
+        )
+        with patch.object(
+            subscription_adapters, "fetch_public_feed", side_effect=gated_feed
+        ), patch.object(
+            subscription_adapters.shutil, "which", return_value="/usr/bin/yt-dlp"
+        ), patch.object(
+            subscription_adapters.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess([], 0, listing, ""),
+        ):
+            result, entries = subscription_adapters.fetch_entries(subscription, {})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(entries[0].external_id, "yt:video:abc123XYZ-_")
+        self.assertEqual(
+            entries[0].url, "https://www.youtube.com/watch?v=abc123XYZ-_"
+        )
+        self.assertEqual(entries[0].author, "Naval")
+
+    def test_youtube_fallback_without_ytdlp_reports_missing_dependency(self):
+        subscription = {
+            "kind": "youtube_channel",
+            "config": {"channel_id": "UC123"},
+            "policy": {},
+        }
+
+        def gated_feed(*args, **kwargs):
+            raise subscription_adapters.AdapterError("http_404", "gated")
+
+        with patch.object(
+            subscription_adapters, "fetch_public_feed", side_effect=gated_feed
+        ), patch.object(subscription_adapters.shutil, "which", return_value=None):
+            with self.assertRaises(subscription_adapters.AdapterError) as ctx:
+                subscription_adapters.fetch_entries(subscription, {})
+        self.assertEqual(ctx.exception.code, "missing_dependency")
 
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()

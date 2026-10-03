@@ -10,9 +10,12 @@ import email.utils
 import http.client
 import ipaddress
 import json
+import os
 import re
+import shutil
 import socket
 import ssl
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -422,6 +425,65 @@ def parse_feed(body: bytes, *, declared_format: str = "auto") -> list[Discovered
     raise AdapterError("parse", f"unsupported XML feed root: {name}")
 
 
+def _youtube_entries_ytdlp(channel_id: str) -> list["DiscoveredEntry"]:
+    """Fallback YouTube discovery via yt-dlp flat playlist.
+
+    YouTube gates the public Atom feeds on some exit IPs while watch pages
+    still work; yt-dlp (with the browser-cookie env passthrough) keeps
+    discovery alive on those machines. Entry ids use the same yt:video:
+    prefix as the Atom feed so both paths dedupe identically.
+    """
+    ytdlp = shutil.which("yt-dlp")
+    if not ytdlp:
+        raise AdapterError(
+            "missing_dependency", "yt-dlp is required for YouTube fallback discovery"
+        )
+    url = f"https://www.youtube.com/channel/{channel_id}/videos"
+    command = [ytdlp, "--flat-playlist", "--dump-single-json", "--playlist-end", "25"]
+    browser = os.environ.get("YTDLP_COOKIES_FROM_BROWSER", "").strip()
+    if browser:
+        command += ["--cookies-from-browser", browser]
+    components = os.environ.get("YTDLP_REMOTE_COMPONENTS", "").strip()
+    if components:
+        command += ["--remote-components", components]
+    command.append(url)
+    try:
+        process = subprocess.run(
+            command, capture_output=True, text=True, timeout=120
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise AdapterError("network", f"yt-dlp channel listing failed: {exc}") from exc
+    if process.returncode != 0:
+        raise AdapterError(
+            "network",
+            "yt-dlp channel listing failed: " + process.stderr.strip()[-300:],
+        )
+    try:
+        data = json.loads(process.stdout)
+    except json.JSONDecodeError as exc:
+        raise AdapterError("parse", f"yt-dlp returned invalid JSON: {exc}") from exc
+    entries = []
+    for item in data.get("entries") or []:
+        video_id = str(item.get("id") or "").strip()
+        if not video_id:
+            continue
+        entries.append(
+            DiscoveredEntry(
+                external_id=f"yt:video:{video_id}",
+                url=f"https://www.youtube.com/watch?v={video_id}",
+                title=str(item.get("title") or video_id),
+                author=str(data.get("channel") or data.get("title") or ""),
+                published_at="",
+                updated_at="",
+                content_html="",
+                summary_html="",
+                enclosure_url="",
+                raw={"kind": "youtube_flat", "id": video_id},
+            )
+        )
+    return entries
+
+
 def fetch_entries(
     subscription: dict[str, Any], state: dict[str, Any]
 ) -> tuple[FetchResult, list[DiscoveredEntry]]:
@@ -431,20 +493,32 @@ def fetch_entries(
     source_config = subscription["config"]
     if kind == "youtube_channel":
         url = youtube_feed_url(source_config["channel_id"])
-        declared_format = "atom"
-    elif kind == "feed":
+        try:
+            result = fetch_public_feed(
+                url,
+                etag=state.get("etag", ""),
+                last_modified=state.get("last_modified", ""),
+                user_agent=(subscription.get("policy") or {}).get("user_agent", ""),
+            )
+        except AdapterError:
+            # The Atom feed is gated on some exit IPs; keep discovery alive.
+            entries = _youtube_entries_ytdlp(source_config["channel_id"])
+            return FetchResult(200, b"", "", "", url), entries
+        return result, [] if result.not_modified else parse_feed(
+            result.body, declared_format="atom"
+        )
+    if kind == "feed":
         url = source_config["feed_url"]
         declared_format = source_config.get("format", "auto")
-    else:
-        raise AdapterError(
-            "invalid_config", f"unsupported P0 subscription kind: {kind}"
+        result = fetch_public_feed(
+            url,
+            etag=state.get("etag", ""),
+            last_modified=state.get("last_modified", ""),
+            user_agent=(subscription.get("policy") or {}).get("user_agent", ""),
         )
-    result = fetch_public_feed(
-        url,
-        etag=state.get("etag", ""),
-        last_modified=state.get("last_modified", ""),
-        user_agent=(subscription.get("policy") or {}).get("user_agent", ""),
-    )
-    return result, [] if result.not_modified else parse_feed(
-        result.body, declared_format=declared_format
+        return result, [] if result.not_modified else parse_feed(
+            result.body, declared_format=declared_format
+        )
+    raise AdapterError(
+        "invalid_config", f"unsupported P0 subscription kind: {kind}"
     )
