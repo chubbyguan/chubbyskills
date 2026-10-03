@@ -754,6 +754,74 @@ class SubscriptionTest(unittest.TestCase):
                 subscription_adapters.fetch_entries(subscription, {})
         self.assertEqual(ctx.exception.code, "missing_dependency")
 
+    def test_promote_accepts_baseline_seen_entries(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        entry_id, _ = store.insert_entry(
+            "example-feed",
+            subscriptions.asdict(self.entry("e1", "Baseline episode", 1)),
+            state="seen",
+            skip_reason="initial_baseline",
+        )
+        self.assertEqual(store.promote([entry_id]), 1)
+        row = next(r for r in store.list_entries() if r["id"] == entry_id)
+        self.assertEqual(row["state"], "queued")
+
+    def test_requeue_terminal_aligns_with_attempts_journal(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        entry_id, _ = store.insert_entry(
+            "example-feed",
+            subscriptions.asdict(self.entry("e1", "Fragile episode", 1)),
+            state="queued",
+        )
+        base = subscription_store.parse_iso("2026-10-01T00:00:00+00:00")
+        for attempt in range(3):
+            stamp = (base + __import__("datetime").timedelta(hours=attempt)).isoformat()
+            claimed = store.claim_entries(1, include_retry=True, now=stamp)
+            self.assertEqual(len(claimed), 1)
+            store.finish_entry(entry_id, outcome="failed", error="boom", now=stamp)
+        row = next(r for r in store.list_entries() if r["id"] == entry_id)
+        self.assertEqual(row["state"], "failed_terminal")
+
+        self.assertEqual(store.requeue_terminal([entry_id]), 1)
+        row = next(r for r in store.list_entries() if r["id"] == entry_id)
+        self.assertEqual(row["state"], "queued")
+        self.assertEqual(row["attempt_count"], 3)
+        # The next claim must not collide with recorded attempts.
+        claimed = store.claim_entries(1, now="2026-10-01T05:00:00+00:00")
+        self.assertEqual(claimed[0]["attempt_count"], 4)
+        self.assertEqual(store.requeue_terminal([entry_id]), 0)  # not terminal now
+
+    def test_remove_subscription_keeps_history(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        store.insert_entry(
+            "example-feed",
+            subscriptions.asdict(self.entry("e1", "Keep me", 1)),
+            state="seen",
+        )
+        args = types.SimpleNamespace(
+            subscribe_command="remove",
+            id="example-feed",
+            subscriptions=str(self.subscriptions_path),
+        )
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(subscriptions.command_subscribe(args, self.config), 0)
+        kept = subscription_store.load_document(self.subscriptions_path)
+        self.assertEqual(kept["subscriptions"], [])
+        # History stays queryable after removal.
+        self.assertEqual(len(store.list_entries()), 1)
+        with redirect_stdout(io.StringIO()):
+            again = subscriptions.command_subscribe(args, self.config)
+        self.assertEqual(again, 1)
+
     def test_locks_are_exclusive_and_releasable(self):
         self.write_document()
         store = self.store()
