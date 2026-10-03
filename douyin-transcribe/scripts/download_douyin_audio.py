@@ -58,9 +58,27 @@ def parse_share_page(html: str) -> dict:
         raise RuntimeError(f"页面结构解析失败（{exc}），可能已被风控或链接失效") from exc
 
 
+def _download_with_ytdlp(url: str, output_dir: str) -> tuple:
+    """兜底：抖音对无 cookie 的分享页返回蜘蛛壳后，用 yt-dlp 下载。
+
+    通过 chubby_common.ytdlp 继承 YTDLP_COOKIES_FROM_BROWSER 等环境变量。
+    """
+    from chubby_common import ytdlp
+    from chubby_common.config import PlatformConfig
+
+    cfg = PlatformConfig(
+        id="douyin", name="抖音", tag="抖音", default_title="抖音视频", ua=MOBILE_UA
+    )
+    title = ytdlp.get_title(cfg, url)
+    audio_path = ytdlp.download_audio(cfg, url, output_dir)
+    return audio_path, title
+
+
 def download_audio(video_id: str, output_dir: str = None) -> tuple:
     """Download audio from Douyin video. Returns (audio_path, title)."""
     deps.ensure_ffmpeg()
+    if output_dir is None:
+        output_dir = tempfile.mkdtemp(prefix="dyt-")
     share_url = f"https://www.iesdouyin.com/share/video/{video_id}"
 
     # Fetch share page
@@ -68,10 +86,12 @@ def download_audio(video_id: str, output_dir: str = None) -> tuple:
         ["curl", "-s", "-L", "-H", f"User-Agent: {MOBILE_UA}", share_url],
         capture_output=True, text=True, timeout=30
     )
-    info = parse_share_page(result.stdout)
-
-    if output_dir is None:
-        output_dir = tempfile.mkdtemp(prefix="dyt-")
+    try:
+        info = parse_share_page(result.stdout)
+    except RuntimeError as exc:
+        # 风控只给蜘蛛壳（isSpider=true，无 videoInfoRes）时回退 yt-dlp。
+        print(f"  ⚠️  分享页解析失败（{exc}），回退 yt-dlp...", file=sys.stderr)
+        return _download_with_ytdlp(f"https://www.douyin.com/video/{video_id}", output_dir)
 
     # Download video
     video_path = os.path.join(output_dir, f"{video_id}.mp4")
