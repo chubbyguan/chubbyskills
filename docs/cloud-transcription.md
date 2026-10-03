@@ -51,9 +51,9 @@ python3 podcast-transcribe/scripts/transcribe.py "/你的音频目录/episode.mp
 两个云端后端都是同步接口，一次请求直接返回转录结果：
 
 - **DashScope `qwen3-asr-flash`**：客户端把音频 base64 内联进 `chat/completions` 请求，响应的 `choices[0].message.content` 就是全文转录。输入限制为 **base64 编码后不超过 10MB、录音不超过 5 分钟**；本客户端在原始文件超过 7 MiB 时直接拒绝。
-- **Groq `whisper-large-v3-turbo`**：客户端以 multipart/form-data 上传文件到 `audio/transcriptions`，`response_format=verbose_json` 返回全文和分段时间戳（产物附「时间戳参考」）。**免费层文件上限 25MB**（dev tier 100MB），本客户端在原始文件达到 25 MiB 时直接拒绝；免费层还有请求速率限制，批量场景请控制频率。
+- **Groq `whisper-large-v3-turbo`**：客户端以 multipart/form-data 上传文件到 `audio/transcriptions`，`response_format=verbose_json` 返回全文和分段时间戳（产物附「时间戳参考」）。免费层单文件上限 25MB（dev tier 100MB）——**达到 25 MiB 的音频会自动分片**：ffmpeg 切成 20 分钟一段（16kHz mono 64kbps MP3，每段约 9.6MB，留足余量），逐段提交后按顺序拼接全文，分段时间戳自动累加前序偏移。分片进度逐段落盘，进程中断后重跑同一命令从断点续传，不重复提交已完成分片；遇到 HTTP 429 按 Retry-After 或指数退避等待（受 `--cloud-timeout` 总时限约束）。免费层还有请求速率限制，批量场景请控制频率。长音频分片需要本机 ffmpeg/ffprobe。
 
-两个后端超限都会在提交前拒绝，并提示改用本地 SenseVoice-Small（`--provider local`）——长播客请始终使用本地转录。不支持的音频容器先调用本机 `ffmpeg` 转为 MP3 再提交。仅使用云端转录不需要安装 funasr 本地依赖；需要容器转换时仍需 `ffmpeg`。
+DashScope 超限会在提交前拒绝并提示改用本地 SenseVoice-Small（`--provider local`）；Groq 则自动分片处理长音频，不支持的音频容器先调用本机 `ffmpeg` 转为 MP3 再提交。仅使用云端转录不需要安装 funasr 本地依赖；需要容器转换或分片时仍需 `ffmpeg`。
 
 成功后输出带来源和转录后端元数据的 Markdown，标准输出最后一行为文件路径，供统一入库流程接收。完整正文始终保留；Groq 返回的分段时间戳作为附录保留，DashScope 不返回时间戳，产物不编造时间轴。
 

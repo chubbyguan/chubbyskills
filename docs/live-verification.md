@@ -38,3 +38,28 @@ python3 tools/platform_smoke.py --mode live --platform x --platform youtube \
 GitHub 的 **Real text and subtitle verification (manual)** workflow 可手动选择一条公开链接，保留七天产物。它只提供图文/字幕依赖，不安装 ASR 或登录 Cookie；这些能力需要另外准备环境，不能依靠该 workflow 验证。
 
 结构检查生成时间见 [platform-status](platform-status.md)，离线/fallback 结果见 [platform-smoke-matrix](platform-smoke-matrix.md)。生成日期不等于真实采集验证日期。
+
+## 2026-10 补充实测记录
+
+以下为 2026-10 期间完成、此前未落档的真实环境验证。均为单次或单点实测，不代表持续可用性。
+
+### PR #27：yt-dlp 浏览器 Cookie 与 JS 挑战组件透传（2026-10-01/02）
+
+环境变量 `YTDLP_COOKIES_FROM_BROWSER`（对应 `--cookies-from-browser`）和 `YTDLP_REMOTE_COMPONENTS`（对应 `--remote-components`，让 yt-dlp 下载 JS 挑战求解组件）透传到所有平台技能的 yt-dlp 调用（commit `7fd82e0`）。实测：在会被 YouTube 拦截为 `Sign in to confirm you are not a bot` 的出口 IP 上，两个变量同时设置后自动字幕下载成功。Cookie 来自用户自己浏览器的登录态，属个人使用路径。
+
+### PR #31：抖音 spider-shell 回退（2026-10）
+
+无 Cookie 访问抖音分享页时平台返回反爬 shell 页（spider shell），下载器检测到后自动回退到 yt-dlp 路径，配合 `YTDLP_COOKIES_FROM_BROWSER` 即可（浏览器访问过 douyin.com 即可，无需登录）。文档化于 commit `2af5d14`，见 [platform-status](platform-status.md) 和 `platforms/douyin.yaml`。
+
+### YouTube 频道订阅单日深度验收（2026-10-03）
+
+按 `docs/subscription-provider-acceptance.md` 对 YouTube 频道路径（3Blue1Brown，原生 Atom + yt-dlp 回退发现）做单日验收，10 项验收标准全部通过：首次基线 25 条入库、后续同步零重复（25 parsed / 0 new / 25 duplicates）、Atom 发现 HTTP 200、yt-dlp 回退路径直测返回与 Atom 完全一致的 25 条 video ID、凭据不泄漏（SQLite/JSON/stdout 检查无 token/cookie）、discover_only 不自动处理、promote 后字幕优先 23 秒完成且不触发音频转录、tick 调度锁竞争时正确跳过、到期语义与按源抖动正常、`status --json` 证据字段齐全。一个部分覆盖项：youtube_channel 源的 Atom 4xx 会被 yt-dlp 回退掩盖为 `network` 退避而非按 404 暂停，属设计取舍，已记为观察项。7 天连续观察（≥48 次检查、success+unchanged ≥95%）尚未完成，不写「已验证」；验收证据存于执行环境未入库目录，结论以本节为准。
+
+### SenseVoice-Small vs Qwen3-ASR-0.6B 本地实测（2026-10-03）
+
+MacBook Pro M3 Pro（18GB）纯 CPU，torch 2.14.1，5 分钟中文双人播客（茶文化专名/人名/数字密集）：SenseVoice-Small RTF **0.11**（32.8 秒），Qwen3-ASR-0.6B RTF **0.80**（240.4 秒），约 7 倍差距。质量互有胜负：Qwen 在专名（岩茶）和人名（朱伟）上更稳，但出现 LLM 式幻觉改写（「黄金」→「皇帝」），且无 ITN（数字输出为中文大写形式）；SenseVoice 有同音字错误但数字下游友好。**结论：CPU 场景保持 SenseVoice-Small 为默认；GPU 或专名敏感场景可选 Qwen3-ASR。**
+
+### 仍待真实验收
+
+- DashScope（`qwen3-asr-flash`）与 Groq（`whisper-large-v3-turbo`）云转录后端：代码与限额检查就绪，未完成真实转录验收。
+- X 长文章（Articles）登录态全文路径（`X_COOKIES`）：实现与预览回退就绪，未完成真实验收。

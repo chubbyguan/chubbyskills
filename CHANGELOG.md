@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 - 2026-10-03
 
 - Podcast local transcription now uses SenseVoice-Small through the shared `chubby_common/funasr.py` wrapper, the same stack as the video skills; faster-whisper (and its `av` pin) has been removed. SenseVoice returns plain full text, so podcast transcripts no longer carry per-segment timestamps.
 - The experimental Atlas Cloud / MuAPI podcast cloud backends have been replaced by Alibaba Cloud Model Studio's DashScope `qwen3-asr-flash` (`--provider dashscope`, `DASHSCOPE_API_KEY`, OpenAI-compatible `chat/completions` with inline base64 audio). The synchronous response is normalized into the existing resumable state machine; audio over 7 MiB raw (10 MB encoded / 5-minute service limit) is rejected before submission with a pointer to local SenseVoice. Attribution for the original cloud-transcription requests (PR #3 / PR #5) is retained.
 - `setup.sh podcast`, `check_env`/`doctor`, `platforms/podcast.yaml`, packaging extras and docs were updated to the funasr + DashScope stack.
 - Local podcast transcription now offers Qwen3-ASR-0.6B as an opt-in model (`--provider local --model qwen3-asr-0.6b`) via a new `local_qwen_asr.py` backend (official `qwen-asr` package, transformers CPU float32, `max_new_tokens=4096` to avoid truncation). SenseVoice-Small remains the default; local model names are whitelist-validated. The optional `qwen-asr` dependency is not part of the default install. Measured comparison (M3 Pro CPU, 2026-10): SenseVoice RTF 0.11 vs Qwen RTF 0.80; Qwen is steadier on proper nouns but can hallucinate and lacks ITN.
+- Groq long-audio support: files at or above the 25 MB free-tier limit are no longer rejected but automatically chunked with ffmpeg into 20-minute 16 kHz mono 64 kbps MP3 segments (~9.6 MB each). Chunks are submitted in order with per-chunk persisted progress (digests + durations in the existing state file, backward compatible with single-file states), so an interrupted run resumes without resubmitting completed chunks; text is concatenated in order and segment timestamps are shifted by cumulative chunk durations. HTTP 429 responses wait on Retry-After / exponential backoff within the overall `--cloud-timeout`.
 - Added a second synchronous cloud provider `groq` (Groq `whisper-large-v3-turbo` via the OpenAI-compatible `audio/transcriptions` multipart endpoint, `GROQ_API_KEY`). `verbose_json` segment timestamps are kept as a Markdown appendix; files at or above the 25 MB free-tier limit are rejected before upload with a pointer to local SenseVoice.
 
 ## 0.13.1 - 2026-10-01

@@ -20,6 +20,11 @@ video = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0
 podcast = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
 wechat = ["beautifulsoup4>=4.12.0", "markitdown>=0.0.1", "pymupdf>=1.23.0"]
 
+[dependency-groups]
+# Picked up automatically by `uv run` so a bare
+# `uv run --with pytest pytest tests/ -q` works without extra flags.
+dev = ["pytest>=8,<9", "PyYAML>=6,<7"]
+
 [project.scripts]
 chubby = "tools.chubby:main"
 

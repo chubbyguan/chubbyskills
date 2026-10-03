@@ -9,7 +9,7 @@
 把视频、播客、文章和本地文档保存为 Markdown，整理成能搜索、能回查来源、能交给 Agent 使用的素材库。
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.13.1-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.1)
+[![Version](https://img.shields.io/badge/Version-0.14.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.14.0)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -51,6 +51,8 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | X / 小红书 | 手动兜底 | 零依赖采集正文；X 长文章可配 `X_COOKIES` 抓登录态全文，失败可手动补全文 |
 | RSS / YouTube 频道订阅 | P0 + P1 | 公开 Feed；支持 RSSHub / RSS-Bridge BYO 标签，默认只发现 |
 | 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
+
+本项目不做反爬对抗，选择轻量接口加手动兜底，原因与适用边界见[为什么不对抗风控](./docs/platform-fallbacks.md#为什么不对抗风控)。
 
 <a id="安装方式"></a>
 
@@ -158,7 +160,7 @@ python3 tools/chubby.py ingest "/你的音频目录/episode.mp3" \
 
 本地模型默认 SenseVoice-Small，也可选 Qwen3-ASR-0.6B（`--provider local --model qwen3-asr-0.6b`，需自行 `pip install qwen-asr transformers torch`）。2026-10 在 M3 Pro CPU 上的实测：SenseVoice RTF 0.11、Qwen RTF 0.80（慢约 7 倍）；质量互有胜负——Qwen 专名/人名更稳但有幻觉改写风险且无 ITN，SenseVoice 输出带情感标签需清洗。CPU 场景保持默认，GPU 或专名敏感时选 Qwen。详见 [podcast-transcribe](./podcast-transcribe/SKILL.md)。
 
-可选云端后端为 **阿里云百炼 DashScope 的 `qwen3-asr-flash`**（`--provider dashscope`，需 `DASHSCOPE_API_KEY`）和 **Groq 的 `whisper-large-v3-turbo`**（`--provider groq`，需 `GROQ_API_KEY`，免费层文件上限 25MB 且有速率限制）。音频发送至云端并可能计费；DashScope 限制为编码后不超过 10MB、时长不超过 5 分钟。超限都会在提交前拒绝并提示改用本地 SenseVoice-Small，长播客请用本地转录。完成结果持久保存，进程中断后可恢复；`--resubmit` 会明确创建新任务，可能再次计费。
+可选云端后端为 **阿里云百炼 DashScope 的 `qwen3-asr-flash`**（`--provider dashscope`，需 `DASHSCOPE_API_KEY`）和 **Groq 的 `whisper-large-v3-turbo`**（`--provider groq`，需 `GROQ_API_KEY`；免费层单文件上限 25MB、有速率限制，**长音频自动分片转录并支持断点续传**）。音频发送至云端并可能计费；DashScope 限制为编码后不超过 10MB、时长不超过 5 分钟，超限会在提交前拒绝并提示改用本地 SenseVoice-Small。完成结果持久保存，进程中断后可恢复；`--resubmit` 会明确创建新任务，可能再次计费。
 
 播客自动下载仅接受公网 HTTP(S) 直连地址，不跟随重定向，也不使用代理。需要跳转或代理的资源，先自行下载，再传本地文件。配置和恢复方法见[云转录说明](./docs/cloud-transcription.md)。云服务的真实转录尚未完成验收。
 
@@ -211,7 +213,7 @@ python3 tools/install_skill.py --all --dest /path/to/agent/skills
 
 Claude Code、OpenCode、OpenClaw、Hermes 等客户端使用各自实际配置的 skills 目录作为 `--dest`，并按客户端方式启用技能。运行环境中的 Python 和系统依赖仍需另外配置。
 
-安装器会打包仓库内依赖，生成可独立搬移的技能目录；`setup.sh` 负责安装运行依赖。已有同名技能时安装器会拒绝覆盖，升级时先安装到临时目录核对自己的修改。请使用安装器或 [Release 技能包](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.1)，避免只下载单个源码目录漏掉公共模块。[完整安装指南](./docs/installation.md)
+安装器会打包仓库内依赖，生成可独立搬移的技能目录；`setup.sh` 负责安装运行依赖。已有同名技能时安装器会拒绝覆盖，升级时先安装到临时目录核对自己的修改。请使用安装器或 [Release 技能包](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.14.0)，避免只下载单个源码目录漏掉公共模块。[完整安装指南](./docs/installation.md)
 
 首页的 `tools/chubby.py` 统一流程需要完整仓库。独立知识库技能使用其自带的 `tools/import_document.py`、`tools/vault_index.py` 和 `tools/evidence_brief.py`，命令见[文档导入](./docs/document-import.md)。
 
@@ -298,7 +300,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [社区推广 / 榜单提交指南](./docs/community-promotion-submission-guide.zh-CN.md) | 各渠道推广与榜单提交文案（已对齐当前 14 个 Skills 版本） |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
 | [可选集成](./docs/integrations.md) | 外部解析工具的 Markdown 交接 |
-| [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.13.1** |
+| [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.14.0** |
 
 ## 使用范围与许可
 

@@ -39,6 +39,16 @@ python3 tools/platform_smoke.py --mode live --check
 | YouTube | `missing_yt_dlp`, `no_caption`, `age_or_region_limit` | 字幕优先；无字幕时走音频转录 |
 | Zhihu | `embedded_video_unavailable`, `anti_bot`, `download_blocked` | 下载本地视频后转录 |
 
+## 为什么不对抗风控
+
+本项目刻意选择「轻量接口 + 手动兜底」，不使用浏览器自动化（无头浏览器、模拟点击、验证码识别）去对抗平台反爬。原因有三：
+
+- **维护成本不对等**。反爬对抗是持续的猫鼠游戏：平台每次调整页面结构或风控策略，自动化脚本就要跟着修。一个人维护的工具箱追不起这种军备竞赛，追不上的结果就是用户拿到一堆时灵时不灵的脚本。
+- **合规边界清晰**。用平台公开的字幕、RSS、嵌入端点和用户自己浏览器里的登录态（`YTDLP_COOKIES_FROM_BROWSER`、`XHS_COOKIE`、`X_COOKIES`），处理的是自己有权访问的内容，定位是个人学习与研究。绕过验证码、伪造设备指纹这类手段会把工具推向另一个合规地带，我们不去。
+- **手动兜底是特性不是缺陷**。采集失败时，保存正文、导出 PDF、下载本地视频再导入，对个人用户来说通常比调试一条反爬链路更快。本项目把「失败分型 + 明确的兜底路径」当作核心能力来维护（见上面的 Failure Classes 和 Fallback Matrix），而不是把「什么都能抓下来」当作目标。
+
+如果需求是大规模、持续、多账号地抓取平台数据（舆情监控、商业数据管道等），[MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) 这类以浏览器自动化为核心的项目更合适——它们投入对应的维护资源，也要求使用者自行承担账号与合规风险。两条路线服务的是不同场景，不存在谁替代谁。
+
 ## Issue Triage
 
 提交平台失败 issue 时至少贴：

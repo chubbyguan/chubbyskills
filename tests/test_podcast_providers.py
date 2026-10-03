@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "podcast-transcribe" / "scripts"
 
@@ -94,13 +94,114 @@ class PodcastProviderTests(unittest.TestCase):
         for request in calls:
             self.assertNotIn(b'name="language"', request.data)
 
-    def test_groq_rejects_oversized_audio_before_any_request(self):
+    def test_groq_single_file_safety_net_still_rejects_oversized(self):
         with self.audio.open("wb") as stream:
             stream.truncate(cloud.GROQ_MAX_AUDIO_BYTES)
-        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}), patch.object(cloud, "request_json") as request:
-            with self.assertRaisesRegex(ValueError, "SenseVoice"):
-                self.run_groq()
-            request.assert_not_called()
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            client = cloud.CloudProvider({"provider": "groq", "model": "whisper-large-v3-turbo", "language": "zh", "base_url": "https://api.groq.com/openai/v1"})
+            with self.assertRaisesRegex(ValueError, "25MB"):
+                client._prepare_groq(self.audio, 0)
+
+    def _groq_chunks(self):
+        return [(b"chunk-zero", cloud.hashlib.sha256(b"chunk-zero").hexdigest(), 10.0),
+                (b"chunk-one", cloud.hashlib.sha256(b"chunk-one").hexdigest(), 5.0)]
+
+    def _big_audio(self):
+        with self.audio.open("wb") as stream:
+            stream.truncate(cloud.GROQ_MAX_AUDIO_BYTES)
+
+    def test_groq_long_audio_chunks_in_order_with_segment_offsets(self):
+        self._big_audio()
+        responses = [
+            {"text": "第一段", "segments": [{"start": 0.0, "end": 2.0, "text": "第一段"}]},
+            {"text": "第二段", "segments": [{"start": 0.5, "end": 1.5, "text": "第二段"}]},
+        ]
+        calls = []
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            with patch.object(cloud, "_split_audio", side_effect=lambda path, deadline: self._groq_chunks()) as split:
+                with patch.object(cloud, "request_json", side_effect=lambda request, timeout: (calls.append(request), responses.pop(0))[1]):
+                    result = self.run_groq()
+        self.assertEqual(split.call_count, 1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["text"], "第一段\n第二段")
+        # Second chunk segments shift by the first chunk's duration (10s).
+        self.assertEqual(result["segments"], [
+            {"start": 0.0, "end": 2.0, "text": "第一段"},
+            {"start": 10.5, "end": 11.5, "text": "第二段"},
+        ])
+        state = json.loads(next(self.state.glob("*.json")).read_text())
+        self.assertEqual(state["status"], "completed")
+        self.assertEqual(sorted(state["chunks"]["completed"]), ["0", "1"])
+        # Completed chunked results replay from cache with zero requests.
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            with patch.object(cloud, "request_json", side_effect=AssertionError("must use completed cache")):
+                self.assertEqual(self.run_groq()["text"], "第一段\n第二段")
+
+    def test_groq_chunk_resume_never_resubmits_completed_chunks(self):
+        self._big_audio()
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            with patch.object(cloud, "_split_audio", side_effect=lambda path, deadline: self._groq_chunks()):
+                calls = []
+
+                def first_run(request, timeout):
+                    calls.append(request)
+                    if len(calls) == 2:
+                        raise URLError("connection lost")
+                    return {"text": "第一段", "segments": [{"start": 0.0, "end": 2.0, "text": "第一段"}]}
+
+                with patch.object(cloud, "request_json", side_effect=first_run):
+                    with self.assertRaisesRegex(RuntimeError, "chunk 2/2|resume"):
+                        self.run_groq()
+                state = json.loads(next(self.state.glob("*.json")).read_text())
+                self.assertEqual(state["status"], "submitting")
+                self.assertEqual(sorted(state["chunks"]["completed"]), ["0"])
+                with patch.object(cloud, "request_json", return_value={"text": "第二段", "segments": []}) as request:
+                    result = self.run_groq()
+                self.assertEqual(request.call_count, 1)
+                body = request.call_args.args[0].data
+                self.assertIn(b"chunk-one", body)
+                self.assertNotIn(b"chunk-zero", body)
+        self.assertEqual(result["text"], "第一段\n第二段")
+
+    def test_groq_chunk_plan_mismatch_blocks_resume(self):
+        self._big_audio()
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            with patch.object(cloud, "_split_audio", side_effect=lambda path, deadline: self._groq_chunks()):
+                with patch.object(cloud, "request_json", side_effect=URLError("lost")):
+                    with self.assertRaises(RuntimeError):
+                        self.run_groq()
+                changed = [(b"different", cloud.hashlib.sha256(b"different").hexdigest(), 10.0)]
+                with patch.object(cloud, "_split_audio", side_effect=lambda path, deadline: changed):
+                    with patch.object(cloud, "request_json") as request:
+                        with self.assertRaisesRegex(RuntimeError, "chunk plan|resubmit"):
+                            self.run_groq()
+                        request.assert_not_called()
+
+    def test_groq_chunk_429_waits_retry_after_then_succeeds(self):
+        self._big_audio()
+        error = HTTPError("https://api.groq.com/openai/v1/audio/transcriptions", 429, "rate limited", {"Retry-After": "1"}, None)
+        responses = [error, {"text": "第一段", "segments": []}, {"text": "第二段", "segments": []}]
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            with patch.object(cloud, "_split_audio", side_effect=lambda path, deadline: self._groq_chunks()):
+                with patch.object(cloud, "request_json") as request, patch.object(cloud.time, "sleep") as sleep:
+                    def respond(req, timeout):
+                        item = responses.pop(0)
+                        if isinstance(item, Exception):
+                            raise item
+                        return item
+                    request.side_effect = respond
+                    result = self.run_groq()
+        self.assertEqual(result["text"], "第一段\n第二段")
+        self.assertEqual(request.call_count, 3)
+        sleep.assert_called_once_with(1.0)
+
+    def test_groq_chunking_requires_ffmpeg(self):
+        self._big_audio()
+        with patch.dict(os.environ, {"GROQ_API_KEY": "secret-groq-key"}):
+            with patch.object(cloud.shutil, "which", return_value=None), patch.object(cloud, "request_json") as request:
+                with self.assertRaisesRegex(RuntimeError, "ffmpeg"):
+                    self.run_groq()
+                request.assert_not_called()
 
     def test_groq_missing_or_invalid_key_fails_before_any_request(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(cloud, "request_json") as request:
@@ -345,7 +446,6 @@ class PodcastProviderTests(unittest.TestCase):
         self.assertIn('transcription_model: "qwen3-asr-0.6b"', output)
 
     def test_local_model_whitelist_rejects_unknown_models_without_loading(self):
-        transcribe = load_script("transcribe")
         config_module = load_script("provider_config")
         with self.assertRaisesRegex(ValueError, "SenseVoiceSmall"):
             config_module.resolve_provider_config(provider="local", model="tiny", state_dir=self.state)

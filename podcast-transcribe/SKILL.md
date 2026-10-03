@@ -89,7 +89,7 @@ python3 scripts/transcribe.py "/你的音频目录/episode.mp3" ./output \
 
 `--provider` 优先于 `PODCAST_TRANSCRIBE_PROVIDER`，都未指定时使用 `local`。批量入口支持同样的 provider、模型、语言、等待和状态目录参数，并把最终选项显式传给单集进程。
 
-两个云端后端都是同步接口，一次请求直接返回全文。DashScope 限制为**编码后不超过 10MB、时长不超过 5 分钟**（客户端在原始文件超过 7 MiB 时拒绝）；Groq 免费层**文件上限 25MB**（达到 25 MiB 时拒绝），并返回分段时间戳作为附录。超限都会提示改用本地 SenseVoice-Small——云端只适合短音频，长播客请用 `--provider local`。不支持的音频容器先在本机用 `ffmpeg` 转为 MP3 再提交。
+两个云端后端都是同步接口。DashScope 限制为**编码后不超过 10MB、时长不超过 5 分钟**（客户端在原始文件超过 7 MiB 时拒绝并提示改用本地 SenseVoice）。Groq 免费层单文件上限 25MB，**达到上限的长音频会自动分片**：ffmpeg 切成 20 分钟一段（约 9.6MB/段），逐段转录后按顺序拼接，时间戳自动累加偏移；分片进度逐段落盘，中断后重跑同一命令断点续传，不重复提交已完成分片；遇 429 按 Retry-After/指数退避等待。Groq 返回的分段时间戳会作为附录保留。分片和容器转换需要本机 `ffmpeg`。
 
 ## 云端任务恢复
 

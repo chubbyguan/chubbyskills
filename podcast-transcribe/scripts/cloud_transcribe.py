@@ -14,7 +14,9 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from urllib.error import HTTPError, URLError
@@ -160,8 +162,113 @@ DASHSCOPE_MAX_AUDIO_BYTES = 7 * 1024 * 1024
 
 GROQ_FORMATS = {"flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"}
 
-# Groq's free tier accepts files up to 25 MB; anything at or above is refused before upload.
+# Groq's free tier accepts files up to 25 MB; longer audio is chunked instead of refused.
 GROQ_MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
+# Long-audio chunking: 20-minute segments at 16 kHz mono 64 kbps MP3 ≈ 9.6 MB each,
+# comfortably below the 25 MB free-tier limit.
+GROQ_CHUNK_SECONDS = 1200
+
+
+def _split_audio(audio_path: Path, deadline: float) -> list:
+    """Split long audio into deterministic MP3 chunks: (content, sha256, duration_seconds)."""
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        raise RuntimeError("长音频分片转录需要 ffmpeg 和 ffprobe；macOS: brew install ffmpeg  Ubuntu: sudo apt install ffmpeg")
+    with tempfile.TemporaryDirectory(prefix="podcast-groq-chunks-") as temporary:
+        pattern = str(Path(temporary) / "chunk_%03d.mp3")
+        try:
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(audio_path),
+                            "-f", "segment", "-segment_time", str(GROQ_CHUNK_SECONDS),
+                            "-ar", "16000", "-ac", "1", "-codec:a", "libmp3lame", "-b:a", "64k", pattern],
+                           capture_output=True, check=True, timeout=_remaining(deadline, 1800))
+        except (OSError, subprocess.SubprocessError):
+            raise RuntimeError("Groq 长音频分片失败：ffmpeg 无法切分该音频") from None
+        chunks = []
+        for path in sorted(Path(temporary).glob("chunk_*.mp3")):
+            try:
+                probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True, timeout=60)
+                duration = float(probe.stdout.strip())
+            except (OSError, subprocess.SubprocessError, ValueError):
+                raise RuntimeError("Groq 长音频分片失败：ffprobe 无法读取分片时长") from None
+            if not math.isfinite(duration) or duration <= 0:
+                raise RuntimeError("Groq 长音频分片失败：分片时长无效")
+            content = path.read_bytes()
+            if len(content) >= GROQ_MAX_AUDIO_BYTES:
+                raise RuntimeError("Groq 分片结果仍达到 25MB 上限；请改用本地 SenseVoice-Small（--provider local）")
+            chunks.append((content, hashlib.sha256(content).hexdigest(), duration))
+        if not chunks:
+            raise RuntimeError("Groq 长音频分片失败：ffmpeg 没有产生任何分片")
+        return chunks
+
+
+def _groq_submit_with_backoff(client, payload, deadline, initial_delay=3.0):
+    """Submit one chunk; HTTP 429 waits Retry-After / exponential backoff within the deadline."""
+    delay = initial_delay
+    while True:
+        try:
+            return client.submit(payload, deadline)
+        except HTTPError as exc:
+            if exc.code != 429:
+                raise
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                wait = float(retry_after) if retry_after else delay
+            except (TypeError, ValueError):
+                wait = delay
+            wait = max(1.0, min(wait, 300.0))
+            # Sleeping past the deadline fails the run instead of hanging; _remaining raises TimeoutError.
+            time.sleep(min(wait, _remaining(deadline)))
+            delay = min(delay * 2, 60.0)
+
+
+def _transcribe_groq_chunked(client, audio_path, state, state_path, identity, config, deadline):
+    """Split long audio, submit chunks with per-chunk persistence, and stitch results in order."""
+    chunks = _split_audio(audio_path, deadline)
+    if _file_hash(audio_path) != identity["audio_sha256"]:
+        raise RuntimeError("Audio changed during preparation; no transcription job was submitted")
+    digests = [digest for _, digest, _ in chunks]
+    durations = [duration for _, _, duration in chunks]
+    if state is None:
+        state = {"version": 1, "identity": identity, "status": "submitting", "created_at": time.time(),
+                 "chunks": {"digests": digests, "durations": durations, "completed": {}}}
+        _atomic_json(state_path, state)
+    else:
+        saved = state["chunks"]
+        if saved.get("digests") != digests or not isinstance(saved.get("completed"), dict):
+            raise RuntimeError("Cloud state chunk plan no longer matches the audio; inspect it before --resubmit")
+    completed = state["chunks"]["completed"]
+    total = len(chunks)
+    for index, (content, _digest, _duration) in enumerate(chunks):
+        key = str(index)
+        if key in completed:
+            continue
+        print(f"  Groq chunk {index + 1}/{total}...", file=sys.stderr)
+        payload = {"fields": client._groq_fields(), "filename": "audio.mp3", "content": content}
+        try:
+            result = _groq_submit_with_backoff(client, payload, deadline)
+        except Exception:
+            raise RuntimeError(f"Groq chunk {index + 1}/{total} failed; state saved. Rerun the same command to resume without resubmitting completed chunks") from None
+        # Persist each completed chunk before any next potentially billable POST.
+        completed[key] = {"text": result["text"], "segments": result.get("segments", [])}
+        _atomic_json(state_path, state)
+    texts = [completed[str(index)]["text"] for index in range(total)]
+    segments = []
+    offset = 0.0
+    for index in range(total):
+        for segment in completed[str(index)]["segments"]:
+            if not isinstance(segment, dict) or not isinstance(segment.get("text"), str):
+                continue
+            try:
+                start = float(segment.get("start", 0)) + offset
+                end = float(segment.get("end", segment.get("start", 0))) + offset
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(start) and math.isfinite(end) and 0 <= start <= end:
+                segments.append({"start": start, "end": end, "text": segment["text"].strip()})
+        offset += state["chunks"]["durations"][index]
+    state.update(status="completed", result={"text": "\n".join(texts), "segments": segments})
+    _atomic_json(state_path, state)
+    return dict(state["result"], provider=config["provider"], model=config["model"], cached=False)
 
 
 def _convert_to_mp3(audio_path: Path, deadline: float, label: str) -> bytes:
@@ -279,6 +386,13 @@ class CloudProvider:
             payload["asr_options"]["language"] = self.language
         return payload
 
+    def _groq_fields(self) -> dict:
+        fields = {"model": self.model, "response_format": "verbose_json"}
+        if self.language and self.language != "auto":
+            # Groq expects an ISO-639-1 code such as zh/en.
+            fields["language"] = self.language
+        return fields
+
     def _prepare_groq(self, audio_path: Path, deadline: float) -> dict:
         audio_format = audio_path.suffix.lower().lstrip(".")
         if audio_format not in GROQ_FORMATS:
@@ -286,18 +400,11 @@ class CloudProvider:
             content = _convert_to_mp3(audio_path, deadline, "groq")
             audio_format = "mp3"
         else:
-            if audio_path.stat().st_size >= GROQ_MAX_AUDIO_BYTES:
-                raise ValueError(
-                    "音频达到 Groq 免费层 25MB 文件上限；请改用本地 SenseVoice-Small（--provider local）转录长播客")
             content = audio_path.read_bytes()
         if len(content) >= GROQ_MAX_AUDIO_BYTES:
             raise ValueError(
                 "音频达到 Groq 免费层 25MB 文件上限；请改用本地 SenseVoice-Small（--provider local）转录长播客")
-        fields = {"model": self.model, "response_format": "verbose_json"}
-        if self.language and self.language != "auto":
-            # Groq expects an ISO-639-1 code such as zh/en.
-            fields["language"] = self.language
-        return {"fields": fields, "filename": f"audio.{audio_format}", "content": content}
+        return {"fields": self._groq_fields(), "filename": f"audio.{audio_format}", "content": content}
 
 
 def transcribe_cloud(audio_path, *, provider, model=None, language=None, base_url=None,
@@ -340,9 +447,13 @@ def transcribe_cloud(audio_path, *, provider, model=None, language=None, base_ur
                 if not isinstance(result, dict) or not isinstance(result.get("text"), str) or not result["text"].strip():
                     raise RuntimeError("Completed cloud state is invalid; inspect it before retrying")
                 return dict(result, provider=config["provider"], model=config["model"], cached=True)
+        client = CloudProvider(config)
+        if config["provider"] == "groq" and (isinstance((state or {}).get("chunks"), dict) or (state is None and audio_path.stat().st_size >= GROQ_MAX_AUDIO_BYTES)):
+            # Long-audio path: per-chunk persistence resumes without resubmitting completed chunks.
+            return _transcribe_groq_chunked(client, audio_path, state, state_path, identity, config, deadline)
+        if state:
             if state.get("status") != "pending" or not isinstance(state.get("task_id"), str) or not state["task_id"]:
                 raise RuntimeError("Cloud job is ambiguous or failed; check provider billing/status, then use --resubmit only to explicitly create a new billable job")
-        client = CloudProvider(config)
         if state is None:
             payload = client.prepare(audio_path, deadline)
             if _file_hash(audio_path) != identity["audio_sha256"]:

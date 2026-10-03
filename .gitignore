@@ -44,3 +44,7 @@ Thumbs.db
 # Model cache
 .cache/
 modelscope/
+
+# Scratch working directories
+.work/
+.manus/
