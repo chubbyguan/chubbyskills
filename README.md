@@ -295,7 +295,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [订阅与调度（P0）](./docs/subscriptions.md) | 公开 Feed / YouTube 订阅、队列、调度、故障恢复与限制 |
 | [知识库自动化](./docs/knowledge-automation.md) | 索引、向量检索、归档和知识卡片 |
 | [MCP 配置](./docs/mcp-workflow.md) | 将知识库接入 Agent |
-| [社区推广 / 榜单提交指南](./docs/community-promotion-submission-guide.zh-CN.md) | 旧版推广草稿；外发前需将“13 个 Skills”等内容对齐当前 14 个 Skills 版本 |
+| [社区推广 / 榜单提交指南](./docs/community-promotion-submission-guide.zh-CN.md) | 各渠道推广与榜单提交文案（已对齐当前 14 个 Skills 版本） |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
 | [可选集成](./docs/integrations.md) | 外部解析工具的 Markdown 交接 |
 | [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.13.1** |
