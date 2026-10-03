@@ -298,6 +298,14 @@ class SubscriptionTest(unittest.TestCase):
         self.assertEqual(sum(row["state"] == "queued" for row in rows), 2)
         self.assertEqual(sum(row["state"] == "seen" for row in rows), 1)
 
+    def test_sync_fails_loudly_when_subscriptions_file_missing(self):
+        # A scheduled tick against a missing config must not report a silent
+        # due=0 success; cron/launchd users need a nonzero exit and the path.
+        with self.assertRaises(subscriptions.SubscribeCommandError) as ctx:
+            subscriptions.sync_subscriptions(self.args, self.config, due=True)
+        self.assertIn(str(self.subscriptions_path), str(ctx.exception))
+        self.assertIn("subscribe init", str(ctx.exception))
+
     def test_claim_failure_and_retry_state(self):
         self.write_document(mode="auto_ingest")
         self.args.backfill = 1

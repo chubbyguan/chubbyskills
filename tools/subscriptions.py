@@ -318,10 +318,16 @@ def _sync_one(
 def sync_subscriptions(
     args: Any, config: dict[str, Any], *, due: bool = False, force: bool = False
 ) -> tuple[int, list[dict[str, Any]]]:
-    _, document, store = _context(args, config)
+    document_path, document, store = _context(args, config)
     backfill = int(getattr(args, "backfill", 0) or 0)
     if backfill < 0 or backfill > 10:
         raise SubscribeCommandError("--backfill must be between 1 and 10")
+    if not document_path.exists():
+        # A silent empty run is the worst outcome for a scheduled tick: cron
+        # keeps reporting due=0 forever. Fail loudly so schedulers surface it.
+        raise SubscribeCommandError(
+            f"订阅配置不存在：{document_path}；先运行 subscribe init，或用 --subscriptions 指定配置文件"
+        )
     candidates = store.due_subscriptions(
         document["subscriptions"], force=force or not due
     )
