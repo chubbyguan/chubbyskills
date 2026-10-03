@@ -869,7 +869,29 @@ class SubscriptionStore:
         placeholders = ",".join("?" for _ in ids)
         with self.session() as con:
             con.execute(
-                f"UPDATE entries SET state='queued', queued_at=?, skip_reason=NULL, next_retry_at=NULL WHERE id IN ({placeholders}) AND state IN ('discovered', 'retry_wait', 'index_retry')",
+                f"UPDATE entries SET state='queued', queued_at=?, skip_reason=NULL, next_retry_at=NULL WHERE id IN ({placeholders}) AND state IN ('discovered', 'retry_wait', 'index_retry', 'seen')",
+                (stamp, *ids),
+            )
+            return con.execute("SELECT changes()").fetchone()[0]
+
+    def requeue_terminal(self, entry_ids: Iterable[int], *, now: str | None = None) -> int:
+        """Requeue failed_terminal entries after an environment fix.
+
+        attempt_count is aligned with the attempts journal so the next claim
+        does not collide with recorded attempts.
+        """
+        stamp = now or now_iso()
+        ids = [int(item) for item in entry_ids]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        with self.session() as con:
+            con.execute(
+                f"""UPDATE entries SET state='queued', queued_at=?, next_retry_at=NULL,
+                    claim_token=NULL, heartbeat_at=NULL, last_error_code=NULL, last_error=NULL,
+                    completed_at=NULL,
+                    attempt_count=COALESCE((SELECT MAX(attempt_no) FROM entry_attempts WHERE entry_id=entries.id), 0)
+                    WHERE id IN ({placeholders}) AND state='failed_terminal'""",
                 (stamp, *ids),
             )
             return con.execute("SELECT changes()").fetchone()[0]

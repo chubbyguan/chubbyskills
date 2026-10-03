@@ -669,6 +669,19 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
             _, _, store = _context(args, config)
             print(f"✅ 已入队 {store.promote(args.entry_ids)} 条。")
             return 0
+        if action == "requeue":
+            _, _, store = _context(args, config)
+            print(f"✅ 已重新入队 {store.requeue_terminal(args.entry_ids)} 条终态失败条目。")
+            return 0
+        if action == "remove":
+            path, document, _ = _context(args, config)
+            kept = [s for s in document["subscriptions"] if s["id"] != args.id]
+            if len(kept) == len(document["subscriptions"]):
+                raise SubscribeCommandError(f"subscription not found: {args.id}")
+            document["subscriptions"] = kept
+            subscription_store.save_document(path, document)
+            print(f"✅ 已移除订阅：{args.id}（历史条目保留在状态库中可追溯）")
+            return 0
         if action == "skip":
             _, _, store = _context(args, config)
             print(f"✅ 已跳过 {store.skip(args.entry_ids, args.reason)} 条。")

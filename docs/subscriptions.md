@@ -147,7 +147,7 @@ python3 tools/chubby.py subscribe sync --all --backfill 3
 默认 `discover_only`：新条目进入 `discovered`，人工决定哪些应进入知识库。
 
 ```bash
-# 查看待审条目
+# 查看待审条目（含基线 seen 条目，可随时挑历史内容补采）
 python3 tools/chubby.py subscribe pending --state discovered
 
 # 只把选择的条目送入采集与转录
@@ -216,6 +216,8 @@ python3 tools/chubby.py subscribe status
 python3 tools/chubby.py subscribe status --json
 python3 tools/chubby.py subscribe pause yt-3blue1brown
 python3 tools/chubby.py subscribe resume yt-3blue1brown
+python3 tools/chubby.py subscribe requeue 42        # 环境修复后重排终态失败条目
+python3 tools/chubby.py subscribe remove old-feed   # 移除来源（历史条目保留）
 ```
 
 | 情况 | 行为 |
