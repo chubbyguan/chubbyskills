@@ -2,7 +2,7 @@
 name: douyin-transcribe
 description: >
   抖音视频 → 下载 → 转录 → 存为 Markdown 的完整工作流。
-  支持短链接和完整链接，无需 cookie/登录。
+  支持短链接和完整链接；优先无 cookie 直采，被风控时回退 yt-dlp + 浏览器 cookie（无需登录）。
 metadata:
   category: "media"
   triggers: "[\"用户发送抖音分享链接或口头提到要转录抖音视频\", \"把这个抖音视频转成文字\", \"帮我转录这个抖音\"]"
@@ -45,7 +45,7 @@ python scripts/transcribe.py "https://v.douyin.com/xxxxx"
 - ✅ `iesdouyin.com/share/video/` 而非 `douyin.com/video/`
 - ✅ 移动端 UA 必须用 iPhone
 - ✅ `playwm` → `play` 去水印
-- ✅ 无需 cookie、无需登录、无需 yt-dlp
+- ⚠️ 首选无 cookie 直采；若分享页返回蜘蛛壳（风控），自动回退 yt-dlp + `YTDLP_COOKIES_FROM_BROWSER`（浏览器打开过 douyin.com 即可，无需登录）
 
 ### Step 2: SenseVoice-Small 转录
 
