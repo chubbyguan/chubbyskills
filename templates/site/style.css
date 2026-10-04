@@ -1,0 +1,80 @@
+/* chubbyskills 日报站点：纸面阅读感 */
+:root {
+  --ink: #2b2620;
+  --paper: #faf7f0;
+  --accent: #8a4b2a;
+  --rule: #ddd5c4;
+  --muted: #7a7264;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+  line-height: 1.7;
+}
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.site-header {
+  border-bottom: 2px solid var(--ink);
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 0.75rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.site-header h1 { font-size: 1.4rem; margin: 0; letter-spacing: 0.05em; }
+.site-header h1 a { color: var(--ink); }
+.site-header nav a { margin-left: 1rem; font-size: 0.95rem; }
+.window-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.card {
+  border: 1px solid var(--rule);
+  background: #fffdf8;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  border-radius: 4px;
+}
+.card h2 { font-size: 1.15rem; margin: 0 0 0.25rem; }
+.card ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+.card li { margin-bottom: 0.35rem; }
+.heat { color: var(--accent); font-size: 0.85rem; margin: 0; }
+.meta { color: var(--muted); font-size: 0.82rem; margin-left: 0.5rem; }
+.empty { color: var(--muted); }
+.back { margin-top: 1.5rem; font-size: 0.9rem; }
+table.sources {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  background: #fffdf8;
+}
+table.sources th, table.sources td {
+  border: 1px solid var(--rule);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+table.sources th { background: #f1ebdd; }
+.archive-list { padding-left: 1.25rem; }
+.about p { margin: 0.6rem 0; }
+.site-footer {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.82rem;
+}

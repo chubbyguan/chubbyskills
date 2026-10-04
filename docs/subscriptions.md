@@ -203,6 +203,30 @@ python3 tools/chubby.py subscribe digest --enrich
 - `DEEPSEEK_API_KEY` 缺失时 enrich 直接报错并提示去掉 `--enrich` 用零 LLM 模式；不会静默降级后照出文件。
 - 提示词外置在 `templates/digest-prompts/`（`prescreen.txt` / `score.txt` / `summary.txt`）：**改筛选标准、评分口径、摘要风格只改文字，不用改代码**；但各文件的输出 JSON 结构必须保持不变。
 
+### 日报站点（site）
+
+`subscribe site build` 把订阅队列渲染成一个纯静态站点（纯 Python `string.Template`，零 JS 框架、零模板引擎），可直接发到 GitHub Pages：
+
+```bash
+python3 tools/chubby.py subscribe site build                          # 默认 <vault>/30_Output/site/
+python3 tools/chubby.py subscribe site build --days 30 \
+  --site-name "Chubby 情报站" --base-url /chubby-daily --output ./site
+```
+
+页面：`index.html`（近 7 天事件流，按热度+时间排序的聚簇卡片）、`archive/<date>.html`（近 30 天每日归档）、`sources.html`（订阅源表：名称、类型、最近检查时间、7 天检查数与成功率，读 source_checks）、`about.html`（项目说明与免责）+ `style.css`。聚簇复用 digest 的标题相似度逻辑，不依赖 digest 的 Markdown 产物。
+
+**公开站内容边界（硬规则）**：只放条目标题、来源名、发布时间、原始链接、聚簇热度和来源健康统计；**绝不**输出正文/转录全文、本地 vault 路径、关联笔记标题或任何凭据。所有用户内容 HTML 转义；泄漏断言由测试保障。注意输出目录是生成物，重复 build 会**覆盖**（与 digest 的不覆盖惯例不同）。
+
+部署到 GitHub Pages（示例）：
+
+```bash
+python3 tools/chubby.py subscribe site build --base-url /<repo> --output /tmp/site
+gh repo create <repo> --public --source /tmp/site --push
+gh api repos/{owner}/<repo>/pages -X POST -f "build_type=workflow"  # 或用 Settings → Pages 选分支目录
+```
+
+也可在仓库里加一个 Actions workflow 定时 build 并推 gh-pages 分支；--site-name 与 --base-url 会注入所有内部链接。
+
 ## 定时调度
 
 订阅 CLI 不启动常驻服务。每小时由系统定时器触发一次；每个来源仍按自身 `poll_minutes` 决定是否实际请求。每个来源的下一次到期时间带按来源哈希的确定性抖动（约 ±10%），批量添加的源不会在同一秒集中请求同一个 host。

@@ -15,12 +15,14 @@ try:
         subscription_adapters,
         subscription_digest,
         subscription_executor,
+        subscription_site,
         subscription_store,
     )
 except ModuleNotFoundError:
     import subscription_adapters
     import subscription_digest
     import subscription_executor
+    import subscription_site
     import subscription_store
 
 
@@ -726,6 +728,11 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         if action == "digest":
             _, document, store = _context(args, config)
             return subscription_digest.run_digest(args, config, document, store)
+        if action == "site":
+            _, document, store = _context(args, config)
+            if getattr(args, "site_command", None) == "build":
+                return subscription_site.build_site(args, config, document, store)
+            raise SubscribeCommandError(f"unknown subscribe site command: {args.site_command}")
         if action == "pause":
             return _toggle(args, config, False)
         if action == "resume":
@@ -736,6 +743,7 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         subscription_store.SubscriptionError,
         subscription_adapters.AdapterError,
         subscription_digest.DigestError,
+        subscription_site.SiteError,
         ValueError,
     ) as exc:
         print(f"❌ 订阅操作失败：{exc}", file=sys.stderr)

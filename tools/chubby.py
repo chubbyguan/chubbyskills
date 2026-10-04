@@ -1457,6 +1457,13 @@ def build_parser():
     subscribe_digest.add_argument("--enrich", action="store_true", help="Optional DeepSeek prescreen/score/summary layer (DEEPSEEK_API_KEY)")
     subscribe_digest.add_argument("--no-vault-links", action="store_true", help="Skip vault related-notes lookup")
     subscribe_digest.add_argument("--cluster-threshold", type=float, default=0.5, help="Title Jaccard similarity for event clustering (default 0.5)")
+    subscribe_site = subscribe_sub.add_parser("site", help="Static daily-report site generator")
+    site_sub = subscribe_site.add_subparsers(dest="site_command", required=True)
+    site_build = site_sub.add_parser("build", help="Build the static site (overwrites the output directory)")
+    site_build.add_argument("--output", help="Output directory (default: <vault>/30_Output/site/)")
+    site_build.add_argument("--days", type=int, default=7, help="Window in days (1-90, default 7)")
+    site_build.add_argument("--site-name", help="Site name injected into every page")
+    site_build.add_argument("--base-url", default="", help="URL prefix for all internal links (e.g. /repo-name for GitHub Pages)")
 
     search = sub.add_parser("search", help="Sync the vault index and search collected notes")
     search.add_argument("query")
