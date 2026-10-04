@@ -317,7 +317,14 @@ class CloudProvider:
         if payload is not None:
             body = json.dumps(payload).encode("utf-8")
             content_type = "application/json"
-        headers = {self.auth_header: self.auth_value}
+        # Groq sits behind Cloudflare bot rules that reject Python's default
+        # urllib User-Agent (403 / connection reset on upload); a desktop
+        # browser UA is required for requests to succeed at all.
+        headers = {
+            self.auth_header: self.auth_value,
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        }
         if content_type:
             headers["Content-Type"] = content_type
         request = Request(f"{self.base_url}/{endpoint}", data=body, headers=headers, method="POST" if body is not None else "GET")

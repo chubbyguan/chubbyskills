@@ -61,8 +61,15 @@ MacBook Pro M3 Pro（18GB）纯 CPU，torch 2.14.1，5 分钟中文双人播客�
 
 ### 仍待真实验收
 
-- DashScope（`qwen3-asr-flash`）与 Groq（`whisper-large-v3-turbo`）云转录后端：代码与限额检查就绪，未完成真实转录验收。
+- ~~Groq（`whisper-large-v3-turbo`）云转录后端~~：已于 2026-10-04 完成真实验收，见下。
+- DashScope（`qwen3-asr-flash`）云转录后端：代码与限额检查就绪，未完成真实转录验收。
 - ~~X 长文章（Articles）登录态全文路径（`X_COOKIES`）~~：已于 2026-10-04 完成真实验收，见下。
+
+## 2026-10-04 验收：Groq 云转录后端
+
+- **实测**：5 分钟中文双人播客（16kHz mono，`whisper-large-v3-turbo`），提交后 **3 秒**返回，154 个时间戳分段；二次运行命中本地缓存 0 秒零请求。文本流畅，专名表现稳定（「马连道」正确、「朱伟」第二次出现正确），无幻觉改写，偶有同音字（「茶」→「查」）。
+- **修复**：Groq 的 Cloudflare 前置会拒绝 Python urllib 默认 UA（GET 403、POST 上传中断），`CloudProvider.request` 现统一携带桌面浏览器 UA 与 `Accept: application/json`（对 DashScope 同样无害），并有回归测试锁定。
+- **注意**：本机经代理访问 api.groq.com；免费层有速率限制，长音频分片路径未在本轮实测覆盖。
 
 ## 2026-10-04 复测：X 长文章登录态全文抓取修复
 

@@ -7,7 +7,7 @@
 
 此前的 Atlas / MuAPI 实验后端已被 DashScope 取代并移除。需求最初来自 [PR #3](https://github.com/chubbyguan/chubbyskills/pull/3)（[binyangzhu000-sudo](https://github.com/binyangzhu000-sudo)）和 [PR #5](https://github.com/chubbyguan/chubbyskills/pull/5)（[Anil-matcha](https://github.com/Anil-matcha)），归属保留。
 
-> **验收状态**：`dashscope` 与 `groq` 两个后端（2026-10 接入）的请求构造、状态恢复和错误路径均有单测覆盖，但**尚未完成真实账号的在线验收**。首次使用前请用短音频自行验证，结果欢迎反馈到 issue。
+> **验收状态**：`groq`（2026-10-04）已完成真实账号在线验收；`dashscope` 的请求构造、状态恢复和错误路径均有单测覆盖，但**尚未完成真实账号的在线验收**。首次使用前请用短音频自行验证，结果欢迎反馈到 issue。
 
 ## 选择后端
 

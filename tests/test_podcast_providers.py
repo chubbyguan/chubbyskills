@@ -68,6 +68,9 @@ class PodcastProviderTests(unittest.TestCase):
         self.assertEqual(request.method, "POST")
         self.assertTrue(request.full_url.endswith("/openai/v1/audio/transcriptions"))
         self.assertEqual(request.get_header("Authorization"), "Bearer secret-groq-key")
+        # Groq's Cloudflare front rejects Python's default urllib UA outright
+        # (403 / connection reset on upload), so a browser UA is mandatory.
+        self.assertIn("Mozilla/5.0", request.get_header("User-agent"))
         content_type = request.get_header("Content-type")
         self.assertIn("multipart/form-data; boundary=", content_type)
         body = request.data
