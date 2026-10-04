@@ -31,7 +31,7 @@ def run_ydl(cfg, args, timeout, capture=True):
         cmd += ["--referer", cfg.referer]
     cmd += list(cfg.extra_ydl_args) + list(args)
     return subprocess.run(
-        cmd, capture_output=capture, text=True, timeout=timeout, check=not capture
+        cmd, capture_output=capture, text=True, timeout=timeout, check=True
     )
 
 
@@ -76,7 +76,9 @@ def download_audio(cfg, url: str, output_dir: str, filename: str = "audio.mp3") 
             print(f"  ✅ Audio: {size_mb:.1f} MB", file=sys.stderr)
             return audio_path
         except subprocess.CalledProcessError as exc:
-            last_err = exc
+            last_err = f"yt-dlp 退出码 {exc.returncode}"
+            if exc.stderr and exc.stderr.strip():
+                last_err += f"：{exc.stderr.strip()}"
             print(f"  ⚠️  下载失败，{2 * attempt}s 后重试...", file=sys.stderr)
             time.sleep(2 * attempt)
         except subprocess.TimeoutExpired as exc:
