@@ -192,7 +192,7 @@ python3 tools/chubby.py subscribe sync --all    # 首次只建立基线
 python3 tools/chubby.py subscribe pending
 ```
 
-定时运行使用 `python3 tools/chubby.py subscribe tick --due --process-limit 3`，交给 macOS launchd 或 Linux cron 每小时触发。支持用户自带 RSSHub、RSS-Bridge 或其它 Provider 的最终公开 Feed；该标签不会启用平台抓取、认证或代理。X、小红书、抖音、B站、公众号账号扫描尚未支持。完整命令、调度、Provider 边界和失败恢复见[订阅与调度](./docs/subscriptions.md)，真实兼容性标准见[Provider 7 天验收](./docs/subscription-provider-acceptance.md)。
+定时运行使用 `python3 tools/chubby.py subscribe tick --due --process-limit 3`，交给 macOS launchd 或 Linux cron 每小时触发。`subscribe digest` 把近 N 天的订阅条目汇总成每日情报简报（零 LLM 可用，事件聚簇 + 知识库关联；`--enrich` 可选 DeepSeek 精选摘要，模型内容带标注）。支持用户自带 RSSHub、RSS-Bridge 或其它 Provider 的最终公开 Feed；该标签不会启用平台抓取、认证或代理。X、小红书、抖音、B站、公众号账号扫描尚未支持。完整命令、调度、Provider 边界和失败恢复见[订阅与调度](./docs/subscriptions.md)，真实兼容性标准见[Provider 7 天验收](./docs/subscription-provider-acceptance.md)。
 
 ## 安装到 Agent
 

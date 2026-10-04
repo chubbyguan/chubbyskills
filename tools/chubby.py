@@ -1449,6 +1449,14 @@ def build_parser():
     subscribe_pause.add_argument("id")
     subscribe_resume = subscribe_sub.add_parser("resume", help="Enable a paused source")
     subscribe_resume.add_argument("id")
+    subscribe_digest = subscribe_sub.add_parser(
+        "digest", help="Daily intelligence digest over recent subscription entries"
+    )
+    subscribe_digest.add_argument("--days", type=int, default=1, help="Window in days (1-30, default 1)")
+    subscribe_digest.add_argument("--output", help="Output Markdown path (default: <vault>/30_Output/)")
+    subscribe_digest.add_argument("--enrich", action="store_true", help="Optional DeepSeek prescreen/score/summary layer (DEEPSEEK_API_KEY)")
+    subscribe_digest.add_argument("--no-vault-links", action="store_true", help="Skip vault related-notes lookup")
+    subscribe_digest.add_argument("--cluster-threshold", type=float, default=0.5, help="Title Jaccard similarity for event clustering (default 0.5)")
 
     search = sub.add_parser("search", help="Sync the vault index and search collected notes")
     search.add_argument("query")

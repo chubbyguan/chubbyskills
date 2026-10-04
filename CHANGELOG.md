@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added `subscribe digest`: a daily intelligence brief over recent subscription entries. Zero-LLM by default — title/time/source/link from the subscription SQLite queue, non-LLM title-similarity event clustering (Jaccard over normalized keyword tokens, configurable threshold, heat = reporting source count), and vault related-note links per event; processed entries link to their local notes, unprocessed ones keep original URLs. Output goes to `<vault>/30_Output/` with metadata frontmatter and never overwrites an existing file. `--enrich` adds an optional DeepSeek layer (prescreen → score → Chinese summary, `DEEPSEEK_API_KEY`, prompts externalized in `templates/digest-prompts/` so standards change without code); model-generated content is always labeled 🤖 and fails loudly with a zero-LLM hint when the key is missing.
+
 ## 0.14.0 - 2026-10-03
 
 - Podcast local transcription now uses SenseVoice-Small through the shared `chubby_common/funasr.py` wrapper, the same stack as the video skills; faster-whisper (and its `av` pin) has been removed. SenseVoice returns plain full text, so podcast transcripts no longer carry per-segment timestamps.

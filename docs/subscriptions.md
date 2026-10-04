@@ -173,6 +173,36 @@ python3 tools/chubby.py subscribe process --retry-failed --limit 3
 
 `tick` 会自动领取到期重试条目；手动 `process` 需要显式 `--retry-failed`，避免意外重跑。
 
+## 每日情报简报（digest）
+
+把订阅队列里近 N 天的条目汇总成一份 Markdown 简报，默认**零 LLM**——不需要任何 key：
+
+```bash
+python3 tools/chubby.py subscribe digest                 # 近 1 天，写到 <vault>/30_Output/
+python3 tools/chubby.py subscribe digest --days 7 --output digest.md
+```
+
+数据源是订阅 SQLite 的 entries 表（`discovered` / `queued` / `ingesting` / `succeeded` 等在途与已处理状态；`seen` 基线与 `skipped` 不计入）。窗口内没有条目时只提示、不写文件。
+
+- **事件聚簇**：标题归一化（小写、去标点、提取关键词 token + 中文二元组）后按 Jaccard 相似度贪心聚簇，同一事件被多个来源报道时聚成一簇，热度 = 报道来源数。阈值用 `--cluster-threshold` 调（默认 0.5，越高越严格）。
+- **知识库关联**：每个事件用条目标题在 vault 索引里做检索，显示"知识库已有 N 篇相关笔记"（top 3 标题 + 路径）。`--no-vault-links` 可跳过。
+- **证据可回查**：已处理（`succeeded`）的条目链接到本地笔记路径；未处理的保留原始 URL。
+
+输出 frontmatter 记录生成时间、窗口、来源数、条目数、聚簇阈值和是否 enrich。同名文件永不覆盖：当天已有简报时自动追加时分秒后辍。
+
+### 可选 LLM 层（--enrich）
+
+```bash
+export DEEPSEEK_API_KEY=***
+python3 tools/chubby.py subscribe digest --enrich
+```
+
+`--enrich` 用 DeepSeek 做三段加工：**预筛**（淘汰灌水条目）→ **评分**（1-10 重要性）→ **中文摘要**（每事件一句话标题 + 两三句摘要，仅处理热度排序前 10 个事件）。边界：
+
+- 模型生成的标题 / 摘要 / 评分一律带 🤖 标注，frontmatter 记 `enriched: true`；每条仍保留原始链接，模型内容永远可回查原文。
+- `DEEPSEEK_API_KEY` 缺失时 enrich 直接报错并提示去掉 `--enrich` 用零 LLM 模式；不会静默降级后照出文件。
+- 提示词外置在 `templates/digest-prompts/`（`prescreen.txt` / `score.txt` / `summary.txt`）：**改筛选标准、评分口径、摘要风格只改文字，不用改代码**；但各文件的输出 JSON 结构必须保持不变。
+
 ## 定时调度
 
 订阅 CLI 不启动常驻服务。每小时由系统定时器触发一次；每个来源仍按自身 `poll_minutes` 决定是否实际请求。每个来源的下一次到期时间带按来源哈希的确定性抖动（约 ±10%），批量添加的源不会在同一秒集中请求同一个 host。

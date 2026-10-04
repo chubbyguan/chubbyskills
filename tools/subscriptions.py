@@ -11,9 +11,15 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from tools import subscription_adapters, subscription_executor, subscription_store
+    from tools import (
+        subscription_adapters,
+        subscription_digest,
+        subscription_executor,
+        subscription_store,
+    )
 except ModuleNotFoundError:
     import subscription_adapters
+    import subscription_digest
     import subscription_executor
     import subscription_store
 
@@ -717,6 +723,9 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
                 return 1 if sync_code or process_code else 0
             finally:
                 store.release_lock("tick", token)
+        if action == "digest":
+            _, document, store = _context(args, config)
+            return subscription_digest.run_digest(args, config, document, store)
         if action == "pause":
             return _toggle(args, config, False)
         if action == "resume":
@@ -726,6 +735,7 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         SubscribeCommandError,
         subscription_store.SubscriptionError,
         subscription_adapters.AdapterError,
+        subscription_digest.DigestError,
         ValueError,
     ) as exc:
         print(f"❌ 订阅操作失败：{exc}", file=sys.stderr)
