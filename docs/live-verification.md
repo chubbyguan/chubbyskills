@@ -62,4 +62,11 @@ MacBook Pro M3 Pro（18GB）纯 CPU，torch 2.14.1，5 分钟中文双人播客�
 ### 仍待真实验收
 
 - DashScope（`qwen3-asr-flash`）与 Groq（`whisper-large-v3-turbo`）云转录后端：代码与限额检查就绪，未完成真实转录验收。
-- X 长文章（Articles）登录态全文路径（`X_COOKIES`）：实现与预览回退就绪，未完成真实验收。
+- ~~X 长文章（Articles）登录态全文路径（`X_COOKIES`）~~：已于 2026-10-04 完成真实验收，见下。
+
+## 2026-10-04 复测：X 长文章登录态全文抓取修复
+
+- **背景**：线上发现 `x-ingest` 登录态全文抓取失效 —— `fetch_article_graphql()` 内置的两个硬编码 queryId（`DJS3BdhUhcaEpZ7B7irJDg`、`V3vfsYzNEyD9tsf4xoPhgw`）对 `TweetResultByRestId` 全部返回 404，登录 cookie 有效也无济于事，只能拿到 syndication 预览。
+- **诊断**：用桌面 Chrome UA + 登录 cookie 拉 `https://x.com/home`，HTML 引用 `https://abs.twimg.com/responsive-web/client-web/main.<hash>.js`；在该 bundle 中匹配 `queryId:"...",operationName:"TweetResultByRestId"` 挖到当前有效 queryId `LbQZrAWyKPvExi8di3-EoA`。另发现该操作要求 `fieldToggles`（`withArticlePlainText` / `withArticleRichContentState` 置 true）才会返回 `plain_text` / `content_state`，否则 article 结果只有标题和预览；且 `TweetResultByRestId` 必须以**推文 id** 为参数（旧代码误传 syndication 返回的 article rest_id，同样拿不到全文）。
+- **修复**：queryId 获取改为「新鲜缓存（`~/.cache/x-ingest/tweet-result-query-ids.json`，TTL 24h）→ 实时从 x.com 前端 JS bundle 提取并写缓存 → 过期缓存 → 内置兜底列表」；GraphQL 请求补齐新版 features 全集与 `fieldToggles`；正文抓取改用推文 id。
+- **验证**（macOS，登录 cookie 有效）：`python3 x-ingest/scripts/fetch_tweet.py "https://x.com/369Serena/status/2103705402793730449" -o /tmp/x-fixed` 抓到全文 **2859 字**（正文，标题《小红书矩阵获客指南-全网独家，让你的活动 or 课程爆满！！！》），封面图本地化，无「预览」标注；同链接不带 cookie 复跑维持预览 + stderr 告警路径，无回归。

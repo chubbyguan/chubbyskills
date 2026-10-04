@@ -1,7 +1,10 @@
 import importlib.util
+import json
 import os
 import tempfile
+import time
 import unittest
+import unittest.mock
 
 from tools import validate_outputs
 
@@ -192,6 +195,101 @@ class XArticleTest(unittest.TestCase):
     def test_load_cookies_rejects_missing_keys(self):
         with self.assertRaisesRegex(ValueError, "auth_token"):
             fetch_tweet.load_cookies("foo=bar")
+
+
+class XQueryIdDiscoveryTest(unittest.TestCase):
+    BUNDLE_JS = (
+        'x.exports={queryId:"AbCdEfGhIjKlMnOpQrSt-U",operationName:'
+        '"TweetResultByRestId",operationType:"query",metadata:{}};'
+        'y.exports={queryId:"AbCdEfGhIjKlMnOpQrSt-U",operationName:'
+        '"TweetResultByRestId"};z.exports={queryId:"short",operationName:'
+        '"TweetResultByRestId"};w.exports={queryId:"OtherOpQueryId1234567",'
+        'operationName:"UserByScreenName"};'
+    )
+
+    def _cache(self, tmpdir, ids, fetched_at):
+        path = os.path.join(tmpdir, "cache", "qids.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"query_ids": ids, "fetched_at": fetched_at}, f)
+        return path
+
+    def test_extract_query_ids_from_js_dedupes_and_filters(self):
+        self.assertEqual(
+            fetch_tweet.extract_query_ids_from_js(self.BUNDLE_JS),
+            ["AbCdEfGhIjKlMnOpQrSt-U"],
+        )
+        self.assertEqual(fetch_tweet.extract_query_ids_from_js(""), [])
+        self.assertEqual(fetch_tweet.extract_query_ids_from_js(None), [])
+
+    def test_fresh_cache_short_circuits_discovery(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._cache(tmpdir, ["CachedQueryId12345678"], time.time())
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", side_effect=AssertionError("net")
+            ):
+                self.assertEqual(
+                    fetch_tweet.get_query_ids(cache_path=path),
+                    ["CachedQueryId12345678"],
+                )
+
+    def test_stale_cache_triggers_discovery_and_rewrites_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._cache(
+                tmpdir, ["StaleQueryId123456789"], time.time() - 48 * 3600
+            )
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", return_value=["NewQueryId1234567890"]
+            ) as discover:
+                ids = fetch_tweet.get_query_ids(cache_path=path)
+            self.assertEqual(ids, ["NewQueryId1234567890"])
+            discover.assert_called_once()
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["query_ids"], ["NewQueryId1234567890"])
+
+    def test_discovery_failure_falls_back_to_stale_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._cache(
+                tmpdir, ["StaleQueryId123456789"], time.time() - 48 * 3600
+            )
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", return_value=[]
+            ):
+                self.assertEqual(
+                    fetch_tweet.get_query_ids(cache_path=path),
+                    ["StaleQueryId123456789"],
+                )
+
+    def test_discovery_failure_without_cache_falls_back_to_builtin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "missing", "qids.json")
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", side_effect=RuntimeError("boom")
+            ):
+                self.assertEqual(
+                    fetch_tweet.get_query_ids(cache_path=path),
+                    list(fetch_tweet._TWEET_RESULT_QUERY_IDS),
+                )
+
+    def test_discover_query_ids_parses_bundle_from_homepage(self):
+        homepage = (
+            '<script src="https://abs.twimg.com/responsive-web/client-web/'
+            'main.abcdef0123456789a.js"></script>'
+        )
+        fetched = {}
+
+        def fake_fetch(url, cookies=None, timeout=20):
+            fetched[url] = True
+            if url == "https://x.com/home":
+                return homepage
+            return self.BUNDLE_JS
+
+        with unittest.mock.patch.object(
+            fetch_tweet, "_fetch_url_text", side_effect=fake_fetch
+        ):
+            ids = fetch_tweet.discover_query_ids(cookies="auth_token=a; ct0=b")
+        self.assertEqual(ids, ["AbCdEfGhIjKlMnOpQrSt-U"])
+        self.assertIn("https://x.com/home", fetched)
 
 
 if __name__ == "__main__":

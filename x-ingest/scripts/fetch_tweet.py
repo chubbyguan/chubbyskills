@@ -28,6 +28,7 @@ import argparse
 import subprocess
 import tempfile
 import shutil
+import time
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -44,11 +45,97 @@ _GRAPHQL_BEARER = (
     "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs"
     "%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
 )
-# TweetResultByRestId 的 queryId 会随 X 前端发版轮换，按新到旧依次尝试。
+# TweetResultByRestId 的 queryId 会随 X 前端发版轮换。运行时优先从 x.com 前端
+# JS bundle 动态发现（缓存到用户目录，TTL 24h），这里只作最终兜底，按新到旧排列。
 _TWEET_RESULT_QUERY_IDS = [
+    "LbQZrAWyKPvExi8di3-EoA",
     "DJS3BdhUhcaEpZ7B7irJDg",
     "V3vfsYzNEyD9tsf4xoPhgw",
 ]
+
+_QUERY_ID_CACHE_TTL = 24 * 3600  # 秒
+_QUERY_ID_CACHE_PATH = os.path.join(
+    os.path.expanduser("~"), ".cache", "x-ingest", "tweet-result-query-ids.json"
+)
+_QUERY_ID_PATTERN = re.compile(
+    r'queryId:"([A-Za-z0-9_-]{15,40})",operationName:"TweetResultByRestId"'
+)
+
+
+def extract_query_ids_from_js(js_text):
+    """从 x-web JS bundle 文本中提取 TweetResultByRestId 的 queryId（去重保序）。"""
+    ids = []
+    for qid in _QUERY_ID_PATTERN.findall(js_text or ""):
+        if qid not in ids:
+            ids.append(qid)
+    return ids
+
+
+def _read_query_id_cache(path):
+    """读取缓存的 queryId 列表。返回 (ids, age_seconds)，无缓存时 ([], None)。"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        ids = [q for q in data.get("query_ids") or [] if isinstance(q, str)]
+        ts = float(data.get("fetched_at") or 0)
+        return ids, time.time() - ts
+    except Exception:
+        return [], None
+
+
+def _write_query_id_cache(path, ids):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"query_ids": ids, "fetched_at": time.time()}, f)
+    except Exception:
+        pass
+
+
+def _fetch_url_text(url, cookies=None, timeout=20):
+    headers = {"User-Agent": UA}
+    if cookies:
+        headers["Cookie"] = cookies
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def discover_query_ids(cookies=None):
+    """加载 x.com 首页 → 找到 main.*.js bundle → 从中挖 TweetResultByRestId 的 queryId。"""
+    html = _fetch_url_text("https://x.com/home", cookies=cookies)
+    bundle_urls = re.findall(
+        r"https://abs\.twimg\.com/responsive-web/client-web/main\.[0-9a-f]+\.js",
+        html,
+    )
+    for bundle_url in dict.fromkeys(bundle_urls):
+        try:
+            ids = extract_query_ids_from_js(_fetch_url_text(bundle_url))
+        except Exception:
+            continue
+        if ids:
+            return ids
+    return []
+
+
+def get_query_ids(cookies=None, cache_path=_QUERY_ID_CACHE_PATH):
+    """queryId 获取链：新鲜缓存 → 实时发现（写缓存）→ 过期缓存 → 内置兜底列表。"""
+    cached, age = _read_query_id_cache(cache_path)
+    if cached and age is not None and age < _QUERY_ID_CACHE_TTL:
+        return cached
+    try:
+        found = discover_query_ids(cookies=cookies)
+    except Exception as e:
+        print(f"  ⚠️  从 x.com 前端动态发现 queryId 失败：{e}", file=sys.stderr)
+        found = []
+    if found:
+        _write_query_id_cache(cache_path, found)
+        return found
+    if cached:
+        print("  ⚠️  动态发现失败，使用过期缓存的 queryId", file=sys.stderr)
+        return cached
+    print("  ⚠️  动态发现失败，使用内置兜底 queryId 列表", file=sys.stderr)
+    return list(_TWEET_RESULT_QUERY_IDS)
 
 
 def extract_tweet_id(url):
@@ -128,26 +215,55 @@ def fetch_article_graphql(rest_id, cookies):
         "withVoice": False,
     }
     features = {
+        "creator_subscriptions_tweet_preview_api_enabled": False,
+        "premium_content_api_read_enabled": False,
+        "communities_web_enable_tweet_community_results_fetch": False,
+        "c9s_tweet_anatomy_moderator_badge_enabled": False,
+        "responsive_web_grok_analyze_button_fetch_trends_enabled": False,
+        "responsive_web_grok_analyze_post_followups_enabled": False,
+        "rweb_cashtags_composer_attachment_enabled": False,
+        "responsive_web_jetfuel_frame": False,
+        "rweb_sports_post_context_enabled": False,
+        "responsive_web_grok_share_attachment_enabled": False,
+        "responsive_web_grok_annotations_enabled": False,
         "articles_preview_enabled": True,
-        "tweetypie_unmention_optimization_enabled": True,
         "responsive_web_edit_tweet_api_enabled": True,
+        "rweb_conversational_replies_downvote_enabled": False,
         "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
         "view_counts_everywhere_api_enabled": True,
         "longform_notetweets_consumption_enabled": True,
         "responsive_web_twitter_article_tweet_consumption_enabled": True,
-        "tweet_awards_web_tipping_enabled": False,
+        "content_disclosure_indicator_enabled": False,
+        "content_disclosure_ai_generated_indicator_enabled": False,
+        "responsive_web_grok_show_grok_translated_post": False,
+        "responsive_web_grok_analysis_button_from_backend": False,
+        "post_ctas_fetch_enabled": False,
+        "rweb_cashtags_enabled": False,
         "freedom_of_speech_not_reach_fetch_enabled": True,
         "standardized_nudges_misinfo": True,
         "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
-        "rweb_video_timestamps_enabled": True,
         "longform_notetweets_rich_text_read_enabled": True,
         "longform_notetweets_inline_media_enabled": True,
-        "responsive_web_graphql_exclude_directive_enabled": True,
+        "profile_label_improvements_pcf_label_in_post_enabled": False,
+        "responsive_web_profile_redirect_enabled": False,
+        "rweb_tipjar_consumption_enabled": False,
         "verified_phone_label_enabled": False,
-        "responsive_web_media_download_video_enabled": False,
-        "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+        "responsive_web_nested_quote_preview_enabled": False,
+        "responsive_web_grok_image_annotation_enabled": False,
+        "responsive_web_grok_imagine_annotation_enabled": False,
+        "responsive_web_grok_community_note_auto_translation_is_enabled": False,
         "responsive_web_graphql_timeline_navigation_enabled": True,
-        "responsive_web_enhance_cards_enabled": False,
+    }
+    # 关键：withArticlePlainText / withArticleRichContentState 决定返回里带不带全文。
+    field_toggles = {
+        "withArticleRichContentState": True,
+        "withArticlePlainText": True,
+        "withArticleSummaryText": False,
+        "withArticleVoiceOver": False,
+        "withGrokAnalyze": False,
+        "withDisallowedReplyControls": False,
+        "withPayments": False,
+        "withAuxiliaryUserLabels": False,
     }
     headers = {
         "User-Agent": UA,
@@ -158,11 +274,13 @@ def fetch_article_graphql(rest_id, cookies):
         "X-Twitter-Active-User": "yes",
         "Cookie": f"auth_token={auth}; ct0={ct0}",
     }
-    for query_id in _TWEET_RESULT_QUERY_IDS:
+    cookie_header = f"auth_token={auth}; ct0={ct0}"
+    for query_id in get_query_ids(cookies=cookie_header):
         url = (
             f"https://x.com/i/api/graphql/{query_id}/TweetResultByRestId"
             f"?variables={urllib.parse.quote(json.dumps(variables))}"
             f"&features={urllib.parse.quote(json.dumps(features))}"
+            f"&fieldToggles={urllib.parse.quote(json.dumps(field_toggles))}"
         )
         req = urllib.request.Request(url, headers=headers)
         try:
@@ -721,10 +839,10 @@ def main():
 
     if data["note_type"] == "article" and data.get("article_is_preview"):
         cookies = args.cookies or os.environ.get("X_COOKIES")
-        if cookies and data.get("article_rest_id"):
+        if cookies:
             print("  📄 长文章，尝试登录态抓取全文...", file=sys.stderr)
             try:
-                result = fetch_article_graphql(data["article_rest_id"], cookies)
+                result = fetch_article_graphql(tweet_id, cookies)
                 title, text = extract_article_text(result)
                 if text:
                     data["text"] = text
