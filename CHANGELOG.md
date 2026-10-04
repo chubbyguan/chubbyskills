@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- DashScope cloud backend live-verified (2026-10-04): 2-minute Chinese podcast via qwen3-asr-flash returned in 4s with the best transcript quality of the three verified backends (correct punctuation, ITN and proper nouns). Both cloud backends are now acceptance-verified.
+
 - Fixed Groq cloud transcription being rejected before any upload: Groq's Cloudflare front blocks Python's default urllib User-Agent (403 on GET, connection reset mid-upload on POST). `CloudProvider.request` now always sends a desktop browser User-Agent and `Accept: application/json`. Verified live (2026-10-04): a 5-minute Chinese podcast returned in 3 seconds with 154 timestamped segments, and the second run replayed from cache with zero API calls.
 
 - Added `subscribe digest`: a daily intelligence brief over recent subscription entries. Zero-LLM by default — title/time/source/link from the subscription SQLite queue, non-LLM title-similarity event clustering (Jaccard over normalized keyword tokens, configurable threshold, heat = reporting source count), and vault related-note links per event; processed entries link to their local notes, unprocessed ones keep original URLs. Output goes to `<vault>/30_Output/` with metadata frontmatter and never overwrites an existing file. `--enrich` adds an optional DeepSeek layer (prescreen → score → Chinese summary, `DEEPSEEK_API_KEY`, prompts externalized in `templates/digest-prompts/` so standards change without code); model-generated content is always labeled 🤖 and fails loudly with a zero-LLM hint when the key is missing.
