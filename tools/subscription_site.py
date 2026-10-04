@@ -12,10 +12,11 @@ any credentials.
 
 from __future__ import annotations
 
+import hashlib
 import html
 import re
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -128,30 +129,93 @@ def _entry_time(entry: dict[str, Any]) -> str:
     return (entry.get("published_at") or entry.get("discovered_at") or "")[:10]
 
 
+CHIP_PALETTE = (
+    "#e06c60", "#d19a66", "#e5c07b", "#98c379", "#56b6c2",
+    "#61afef", "#c678dd", "#be5046", "#7fb5b5", "#c8ae7b",
+)
+
+
+def source_color(source_id: str) -> str:
+    """Stable chip color per source, derived from its id."""
+    digest = hashlib.sha256(source_id.encode("utf-8")).hexdigest()
+    return CHIP_PALETTE[int(digest[:8], 16) % len(CHIP_PALETTE)]
+
+
+def _chip(label: str, color: str) -> str:
+    return f'<span class="chip" style="--chip:{color}">{_escape(label)}</span>'
+
+
+def _heat_badge(cluster: dict[str, Any]) -> str:
+    if cluster["heat"] <= 1:
+        return ""
+    return f'<span class="heat-badge">🔥 ×{cluster["heat"]}</span>'
+
+
 def _render_card(cluster: dict[str, Any], names: dict[str, str]) -> str:
     entries = cluster["entries"]
-    source_names = sorted(
-        {names.get(entry["subscription_id"], entry["subscription_id"]) for entry in entries}
+
+    def label(entry: dict[str, Any]) -> str:
+        return names.get(entry["subscription_id"], entry["subscription_id"])
+
+    top_chips = " ".join(
+        _chip(name, source_color(source_id))
+        for source_id, name in sorted(
+            {(entry["subscription_id"], label(entry)) for entry in entries}
+        )
     )
+    latest = _entry_time(entries[0])
+    header = (
+        f'        <div class="card-top"><time>{_escape(latest)}</time>{top_chips}{_heat_badge(cluster)}</div>'
+    )
+    # Single-entry cluster whose entry is the representative title: render the
+    # title once as the link instead of repeating it in an entries list.
+    if len(entries) == 1 and entries[0]["title"] == cluster["title"]:
+        entry = entries[0]
+        return f"""      <article class="card">
+{header}
+        <h3 class="card-title"><a href="{_safe_href(entry["canonical_url"])}" rel="noopener">{_escape(entry['title'])}</a></h3>
+      </article>"""
     links = "\n".join(
-        f'      <li><a href="{_safe_href(entry["canonical_url"])}" rel="noopener">'
+        f'        <li><a href="{_safe_href(entry["canonical_url"])}" rel="noopener">'
         f"{_escape(entry['title'])}</a>"
-        f'<span class="meta">{_escape(names.get(entry["subscription_id"], entry["subscription_id"]))} · {_escape(_entry_time(entry))}</span></li>'
+        f'<span class="entry-meta">{_escape(_entry_time(entry))} · {_escape(label(entry))}</span></li>'
         for entry in entries
     )
-    return f"""    <article class="card">
-      <h2>{_escape(cluster['title'])}</h2>
-      <p class="heat">热度 {cluster['heat']} · {len(entries)} 条 / {cluster['heat']} 源 · {_escape('、'.join(source_names))}</p>
-      <ul>
+    return f"""      <article class="card">
+{header}
+        <h3 class="card-title">{_escape(cluster['title'])}</h3>
+        <ul class="entries">
 {links}
-      </ul>
-    </article>"""
+        </ul>
+      </article>"""
 
 
-def _render_cards(clusters: list[dict[str, Any]], names: dict[str, str], empty: str) -> str:
+def _render_day_groups(
+    clusters: list[dict[str, Any]], names: dict[str, str], empty: str
+) -> str:
     if not clusters:
         return f'    <p class="empty">{_escape(empty)}</p>'
-    return "\n".join(_render_card(cluster, names) for cluster in clusters)
+    by_day: dict[str, list[dict[str, Any]]] = {}
+    for cluster in clusters:
+        day = max(_entry_time(entry) for entry in cluster["entries"])
+        by_day.setdefault(day, []).append(cluster)
+    sections = []
+    for day in sorted(by_day, reverse=True):
+        day_clusters = by_day[day]
+        count = sum(len(cluster["entries"]) for cluster in day_clusters)
+        try:
+            parsed = datetime.strptime(day, "%Y-%m-%d")
+            label = f"{parsed.month}月{parsed.day}日"
+        except ValueError:
+            label = day
+        cards = "\n".join(_render_card(cluster, names) for cluster in day_clusters)
+        sections.append(
+            f'    <section class="day">\n'
+            f'      <h2 class="day-title">{_escape(label)} · {count} 条</h2>\n'
+            f"{cards}\n"
+            f"    </section>"
+        )
+    return "\n".join(sections)
 
 
 def _templates(template_dir: Path | None = None) -> dict[str, Template]:
@@ -173,18 +237,23 @@ def _page(
     base_url: str,
     generated_at: str,
     page_title: str,
+    assets: str,
+    active: str,
     **slots: str,
 ) -> str:
+    nav = {f"nav_{key}": ' class="active"' if key == active else "" for key in ("today", "archive", "sources", "about")}
     body = templates[body_template].safe_substitute(
-        site_name=_escape(site_name), base_url=base_url, **slots
+        site_name=_escape(site_name), base_url=base_url, assets=assets, **slots
     )
     return templates["layout"].safe_substitute(
         site_name=_escape(site_name),
         page_title=_escape(page_title),
         base_url=base_url,
+        assets=assets,
         generated_at=_escape(generated_at),
         project_url=PROJECT_URL,
         content=body,
+        **nav,
     )
 
 
@@ -193,6 +262,14 @@ def _normalize_base_url(value: str) -> str:
     if base and not re.match(r"^(https?://|/)", base):
         base = "/" + base
     return base
+
+
+def _assets_prefix(base_url: str, depth: int) -> str:
+    """Prefix for CSS/nav links: explicit base-url, else depth-relative so
+    the site also works over file:// (`../` from archive pages)."""
+    if base_url:
+        return base_url
+    return "." if depth == 0 else "/".join(".." for _ in range(depth))
 
 
 def build_site(
@@ -244,6 +321,8 @@ def build_site(
     templates = _templates(template_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "archive").mkdir(exist_ok=True)
+    root_assets = _assets_prefix(base_url, 0)
+    sub_assets = _assets_prefix(base_url, 1)
 
     pages = {
         output_dir
@@ -254,7 +333,9 @@ def build_site(
             base_url=base_url,
             generated_at=generated_at,
             page_title=site_name,
-            cards=_render_cards(index_clusters, names, f"近 {INDEX_WINDOW_DAYS} 天没有订阅更新。"),
+            assets=root_assets,
+            active="today",
+            cards=_render_day_groups(index_clusters, names, f"近 {INDEX_WINDOW_DAYS} 天没有订阅更新。"),
             window=str(INDEX_WINDOW_DAYS),
         ),
         output_dir
@@ -265,6 +346,8 @@ def build_site(
             base_url=base_url,
             generated_at=generated_at,
             page_title=f"订阅源 · {site_name}",
+            assets=root_assets,
+            active="sources",
             rows=_render_source_rows(compute_source_health(store, document, now=now)),
         ),
         output_dir
@@ -275,6 +358,8 @@ def build_site(
             base_url=base_url,
             generated_at=generated_at,
             page_title=f"关于 · {site_name}",
+            assets=root_assets,
+            active="about",
             about_text=_escape(ABOUT_TEXT),
         ),
     }
@@ -287,12 +372,18 @@ def build_site(
             base_url=base_url,
             generated_at=generated_at,
             page_title=f"{date} · {site_name}",
+            assets=sub_assets,
+            active="archive",
             date=date,
-            cards=_render_cards(day_clusters, names, "这一天没有订阅更新。"),
+            cards=_render_day_groups(day_clusters, names, "这一天没有订阅更新。"),
         )
 
     archive_items = "\n".join(
         f'      <li><a href="{base_url}/archive/{date}.html">{_escape(date)}</a>'
+        f'<span class="meta">{len(by_date[date])} 条</span></li>'
+        if base_url
+        else
+        f'      <li><a href="./{date}.html">{_escape(date)}</a>'
         f'<span class="meta">{len(by_date[date])} 条</span></li>'
         for date in archive_dates
     )
@@ -303,6 +394,8 @@ def build_site(
         base_url=base_url,
         generated_at=generated_at,
         page_title=f"归档 · {site_name}",
+        assets=sub_assets,
+        active="archive",
         date="每日归档",
         cards=f'    <ul class="archive-list">\n{archive_items}\n    </ul>'
         if archive_dates

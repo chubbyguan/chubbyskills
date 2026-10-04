@@ -4,17 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$page_title</title>
-<link rel="stylesheet" href="$base_url/style.css">
+<link rel="stylesheet" href="$assets/style.css">
 </head>
 <body>
-<header class="site-header">
-  <h1><a href="$base_url/index.html">$site_name</a></h1>
-  <nav>
-    <a href="$base_url/index.html">今日</a>
-    <a href="$base_url/archive/index.html">归档</a>
-    <a href="$base_url/sources.html">订阅源</a>
-    <a href="$base_url/about.html">关于</a>
-  </nav>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="$assets/index.html">$site_name</a>
+    <nav>
+      <a$nav_today href="$assets/index.html">今日</a>
+      <a$nav_archive href="$assets/archive/index.html">归档</a>
+      <a$nav_sources href="$assets/sources.html">订阅源</a>
+      <a$nav_about href="$assets/about.html">关于</a>
+    </nav>
+  </div>
 </header>
 <main>
 $content
