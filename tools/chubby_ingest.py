@@ -185,8 +185,24 @@ def detect_skill(source):
     return None
 
 
+SKILL_CHECKOUT_HINT = (
+    "平台采集需要完整仓库 checkout：skill 以目录形式分发，不随 Python 包安装。\n"
+    "  git clone https://github.com/chubbyguan/chubbyskills.git && cd chubbyskills\n"
+    "  或按 README 的 Skill 目录把对应技能装进你的 Agent。"
+)
+
+
 def script_path(skill):
-    return os.path.join(ROOT, *SKILL_COMMANDS[skill])
+    """Filesystem path of a skill entrypoint, refusing a partial install.
+
+    A pip/pipx install ships the package but not the skill directories, so
+    running a capture command there would fail deep inside a subprocess. Fail
+    here instead, where the message can say what to do.
+    """
+    path = os.path.join(ROOT, *SKILL_COMMANDS[skill])
+    if not os.path.isfile(path):
+        raise RuntimeError(f"{skill} 的采集脚本不在当前安装中：{path}\n{SKILL_CHECKOUT_HINT}")
+    return path
 
 
 def run_command(cmd, dry_run=False):
@@ -286,6 +302,10 @@ def main():
                 raise RuntimeError("skill 输出不在本次暂存目录内")
             if args.enrich:
                 enrich_script = os.path.join(ROOT, "content-enrich", "scripts", "enrich.py")
+                if not os.path.isfile(enrich_script):
+                    raise RuntimeError(
+                        f"content-enrich 脚本不在当前安装中：{enrich_script}\n{SKILL_CHECKOUT_HINT}"
+                    )
                 run_command([sys.executable, enrich_script, staged_path, "--force"], dry_run=False)
             output_path = publish_bundle(staged_path, args.output, source=args.source)
         print(f"Output: {output_path}", file=sys.stderr)

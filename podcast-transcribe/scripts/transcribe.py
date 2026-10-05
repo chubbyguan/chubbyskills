@@ -16,6 +16,11 @@ import tempfile
 import re
 from datetime import datetime
 
+SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = SKILL_ROOT if os.path.isdir(os.path.join(SKILL_ROOT, "chubby_common")) else os.path.dirname(SKILL_ROOT)
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
 
 def download_audio(url: str, output_dir: str) -> tuple:
     """Download audio from podcast URL. Returns (audio_path, title).
@@ -134,14 +139,16 @@ def transcribe_audio(audio_path: str, output_path: str, title: str, source: str 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     start = time.monotonic()
     if config["provider"] == "local":
-        from faster_whisper import WhisperModel
-        print("Loading local faster-whisper model...", file=sys.stderr)
-        model = WhisperModel(config["model"], device="cpu", compute_type="int8")
-        segments, _info = model.transcribe(audio_path, language=config["language"] or None, beam_size=5, vad_filter=True)
-        text_segments = [f"[{segment.start:6.1f}s -> {segment.end:6.1f}s] {segment.text.strip()}" for segment in segments]
-        text = "\n".join(text_segments)
-        segment_count = len(text_segments)
-        transcriber = f"faster-whisper-{config['model']}"
+        if config["model"] == "qwen3-asr-0.6b":
+            print("Loading local Qwen3-ASR-0.6B model...", file=sys.stderr)
+            text, _ = _sibling("local_qwen_asr").transcribe(audio_path, language=config["language"] or "auto")
+            transcriber = "qwen3-asr-0.6b"
+        else:
+            from chubby_common import funasr
+            print("Loading local SenseVoice-Small model...", file=sys.stderr)
+            text, _ = funasr.transcribe(audio_path, language=config["language"] or "auto")
+            transcriber = "sensevoice-small"
+        segment_count = 1
     else:
         result = _sibling("cloud_transcribe").transcribe_cloud(
             audio_path, provider=config["provider"], model=config["model"],
@@ -214,10 +221,11 @@ def _output_path(output_dir, title, audio_path, config):
 
 def main(argv=None):
     import argparse
-    parser = argparse.ArgumentParser(description="播客一键转录工具；local 默认，云转录为可选实验功能", allow_abbrev=False)
+    parser = argparse.ArgumentParser(description="播客一键转录工具；local（SenseVoice-Small）默认，dashscope/groq 云转录为可选功能", allow_abbrev=False)
     parser.add_argument("source", help="音频 URL 或本地文件")
     parser.add_argument("output_dir", nargs="?", default=".", help="Markdown 输出目录")
     parser.add_argument("--source-url", help="批量模式保留原始音频来源")
+    parser.add_argument("--title", help="覆盖节目标题（订阅源已提供标题时使用）")
     settings = _sibling("provider_config")
     settings.add_provider_arguments(parser)
     args = parser.parse_args(argv)
@@ -237,6 +245,8 @@ def main(argv=None):
                 if urlsplit(args.source).scheme not in ("http", "https"):
                     raise ValueError("Source must be an existing audio file or HTTP(S) URL")
                 audio_path, title = download_audio(args.source, temporary)
+            if args.title:
+                title = args.title.strip() or title
             output_path = _output_path(args.output_dir, title, audio_path, config)
             elapsed, count = transcribe_audio(
                 audio_path, output_path, title, args.source_url or args.source,

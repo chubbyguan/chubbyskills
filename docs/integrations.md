@@ -5,7 +5,7 @@
 | 入口 | 适用范围 | 当前验证状态 |
 |---|---|---|
 | 本仓库 `chubby import` | 已有 Markdown、TXT、带文字层的 PDF | 本地转换、入库、搜索与资料包可独立验收 |
-| [Atlas / MuAPI 可选转录](./cloud-transcription.md) | 明确选择云端处理的播客音频 | experimental；离线测试覆盖，未完成真实付费服务验收 |
+| [DashScope 可选播客转录](./cloud-transcription.md) | 明确选择云端处理的播客音频（`qwen3-asr-flash`，限 10MB/5 分钟） | 可选；离线测试覆盖请求构造与恢复，未完成真实付费服务验收 |
 | [cue-omni-reader](https://github.com/sensedeal/cue-skills/tree/main/cue-omni-reader) | 上游声明支持网页和已授权的本地文档、音频、视频解析 | 仅核对上游文档；本项目未执行真实解析，保留待验证 |
 
 ## cue-omni-reader 的接入边界

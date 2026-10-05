@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chubbyskills"
+dynamic = ["version"]
+description = "Ingest Chinese platform content into a personal knowledge base: 14 agent skills plus a CLI for capture, indexing, search and source briefs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["agent-skills", "knowledge-base", "transcription", "mcp"]
+
+# Core CLI is standard-library only. Platform capabilities opt into extras.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["PyYAML>=6,<7", "ruff>=0.12,<1"]
+video = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
+podcast = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
+wechat = ["beautifulsoup4>=4.12.0", "markitdown>=0.0.1", "pymupdf>=1.23.0"]
+
+[dependency-groups]
+# Picked up automatically by `uv run` so a bare
+# `uv run --with pytest pytest tests/ -q` works without extra flags.
+dev = ["pytest>=8,<9", "PyYAML>=6,<7"]
+
+[project.scripts]
+chubby = "tools.chubby:main"
+
+[project.urls]
+Homepage = "https://github.com/chubbyguan/chubbyskills"
+Issues = "https://github.com/chubbyguan/chubbyskills/issues"
+Changelog = "https://github.com/chubbyguan/chubbyskills/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+# `platforms/` and `templates/` are pure data directories, but their names are
+# legal package names, so shipping them here is what lets a non-editable
+# install resolve platform definitions and site/digest templates. The skill
+# directories cannot join them: `bilibili-transcribe` and friends are not valid
+# package names, and skills are distributed as directories for agents to
+# install rather than as importable modules.
+packages = ["tools", "chubby_common", "platforms", "templates"]
+
+[tool.setuptools.package-data]
+platforms = ["*.yaml"]
+templates = ["site/*", "sites/*", "digest-prompts/*"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}

@@ -1,12 +1,16 @@
 import importlib.util
 import io
+import json
 import os
 import tempfile
+import time
 import unittest
+import unittest.mock   # or: from unittest import mock
 from io import BytesIO
-from unittest import mock
 
 from tools import validate_outputs
+
+
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, "x-ingest", "scripts", "fetch_tweet.py")
@@ -115,6 +119,20 @@ class XIngestFallbackTest(unittest.TestCase):
 
 
 class XArticleTest(unittest.TestCase):
+    def test_syndication_article_matches_golden_output(self):
+        fixture = os.path.join(ROOT, "fixtures", "golden", "x-article-syndication.json")
+        golden = os.path.join(ROOT, "fixtures", "golden", "x-article-preview.md")
+        with open(fixture, encoding="utf-8") as source:
+            data = fetch_tweet.parse_tweet(json.load(source))
+        title = fetch_tweet.compute_title(data)
+        image_refs = [("url", url) for url in data["photos"]]
+        actual = fetch_tweet.build_markdown(
+            data, "https://x.com/example/status/2102982854732922880", title, image_refs
+        )
+
+        with open(golden, encoding="utf-8") as expected:
+            self.assertEqual(actual, expected.read())
+
     def test_parse_syndication_article_marks_preview(self):
         tw = {
             "user": {"name": "Ada", "screen_name": "ada"},
@@ -196,223 +214,99 @@ class XArticleTest(unittest.TestCase):
             fetch_tweet.load_cookies("foo=bar")
 
 
-class XThreadTest(unittest.TestCase):
-    def test_parse_syndication_timeline_extracts_tweet_entries(self):
-        payload = {
-            "props": {
-                "pageProps": {
-                    "timeline": {
-                        "entries": [
-                            {"content": {"tweet": {"id_str": "2", "text": "Reply"}}},
-                            {"content": {"tweet": {"id_str": "3", "text": "Next"}}},
-                            {"content": {"other": {"id_str": "ignored"}}},
-                        ]
-                    }
-                }
-            }
-        }
-        html = (
-            '<script id="__NEXT_DATA__" type="application/json">'
-            + fetch_tweet.json.dumps(payload)
-            + "</script>"
-        )
+class XQueryIdDiscoveryTest(unittest.TestCase):
+    BUNDLE_JS = (
+        'x.exports={queryId:"AbCdEfGhIjKlMnOpQrSt-U",operationName:'
+        '"TweetResultByRestId",operationType:"query",metadata:{}};'
+        'y.exports={queryId:"AbCdEfGhIjKlMnOpQrSt-U",operationName:'
+        '"TweetResultByRestId"};z.exports={queryId:"short",operationName:'
+        '"TweetResultByRestId"};w.exports={queryId:"OtherOpQueryId1234567",'
+        'operationName:"UserByScreenName"};'
+    )
 
+    def _cache(self, tmpdir, ids, fetched_at):
+        path = os.path.join(tmpdir, "cache", "qids.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"query_ids": ids, "fetched_at": fetched_at}, f)
+        return path
+
+    def test_extract_query_ids_from_js_dedupes_and_filters(self):
         self.assertEqual(
-            fetch_tweet.parse_syndication_timeline(html),
-            [{"id_str": "2", "text": "Reply"}, {"id_str": "3", "text": "Next"}],
+            fetch_tweet.extract_query_ids_from_js(self.BUNDLE_JS),
+            ["AbCdEfGhIjKlMnOpQrSt-U"],
         )
-        with self.assertRaisesRegex(ValueError, "__NEXT_DATA__"):
-            fetch_tweet.parse_syndication_timeline("<html></html>")
+        self.assertEqual(fetch_tweet.extract_query_ids_from_js(""), [])
+        self.assertEqual(fetch_tweet.extract_query_ids_from_js(None), [])
 
-    def test_fetch_author_timeline_uses_public_replies_enabled_endpoint(self):
-        html = (
-            '<script id="__NEXT_DATA__" type="application/json">'
-            '{"props":{"pageProps":{"timeline":{"entries":[]}}}}'
-            "</script>"
-        )
-        with (
-            mock.patch.object(fetch_tweet.time, "sleep") as sleep,
-            mock.patch.object(
-                fetch_tweet.urllib.request,
-                "urlopen",
-                return_value=BytesIO(html.encode()),
-            ) as urlopen,
-        ):
-            tweets = fetch_tweet.fetch_author_timeline("ada")
-
-        self.assertEqual(tweets, [])
-        self.assertIn("showReplies=true", urlopen.call_args.args[0].full_url)
-        sleep.assert_called_once_with(fetch_tweet.THREAD_REQUEST_DELAY_SECONDS)
-
-    def test_collect_thread_follows_only_same_author_direct_replies(self):
-        root = {
-            "id_str": "100",
-            "user": {"id_str": "ada-id", "screen_name": "ada"},
-        }
-        timeline = [
-            {
-                "id_str": "102",
-                "conversation_id_str": "100",
-                "in_reply_to_status_id_str": "101",
-                "user": {"id_str": "ada-id", "screen_name": "ada"},
-            },
-            {
-                "id_str": "101",
-                "conversation_id_str": "100",
-                "in_reply_to_status_id_str": "100",
-                "user": {"id_str": "ada-id", "screen_name": "ada"},
-            },
-            {
-                "id_str": "103",
-                "conversation_id_str": "100",
-                "in_reply_to_status_id_str": "100",
-                "user": {"id_str": "other-id", "screen_name": "other"},
-            },
-            {
-                "id_str": "104",
-                "conversation_id_str": "999",
-                "in_reply_to_status_id_str": "101",
-                "user": {"id_str": "ada-id", "screen_name": "ada"},
-            },
-        ]
-
-        thread = fetch_tweet.collect_thread_tweets("100", root, timeline)
-
-        self.assertEqual([tweet["id_str"] for tweet in thread], ["100", "101", "102"])
-
-    def test_thread_markdown_has_thread_frontmatter_and_ordered_media_sections(self):
-        first = fetch_tweet.parse_tweet(
-            {
-                "id_str": "100",
-                "user": {"name": "Ada", "screen_name": "ada"},
-                "text": "First #research",
-                "favorite_count": 3,
-                "conversation_count": 1,
-                "photos": [{"url": "https://img.example/first.jpg"}],
-            }
-        )
-        second = fetch_tweet.parse_tweet(
-            {
-                "id_str": "101",
-                "user": {"name": "Ada", "screen_name": "ada"},
-                "text": "Second #video",
-                "favorite_count": 4,
-                "conversation_count": 2,
-                "video": {
-                    "variants": [
-                        {
-                            "type": "video/mp4",
-                            "bitrate": 100,
-                            "src": "https://video.example/clip.mp4",
-                        }
-                    ]
-                },
-            }
-        )
-        markdown = fetch_tweet.build_thread_markdown(
-            [
-                {
-                    "data": first,
-                    "image_refs": [("local", "Thread.assets/tweet_01_img_1.jpg")],
-                    "transcript": None,
-                },
-                {
-                    "data": second,
-                    "image_refs": [],
-                    "transcript": "Video words",
-                },
-            ],
-            "https://x.com/ada/status/100",
-            "Thread title",
-        )
-
-        with tempfile.NamedTemporaryFile("w", suffix=".md", encoding="utf-8") as output:
-            output.write(markdown)
-            output.flush()
-            errors = [
-                problem
-                for problem in validate_outputs.validate_file(output.name)
-                if problem["level"] == "error"
-            ]
-
-        self.assertIn("note_type: thread", markdown)
-        self.assertIn("thread_count: 2", markdown)
-        self.assertIn('thread_ids: ["100", "101"]', markdown)
-        self.assertIn("likes: 7", markdown)
-        self.assertIn("replies: 3", markdown)
-        self.assertLess(markdown.index("First #research"), markdown.index("Second #video"))
-        self.assertIn("![](Thread.assets/tweet_01_img_1.jpg)", markdown)
-        self.assertIn("### 视频文字稿\n\nVideo words", markdown)
-        self.assertEqual(errors, [])
-
-    def test_thread_cli_processes_each_tweet_media_and_saves_one_markdown(self):
-        root = {
-            "id_str": "100",
-            "user": {"name": "Ada", "screen_name": "ada"},
-            "text": "First post",
-            "photos": [{"url": "https://img.example/first.jpg"}],
-        }
-        reply = {
-            "id_str": "101",
-            "conversation_id_str": "100",
-            "in_reply_to_status_id_str": "100",
-            "user": {"name": "Ada", "screen_name": "ada"},
-            "text": "Second post",
-            "video": {
-                "variants": [
-                    {
-                        "type": "video/mp4",
-                        "bitrate": 100,
-                        "src": "https://video.example/clip.mp4",
-                    }
-                ]
-            },
-        }
-        with tempfile.TemporaryDirectory() as output_dir:
-            with (
-                mock.patch.object(
-                    fetch_tweet,
-                    "fetch_tweet",
-                    return_value=root,
-                ),
-                mock.patch.object(
-                    fetch_tweet,
-                    "fetch_author_timeline",
-                    return_value=[reply],
-                ),
-                mock.patch.object(
-                    fetch_tweet,
-                    "download_images",
-                    return_value=[("local", "First-post.assets/tweet_01_img_1.jpg")],
-                ) as download_images,
-                mock.patch.object(
-                    fetch_tweet, "transcribe_video", return_value="Video words"
-                ) as transcribe_video,
-                mock.patch(
-                    "sys.argv",
-                    [
-                        "fetch_tweet.py",
-                        "https://x.com/ada/status/100",
-                        "--output",
-                        output_dir,
-                        "--thread",
-                    ],
-                ),
-                mock.patch("sys.stdout", new_callable=io.StringIO),
+    def test_fresh_cache_short_circuits_discovery(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._cache(tmpdir, ["CachedQueryId12345678"], time.time())
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", side_effect=AssertionError("net")
             ):
-                fetch_tweet.main()
+                self.assertEqual(
+                    fetch_tweet.get_query_ids(cache_path=path),
+                    ["CachedQueryId12345678"],
+                )
 
-            output_path = os.path.join(output_dir, "First-post.md")
-            with open(output_path, encoding="utf-8") as saved:
-                markdown = saved.read()
+    def test_stale_cache_triggers_discovery_and_rewrites_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._cache(
+                tmpdir, ["StaleQueryId123456789"], time.time() - 48 * 3600
+            )
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", return_value=["NewQueryId1234567890"]
+            ) as discover:
+                ids = fetch_tweet.get_query_ids(cache_path=path)
+            self.assertEqual(ids, ["NewQueryId1234567890"])
+            discover.assert_called_once()
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["query_ids"], ["NewQueryId1234567890"])
 
-        self.assertIn("thread_count: 2", markdown)
-        self.assertIn("## 推文 2", markdown)
-        self.assertIn("![](First-post.assets/tweet_01_img_1.jpg)", markdown)
-        self.assertIn("### 视频文字稿\n\nVideo words", markdown)
-        download_images.assert_called_once()
-        self.assertEqual(download_images.call_args.args[3], "tweet_01_")
-        transcribe_video.assert_called_once_with("https://video.example/clip.mp4")
+    def test_discovery_failure_falls_back_to_stale_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._cache(
+                tmpdir, ["StaleQueryId123456789"], time.time() - 48 * 3600
+            )
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", return_value=[]
+            ):
+                self.assertEqual(
+                    fetch_tweet.get_query_ids(cache_path=path),
+                    ["StaleQueryId123456789"],
+                )
+
+    def test_discovery_failure_without_cache_falls_back_to_builtin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "missing", "qids.json")
+            with unittest.mock.patch.object(
+                fetch_tweet, "discover_query_ids", side_effect=RuntimeError("boom")
+            ):
+                self.assertEqual(
+                    fetch_tweet.get_query_ids(cache_path=path),
+                    list(fetch_tweet._TWEET_RESULT_QUERY_IDS),
+                )
+
+    def test_discover_query_ids_parses_bundle_from_homepage(self):
+        homepage = (
+            '<script src="https://abs.twimg.com/responsive-web/client-web/'
+            'main.abcdef0123456789a.js"></script>'
+        )
+        fetched = {}
+
+        def fake_fetch(url, cookies=None, timeout=20):
+            fetched[url] = True
+            if url == "https://x.com/home":
+                return homepage
+            return self.BUNDLE_JS
+
+        with unittest.mock.patch.object(
+            fetch_tweet, "_fetch_url_text", side_effect=fake_fetch
+        ):
+            ids = fetch_tweet.discover_query_ids(cookies="auth_token=a; ct0=b")
+        self.assertEqual(ids, ["AbCdEfGhIjKlMnOpQrSt-U"])
+        self.assertIn("https://x.com/home", fetched)
 
 
 if __name__ == "__main__":

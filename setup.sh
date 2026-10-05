@@ -84,7 +84,8 @@ install_podcast() {
     echo "--- podcast：播客转录依赖 ---"
     require_cmd python3 "请先安装 Python 3.9+"
     require_cmd ffmpeg "macOS: brew install ffmpeg | Ubuntu: sudo apt install ffmpeg"
-    pip_install faster-whisper
+    warn "即将安装 funasr / modelscope / torch / torchaudio，首次安装体积较大。"
+    pip_install funasr modelscope torch torchaudio
     info "播客转录依赖安装完成"
 }
 

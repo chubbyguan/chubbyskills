@@ -49,8 +49,7 @@ def report_all():
         print(f"  {'✅' if ok else '❌'} {c}" + ("" if ok else f"   → {hint}"))
 
     mods = {
-        "funasr": "pip install funasr modelscope torch torchaudio   （视频/视频笔记转录）",
-        "faster_whisper": "pip install faster-whisper   （播客转录）",
+        "funasr": "pip install funasr modelscope torch torchaudio   （视频/播客转录）",
         "bs4": "pip install beautifulsoup4   （公众号文章）",
         "markitdown": "pip install markitdown   （公众号 PDF，可选）",
         "pymupdf": "pip install pymupdf   （公众号 PDF 兜底，可选）",
@@ -80,12 +79,13 @@ def report_all():
                              ("funasr", mod_ok["funasr"])) if not ok]
     line(not vmiss, "视频转录：抖音·B站·TikTok·微博·知乎·小红书视频·X视频", " / ".join(vmiss))
     pmiss = [n for n, ok in (("ffmpeg", sys_ok["ffmpeg"]),
-                             ("faster-whisper", mod_ok["faster_whisper"])) if not ok]
+                             ("funasr", mod_ok["funasr"])) if not ok]
     line(not pmiss, "播客转录：小宇宙·喜马拉雅", " / ".join(pmiss))
     line(mod_ok["bs4"], "公众号文章采集", "beautifulsoup4")
 
     print("\n💡 小红书·X 图文、情报雷达和知识库管理可以只用标准库；公众号 HTML 需要 beautifulsoup4。")
-    print("   YouTube/B站优先抓字幕，命中时也无需 funasr。只有「视频/播客转录」才需要 funasr / whisper。")
+    print("   YouTube/B站优先抓字幕，命中时也无需 funasr。只有「视频/播客转录」才需要 funasr。")
+    print("   播客本地转录默认 SenseVoice-Small；可选 qwen3-asr-0.6b 后端需额外 `pip install qwen-asr transformers torch`（非必需，缺失不影响 doctor）。")
     print("\n   安装运行依赖：bash setup.sh [skill-name ...]")
     print("   只验所需路径：python3 tools/check_env.py --platform <platform-id>")
     print("\n【下一步】")
@@ -109,7 +109,7 @@ def platform_report(selected, provider=None):
         cloud = settings is not None and settings["provider"] != "local"
         if cloud:
             definition.update(required_deps=[], optional_deps=["cmd:curl", "cmd:ffmpeg"],
-                              notes="Experimental cloud local-audio path; URL downloads need curl, Atlas format conversion may need ffmpeg. Key presence only, no remote requests.")
+                              notes="Optional cloud local-audio path; URL downloads need curl, DashScope/Groq container conversion may need ffmpeg. Key presence only, no remote requests.")
         missing = {}
         for group in ("required", "optional"):
             missing[group] = []
@@ -118,7 +118,7 @@ def platform_report(selected, provider=None):
                 if not present:
                     missing[group].append(label)
         if cloud:
-            keys = ("ATLAS_API_KEY", "ATLAS_CLOUD_API_KEY") if settings["provider"] == "atlas" else ("MUAPI_API_KEY", "MU_API_KEY")
+            keys = ("DASHSCOPE_API_KEY",) if settings["provider"] == "dashscope" else ("GROQ_API_KEY",)
             if not any(os.environ.get(key) for key in keys):
                 missing["required"].append("environment:" + " or ".join(keys))
         results.append({
@@ -138,7 +138,7 @@ def platform_report(selected, provider=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Check capture dependencies; explicit platform checks fail when required dependencies are missing")
     parser.add_argument("--platform", action="append", help="Platform ID; repeat to check more than one")
-    parser.add_argument("--provider", choices=["local", "atlas", "muapi"], help="Provider for --platform podcast")
+    parser.add_argument("--provider", choices=["local", "dashscope", "groq"], help="Provider for --platform podcast")
     parser.add_argument("--json", action="store_true", help="Return the platform dependency report as JSON")
     args = parser.parse_args(argv)
     if args.provider and (not args.platform or "podcast" not in args.platform):

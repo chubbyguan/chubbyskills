@@ -12,14 +12,26 @@ from chubby_common import deps
 
 
 def run_ydl(cfg, args, timeout, capture=True):
-    """统一的 yt-dlp 调用，自动带上平台的 UA / Referer / 额外参数。"""
+    """统一的 yt-dlp 调用，自动带上平台的 UA / Referer / 额外参数。
+
+    环境变量：
+    - YTDLP_COOKIES_FROM_BROWSER：如 chrome / safari，传递给 --cookies-from-browser，
+      用于平台把出口 IP 标记为机器人时的登录态证明。
+    - YTDLP_REMOTE_COMPONENTS：如 ejs:github，YouTube JS challenge 求解组件。
+    """
     deps.ensure_ytdlp()
     cmd = ["yt-dlp", "--no-check-certificates", "--user-agent", cfg.ua]
+    browser = os.environ.get("YTDLP_COOKIES_FROM_BROWSER", "").strip()
+    if browser:
+        cmd += ["--cookies-from-browser", browser]
+    components = os.environ.get("YTDLP_REMOTE_COMPONENTS", "").strip()
+    if components:
+        cmd += ["--remote-components", components]
     if cfg.referer:
         cmd += ["--referer", cfg.referer]
     cmd += list(cfg.extra_ydl_args) + list(args)
     return subprocess.run(
-        cmd, capture_output=capture, text=True, timeout=timeout, check=not capture
+        cmd, capture_output=capture, text=True, timeout=timeout, check=True
     )
 
 
@@ -64,7 +76,9 @@ def download_audio(cfg, url: str, output_dir: str, filename: str = "audio.mp3") 
             print(f"  ✅ Audio: {size_mb:.1f} MB", file=sys.stderr)
             return audio_path
         except subprocess.CalledProcessError as exc:
-            last_err = exc
+            last_err = f"yt-dlp 退出码 {exc.returncode}"
+            if exc.stderr and exc.stderr.strip():
+                last_err += f"：{exc.stderr.strip()}"
             print(f"  ⚠️  下载失败，{2 * attempt}s 后重试...", file=sys.stderr)
             time.sleep(2 * attempt)
         except subprocess.TimeoutExpired as exc:

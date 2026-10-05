@@ -9,7 +9,7 @@
 把视频、播客、文章和本地文档保存为 Markdown，整理成能搜索、能回查来源、能交给 Agent 使用的素材库。
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.13.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.0)
+[![Version](https://img.shields.io/badge/Version-0.14.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.14.0)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -34,6 +34,7 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | 写作时找回证据 | 关键词搜索、可选语义检索、原文读取；采集入库后自动更新索引 |
 | 整理一份选题资料 | 导出 Markdown / JSON 资料包，包含原文摘录、行号、来源和文件摘要 |
 | 让 Agent 使用知识库 | 独立技能包，以及提供搜索、原文读取等工具的可选 MCP 服务 |
+| 持续跟踪可靠来源 | 订阅公开 RSS / Atom / JSON Feed、YouTube 频道与用户自带 Provider 输出；发现、审核、转录与入库分离 |
 
 先看[输出样例](./examples/README.md)，或直接运行下面的本地示例。
 
@@ -46,29 +47,64 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | B站 / YouTube | 稳定 | 字幕优先，仅需 `yt-dlp` |
 | 公众号 | 测试 | HTML 需 `beautifulsoup4`，PDF 兜底 |
 | 抖音 / TikTok / 微博 / 知乎 | 测试·重依赖 | 视频转录需 `funasr` + `ffmpeg` |
-| 播客 | 重依赖 | `faster-whisper`，可选云转录 |
-| X / 小红书 | 手动兜底 | 零依赖采集正文，失败可手动补全文 |
+| 播客 | 重依赖 | `funasr`（SenseVoice-Small），可选 DashScope / Groq 云转录 |
+| X / 小红书 | 手动兜底 | 零依赖采集正文；X 长文章可配 `X_COOKIES` 抓登录态全文，失败可手动补全文 |
+| RSS / YouTube 频道订阅 | P0 + P1 | 公开 Feed；支持 RSSHub / RSS-Bridge BYO 标签，默认只发现 |
 | 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
+
+本项目不做反爬对抗，选择轻量接口加手动兜底，原因与适用边界见[为什么不对抗风控](./docs/platform-fallbacks.md#为什么不对抗风控)。
 
 <a id="安装方式"></a>
 
 ## 快速开始
 
-建议使用 **Python 3.11 或 3.12，macOS / Linux shell**。下面用一份示例 Markdown 跑通「导入 → 搜索 → 资料包」，无需安装第三方 Python 包、配置 API Key 或下载模型。
+核心链路只用 Python 标准库：**不装第三方包、不配 API Key、不下载模型**。需要 Python 3.11 及以上——先 `python3 --version` 确认一下：macOS 自带的是 3.9，核心命令能跑，但 `subscribe` 订阅链路会在导入时失败，建议 `brew install python@3.12` 或直接用下面的 venv 步骤。
 
-### 1. 获取项目并配置知识库
+### 60 秒跑通（一）：抓一条真实链接
+
+X 推文和小红书图文都走 Python 标准库，**不需要 yt-dlp、ffmpeg 或任何模型**（逐平台能力与失败模式见[平台状态](./docs/platform-status.md)）：
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 -m venv .venv
-source .venv/bin/activate
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
+python3 tools/chubby.py ingest "https://x.com/OpenAI/status/1663696190960173056" --no-enrich
+python3 tools/chubby.py search "ChatGPT"
 ```
 
-`init` 会创建 `chubby.yaml` 和知识库目录。下面的命令在仓库根目录运行，沿用这份配置。已有知识库可将 `--vault` 换成它的根目录；已有配置的调整见[创作者工作流](./docs/creator-workflow.md)。
+```text
+✅ 已写入配置：/path/to/chubbyskills/chubby.yaml
+✅ 已准备队列：/path/to/chubbyskills/inbox/links.txt
+✅ 已准备状态：/path/to/chubbyskills/.chubby/runs.jsonl
+✅ 已准备报告目录：/path/to/chubbyskills/runs
 
-### 2. 导入一份文档
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+/path/to/chubbyskills/creator-vault/00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<来源哈希>.md
+
+The ChatGPT iOS app is now available in
+  00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<来源哈希>.md
+  # The ChatGPT iOS app is now available in   > 👤 OpenAI @OpenAI | 👍 754 · 💬 115 …
+```
+
+抓下来的笔记自带来源、作者、时间和互动数，引用时能回查到原帖：
+
+```yaml
+title: "The ChatGPT iOS app is now available in "
+platform: x
+source: "https://x.com/OpenAI/status/1663696190960173056"
+author: "OpenAI @OpenAI"
+created: 2023-05-30
+likes: 754
+```
+
+把链接换成你要存的任意推文或小红书图文即可。
+
+> **平台采集会波动。** 上面是**一条样本**，不构成成功率：没有登录态时可能被风控拦住，X 长文章默认只取到预览。失败时先看[平台状态](./docs/platform-status.md)和[替代处理方式](./docs/platform-fallbacks.md)，或保存正文后走下面这条。
+
+### 60 秒跑通（二）：导入自己的文件
+
+这条完全不碰外网，任何环境都能跑通。导入一份文档，再把它搜回来（把示例换成你自己的 `.md`、`.markdown` 或 `.txt`；已知原始网页时加 `--source-url "原始网页地址"`）：
 
 ```bash
 mkdir -p demo-input
@@ -79,28 +115,68 @@ cat > demo-input/notes.md <<'NOTE'
 NOTE
 
 python3 tools/chubby.py import demo-input/notes.md --no-enrich
+python3 tools/chubby.py search "内容复用"
 ```
 
-将示例路径换成自己的 `.md`、`.markdown` 或 `.txt` 文件即可导入真实材料。已知原始网页时，加 `--source-url "原始网页地址"`；本地文件默认记录文件 URI。
+```text
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+/path/to/chubbyskills/creator-vault/00_Inbox/内容复用笔记--<来源哈希>.md
 
-### 3. 搜索并导出资料包
+内容复用笔记
+  00_Inbox/内容复用笔记--<来源哈希>.md
+  # 内容复用笔记  内容复用从保留原文和来源开始。同一份材料可以用于选题、文章和播客，但引用前要重新核对上下文。
+```
+
+最后导出带出处的资料包——这是这个项目真正产出的东西：
 
 ```bash
-python3 tools/chubby.py search "内容复用"
 python3 tools/chubby.py brief --topic "内容复用" \
   --output "$PWD/creator-vault/30_Output/brief.md"
-python3 tools/chubby.py status --latest
 ```
 
-你会得到：
+```text
+{
+  "markdown": "/path/to/chubbyskills/creator-vault/30_Output/brief.md",
+  "json": "/path/to/chubbyskills/creator-vault/30_Output/brief.json"
+}
+```
+
+`brief.md` 里是逐字摘录、原文行号、来源链接和文件 SHA-256，可以直接回查（文件名后缀由来源路径推导，SHA-256 覆盖导入副本的内容与元数据，两者都会随你实际使用的路径和时间变化）：
+
+```text
+## E1 · 内容复用笔记
+
+笔记相对路径：`00_Inbox/内容复用笔记--c2f47ab83782202c.md`
+原始来源：未提供可打开的网页链接。
+采集时间：2026-10-05T10:54:57+08:00
+文件 SHA-256：`<导入副本的内容哈希>`
+
+原文第 22–22 行：
+```
+
+产物落在三处：
 
 - `creator-vault/00_Inbox/`：带来源信息的 Markdown 和引用的本地附件。
-- `creator-vault/30_Output/brief.md` 与 `brief.json`：包含逐字摘录、原文行号、来源和 SHA-256 的资料包。
+- `creator-vault/30_Output/brief.md` 与 `brief.json`：资料包本体。
 - `.chubby/runs.jsonl` 与 `runs/`：任务状态和运行报告，方便检查失败与重试。
 
-打开资料包核对引用，然后交给 Agent 整理选题。`brief` 在本地导出证据，不调用云模型，也不判断原文观点是否正确。上面的演示材料是人工样例；平台采集需要下一节对应的依赖。
+`brief` 全程在本地完成，不调用云模型，也不判断原文观点是否正确；上面的演示材料是人工样例。再次导出请换一个文件名，确认要替换已生成的资料包后再加 `--force`。
 
-再次导出时请换一个输出文件名；确认要替换已生成的资料包后再加 `--force`。
+### 可选：把 `chubby` 装成命令
+
+上面用的是 `python3 tools/chubby.py`，不装也能跑。想要 `chubby init` 这种形式：
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python3 -m pip install -e .   # 提供 chubby 命令，等价于 python3 tools/chubby.py
+```
+
+也可以装成普通包（`pip install .`，或 `pipx install git+https://github.com/chubbyguan/chubbyskills.git`）。非 editable 安装下，知识库命令全部可用——`init` / `import` / `search` / `brief` / `index` / `doctor` / `subscribe`（含 `digest` 与 `site build`），用户状态写在**你当前所在目录**，不会写进安装目录。
+
+**平台采集 `ingest` 仍需完整仓库 checkout。** 技能以目录形式分发（装进 Agent 用 `tools/install_skill.py`），不随 Python 包安装；命令会直接告诉你这一点，而不是在子进程里失败。
+
+已有知识库时把 `--vault` 换成它的根目录（例如 `docs/quickstart.md` 里的 `$HOME/Documents/creator-vault`）；已有配置的调整见[创作者工作流](./docs/creator-workflow.md)。
 
 ## 处理你的素材
 
@@ -124,11 +200,15 @@ python3 tools/chubby.py search "原文中的关键词"
 | X / 小红书图文 | Python 标准库；`bash setup.sh light` 检查环境，登录态与平台限制仍可能影响采集 |
 | B站 / YouTube 字幕 | `python3 -m pip install yt-dlp` |
 | 本地视频转录 | `bash setup.sh video`；需要系统 `ffmpeg`，本地模型首次使用会下载 |
-| 本地播客转录 | `bash setup.sh podcast`；使用 `faster-whisper`，默认模型 `small` |
+| 本地播客转录 | `bash setup.sh podcast`；使用 SenseVoice-Small（与视频转录共用 funasr 依赖） |
 | 公众号及其 PDF 路径 | `bash setup.sh wechat` |
 | 通用 PDF 文字层导入 | `python3 -m pip install 'pymupdf>=1.24'` |
 
 平台抓取受 Cookie、字幕、地区和页面变化影响。失败时查看[平台状态](./docs/platform-status.md)和[替代处理方式](./docs/platform-fallbacks.md)，也可以保存正文后走本地导入。支持范围与最近的实测结果分开记录，见[真实平台验证](./docs/live-verification.md)。
+
+YouTube 在部分出口 IP 上要求登录证明（`Sign in to confirm you are not a bot`）。两个环境变量会透传到所有平台技能的 yt-dlp 调用：`YTDLP_COOKIES_FROM_BROWSER`（如 `chrome`，对应 `--cookies-from-browser`）和 `YTDLP_REMOTE_COMPONENTS`（如 `ejs:github`，让 yt-dlp 下载 JS 挑战求解组件）。两者均为可选，按需配置。
+
+X 长文章（Articles）默认只能抓到预览文本并给出警告；配置 `--cookies` 或 `X_COOKIES`（自己账号的 `auth_token` + `ct0`）后走登录态接口抓全文，失效时回退为预览。详见 [x-ingest](./x-ingest/SKILL.md)。
 
 ### 本地文档与 PDF
 
@@ -149,7 +229,9 @@ python3 tools/chubby.py ingest "/你的音频目录/episode.mp3" \
   --skill podcast --provider local --no-enrich
 ```
 
-v0.13.0 新增 **Atlas Cloud / MuAPI 实验后端**。需要主动选择 provider 并配置对应凭据；云服务会接收音频并可能计费。任务 ID 和完成结果持久保存，轮询失败或进程中断后可恢复；`--resubmit` 会明确创建新任务，可能再次计费。
+本地模型默认 SenseVoice-Small，也可选 Qwen3-ASR-0.6B（`--provider local --model qwen3-asr-0.6b`，需自行 `pip install qwen-asr transformers torch`）。2026-10 在 M3 Pro CPU 上的实测：SenseVoice RTF 0.11、Qwen RTF 0.80（慢约 7 倍）；质量互有胜负——Qwen 专名/人名更稳但有幻觉改写风险且无 ITN，SenseVoice 输出带情感标签需清洗。CPU 场景保持默认，GPU 或专名敏感时选 Qwen。详见 [podcast-transcribe](./podcast-transcribe/SKILL.md)。
+
+可选云端后端为 **阿里云百炼 DashScope 的 `qwen3-asr-flash`**（`--provider dashscope`，需 `DASHSCOPE_API_KEY`）和 **Groq 的 `whisper-large-v3-turbo`**（`--provider groq`，需 `GROQ_API_KEY`；免费层单文件上限 25MB、有速率限制，**长音频自动分片转录并支持断点续传**）。音频发送至云端并可能计费；DashScope 限制为编码后不超过 10MB、时长不超过 5 分钟，超限会在提交前拒绝并提示改用本地 SenseVoice-Small。完成结果持久保存，进程中断后可恢复；`--resubmit` 会明确创建新任务，可能再次计费。
 
 播客自动下载仅接受公网 HTTP(S) 直连地址，不跟随重定向，也不使用代理。需要跳转或代理的资源，先自行下载，再传本地文件。配置和恢复方法见[云转录说明](./docs/cloud-transcription.md)。云服务的真实转录尚未完成验收。
 
@@ -166,6 +248,22 @@ python3 tools/chubby.py retry --all-failed
 ```
 
 采集入库后和统一查询前，索引会增量同步。更多例子见[创作者工作流](./docs/creator-workflow.md)；已有索引的迁移和重建见[知识库自动化](./docs/knowledge-automation.md)。
+
+### 订阅 YouTube、播客和 RSS
+
+P0 将订阅扫描和媒体处理拆开：首次同步只建立已见基线，新条目先进入待审队列；确认来源质量后，可对该来源开启 `auto_ingest`，让 YouTube / 播客复用现有字幕优先和转录路径。
+
+```bash
+python3 tools/chubby.py subscribe init
+python3 tools/chubby.py subscribe add \
+  --id yt-3blue1brown --name "3Blue1Brown" \
+  --kind youtube_channel --channel-id UCYO_jab_esuFRV4b17AJtAw \
+  --content-profile video --mode discover_only
+python3 tools/chubby.py subscribe sync --all    # 首次只建立基线
+python3 tools/chubby.py subscribe pending
+```
+
+定时运行使用 `python3 tools/chubby.py subscribe tick --due --process-limit 3`，交给 macOS launchd 或 Linux cron 每小时触发。`subscribe digest` 把近 N 天的订阅条目汇总成每日情报简报（零 LLM 可用，事件聚簇 + 知识库关联；`--enrich` 可选 DeepSeek 精选摘要，模型内容带标注）；`subscribe site build` 再把聚簇渲染成可发 GitHub Pages 的纯静态日报站（只含标题/来源/链接/热度，无正文与本地路径），并同时产出 `feed.xml` 与 `llms.txt` 两个 Agent 出口。支持用户自带 RSSHub、RSS-Bridge 或其它 Provider 的最终公开 Feed；该标签不会启用平台抓取、认证或代理。X、小红书、抖音、B站、公众号账号扫描尚未支持。完整命令、调度、Provider 边界和失败恢复见[订阅与调度](./docs/subscriptions.md)，真实兼容性标准见[Provider 7 天验收](./docs/subscription-provider-acceptance.md)。
 
 ## 安装到 Agent
 
@@ -186,7 +284,7 @@ python3 tools/install_skill.py --all --dest /path/to/agent/skills
 
 Claude Code、OpenCode、OpenClaw、Hermes 等客户端使用各自实际配置的 skills 目录作为 `--dest`，并按客户端方式启用技能。运行环境中的 Python 和系统依赖仍需另外配置。
 
-安装器会打包仓库内依赖，生成可独立搬移的技能目录；`setup.sh` 负责安装运行依赖。已有同名技能时安装器会拒绝覆盖，升级时先安装到临时目录核对自己的修改。请使用安装器或 [Release 技能包](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.0)，避免只下载单个源码目录漏掉公共模块。[完整安装指南](./docs/installation.md)
+安装器会打包仓库内依赖，生成可独立搬移的技能目录；`setup.sh` 负责安装运行依赖。已有同名技能时安装器会拒绝覆盖，升级时先安装到临时目录核对自己的修改。请使用安装器或 [Release 技能包](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.14.0)，避免只下载单个源码目录漏掉公共模块。[完整安装指南](./docs/installation.md)
 
 首页的 `tools/chubby.py` 统一流程需要完整仓库。独立知识库技能使用其自带的 `tools/import_document.py`、`tools/vault_index.py` 和 `tools/evidence_brief.py`，命令见[文档导入](./docs/document-import.md)。
 
@@ -209,10 +307,10 @@ MCP 提供搜索、语义检索、读取原文、最近笔记、重新索引和�
 | 视频 | [tiktok-transcribe](./tiktok-transcribe/SKILL.md) | TikTok 视频转录 |
 | 视频 | [weibo-transcribe](./weibo-transcribe/SKILL.md) | 微博视频转录 |
 | 视频 | [zhihu-transcribe](./zhihu-transcribe/SKILL.md) | 知乎视频转录 |
-| 播客 | [podcast-transcribe](./podcast-transcribe/SKILL.md) | 单集、RSS、本地音频；可选实验云后端 |
+| 播客 | [podcast-transcribe](./podcast-transcribe/SKILL.md) | 单集、RSS、本地音频；可选 DashScope / Groq 云后端 |
 | 图文 | [wechat-article-ingest](./wechat-article-ingest/SKILL.md) | 公众号文章和 PDF 转 Markdown |
 | 图文 | [xiaohongshu-ingest](./xiaohongshu-ingest/SKILL.md) | 小红书图文、视频及可选内容分析 |
-| 图文 | [x-ingest](./x-ingest/SKILL.md) | X / Twitter 正文、图片和视频 |
+| 图文 | [x-ingest](./x-ingest/SKILL.md) | X / Twitter 正文、长文章（支持登录态全文）、图片和视频 |
 | 加工 | [content-enrich](./content-enrich/SKILL.md) | 可选的摘要、要点和标签加工 |
 | 知识库 | [knowledge-base-management](./knowledge-base-management/SKILL.md) | 文档导入、索引、资料包、归档与 MCP |
 | 工作流 | [industry-intelligence-radar](./industry-intelligence-radar/SKILL.md) | 多源情报扫描和趋势简报 |
@@ -225,11 +323,12 @@ MCP 提供搜索、语义检索、读取原文、最近笔记、重新索引和�
 | 功能 | 处理位置与配置 |
 |---|---|
 | 文档导入、关键词搜索、`semantic-lite`、资料包 | 本地；本地导入不抓取远程附件 |
-| 平台采集 | 访问来源平台；小红书可按需配置自己的 `XHS_COOKIE` |
+| 平台采集 | 访问来源平台；小红书可按需配置自己的 `XHS_COOKIE`，X 长文章可配 `X_COOKIES`，yt-dlp 路径可配 `YTDLP_COOKIES_FROM_BROWSER` 使用本机浏览器登录态 |
 | 本地音视频转录 | 本机推理；首次运行可能需要下载模型 |
 | 内容加工、翻译、学习笔记提取 | 可选 `DEEPSEEK_API_KEY`，内容发送至对应 API |
 | OpenAI 向量检索 | 可选 `OPENAI_API_KEY`，参与向量化的内容发送至 API |
-| Atlas / MuAPI 转录 | 可选 `ATLAS_API_KEY` / `MUAPI_API_KEY`，音频发送至服务商 |
+| DashScope 播客云转录 | 可选 `DASHSCOPE_API_KEY`，音频发送至阿里云百炼 |
+| Groq 播客云转录 | 可选 `GROQ_API_KEY`，音频发送至 Groq |
 | 云端 Agent 读取素材 | 被读取的内容进入该 Agent 的模型上下文 |
 
 API 服务可能计费，密钥和 Cookie 不要写入笔记或提交到仓库。外部解析工具可以把完整 Markdown 交给本地导入；cue-omni-reader 等入口及其验证状态见[可选集成](./docs/integrations.md)。
@@ -266,11 +365,14 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [创作者工作流](./docs/creator-workflow.md) | 从素材到搜索、资料包和 Agent 选题 |
 | [文档导入](./docs/document-import.md) | Markdown / TXT / PDF、来源和附件规则 |
 | [云转录](./docs/cloud-transcription.md) | Provider 配置、任务恢复和计费边界 |
+| [订阅与调度（P0）](./docs/subscriptions.md) | 公开 Feed / YouTube 订阅、队列、调度、故障恢复与限制 |
 | [知识库自动化](./docs/knowledge-automation.md) | 索引、向量检索、归档和知识卡片 |
+| [验证模型](./docs/verification-model.md) | 三种陈述强度、真实来源验收协议、公开内容边界与第三方证据处理 |
 | [MCP 配置](./docs/mcp-workflow.md) | 将知识库接入 Agent |
+| [社区推广 / 榜单提交指南](./docs/community-promotion-submission-guide.zh-CN.md) | 各渠道推广与榜单提交文案（已对齐当前 14 个 Skills 版本） |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
 | [可选集成](./docs/integrations.md) | 外部解析工具的 Markdown 交接 |
-| [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.13.0** |
+| [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.14.0** |
 
 ## 使用范围与许可
 
@@ -281,7 +383,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 <details>
 <summary>致谢</summary>
 
-感谢 [Agent Skills](https://agentskills.io)、[yt-dlp](https://github.com/yt-dlp/yt-dlp)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)、[faster-whisper](https://github.com/SYSTRAN/faster-whisper)、[Whisper](https://github.com/openai/whisper)、[MarkItDown](https://github.com/microsoft/markitdown)、[PyMuPDF](https://github.com/pymupdf/PyMuPDF)、[Obsidian](https://obsidian.md/)、[GraphRAG](https://github.com/microsoft/graphrag)、[DeepSeek](https://platform.deepseek.com/) 以及 [khazix-skills](https://github.com/KKKKhazix/khazix-skills) 提供工具、标准和参考。
+感谢 [Agent Skills](https://agentskills.io)、[yt-dlp](https://github.com/yt-dlp/yt-dlp)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)、[阿里云百炼 Qwen-ASR](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)、[MarkItDown](https://github.com/microsoft/markitdown)、[PyMuPDF](https://github.com/pymupdf/PyMuPDF)、[Obsidian](https://obsidian.md/)、[GraphRAG](https://github.com/microsoft/graphrag)、[DeepSeek](https://platform.deepseek.com/) 以及 [khazix-skills](https://github.com/KKKKhazix/khazix-skills) 提供工具、标准和参考。
 
 </details>
 

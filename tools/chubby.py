@@ -25,6 +25,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS_DIR = ROOT / "tools"
 
+# Base for relative paths in the config. Without an install this is the
+# repository checkout, but a non-editable install lives in site-packages, and
+# user state (output_dir / runs / .chubby / chubby.yaml) must never be written
+# there. `load_config` sets this to the config file's own directory, which
+# keeps the documented "relative to this repository" promise for a checkout and
+# still writes next to the user's config once installed.
+CONFIG_BASE = Path.cwd()
+
+SKILL_CHECKOUT_HINT = (
+    "平台采集需要完整仓库 checkout：skill 以目录形式分发，不随 Python 包安装。\n"
+    "  git clone https://github.com/chubbyguan/chubbyskills.git && cd chubbyskills\n"
+    "  或按 README 的 Skill 目录把对应技能装进你的 Agent。"
+)
+
 try:
     from tools import chubby_ingest
     from tools import platform_health
@@ -61,10 +75,22 @@ QUICKSTART_SOURCE = "https://x.com/example/status/123456"
 
 
 def read_version():
+    """Packaged version.
+
+    A checkout keeps VERSION authoritative (releases bump the file, which may
+    be newer than an older editable install's metadata); an installed copy has
+    no VERSION next to the package, so it falls back to the distribution
+    metadata that the build wrote from that same file.
+    """
     version_path = ROOT / "VERSION"
     if version_path.exists():
         return version_path.read_text(encoding="utf-8").strip()
-    return "0.0.0"
+    try:
+        from importlib.metadata import version as distribution_version
+
+        return distribution_version("chubbyskills")
+    except Exception:
+        return "0.0.0"
 
 
 def now_iso():
@@ -111,12 +137,32 @@ def parse_int(value, default):
         return default
 
 
+def default_config_path():
+    """Where `chubby.yaml` lives: beside the user, or the checkout's own.
+
+    Order matters. An existing config in the working directory wins, so a
+    configured project keeps working from anywhere. Then an existing config at
+    the package root, which is how a checkout behaves when the command is run
+    from a subdirectory. Only when there is no config anywhere do we return the
+    working directory — creating it there is what keeps `init` from writing
+    into site-packages, where a non-editable install would have no business
+    putting user state.
+    """
+    local = Path.cwd() / "chubby.yaml"
+    if local.exists():
+        return local
+    root_config = ROOT / "chubby.yaml"
+    if root_config.exists():
+        return root_config
+    return local
+
+
 def resolve_path(value):
     value = clean_scalar(value)
     value = os.path.expandvars(os.path.expanduser(value))
     path = Path(value)
     if not path.is_absolute():
-        path = ROOT / path
+        path = CONFIG_BASE / path
     return path
 
 
@@ -136,7 +182,9 @@ def parse_config_file(path):
 
 
 def load_config(path=None):
-    config_path = resolve_path(path) if path else ROOT / "chubby.yaml"
+    global CONFIG_BASE
+    config_path = resolve_path(path) if path else default_config_path()
+    CONFIG_BASE = config_path.parent
     config = dict(DEFAULT_CONFIG)
     config.update(parse_config_file(config_path))
     config["_config_path"] = str(config_path)
@@ -194,7 +242,7 @@ def ensure_runtime_dirs(config):
 
 
 def init_workspace(args):
-    config_path = resolve_path(args.config) if args.config else ROOT / "chubby.yaml"
+    config_path = resolve_path(args.config) if args.config else default_config_path()
     if config_path.exists() and not args.force:
         if getattr(args, "vault", None):
             update_vault_config(config_path, args.vault)
@@ -592,7 +640,7 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
     safe_source, source_secrets = chubby_ingest.redact_url(source)
     secrets.extend(source_secrets)
     if detected_skill == "podcast":
-        secrets.extend(os.environ[key] for key in ("ATLAS_API_KEY", "ATLAS_CLOUD_API_KEY", "MUAPI_API_KEY", "MU_API_KEY") if os.environ.get(key))
+        secrets.extend(os.environ[key] for key in ("DASHSCOPE_API_KEY", "GROQ_API_KEY") if os.environ.get(key))
     if source_secrets:
         retry_requires.append("--source")
     safe_command, _, command_secrets = chubby_ingest.redact_arguments(cmd)
@@ -639,14 +687,17 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
                           artifact_files=previous.get("artifact_files", []),
                           reused=True, reused_from=previous["run_id"])
             return finish_record(record, secrets)
-    if detected_skill == "podcast" and extra_option_value(args.extra, "--provider") in {"atlas", "muapi"} and not args.dry_run:
+    if detected_skill == "podcast" and extra_option_value(args.extra, "--provider") in {"dashscope", "groq"} and not args.dry_run:
         # A killed parent must not leave an older success eligible for reuse
         # while the provider's newer job still needs recovery.
         append_record(config, dict(record, status="running", error="Cloud capture started; final state not recorded yet"))
     try:
         process = subprocess.run(
             cmd,
-            cwd=ROOT,
+            # Run where the user invoked us: a relative --source or local path
+            # they typed resolves against their directory, not against the
+            # package location (site-packages after a pip install).
+            cwd=str(Path.cwd()),
             capture_output=True,
             text=True,
             timeout=timeout_seconds if timeout_seconds > 0 else None,
@@ -993,7 +1044,7 @@ def command_doctor(args, config):
         command.extend(["--platform", args.platform])
     if getattr(args, "provider", None):
         command.extend(["--provider", args.provider])
-    result = subprocess.run(command, cwd=ROOT)
+    result = subprocess.run(command, cwd=str(Path.cwd()))
     return result.returncode
 
 
@@ -1347,7 +1398,7 @@ def build_parser():
     doctor = sub.add_parser("doctor", help="Show config and dependency health")
     doctor.set_defaults(handler=command_doctor)
     doctor.add_argument("--platform", choices=sorted(chubby_ingest.SKILL_COMMANDS))
-    doctor.add_argument("--provider", choices=["local", "atlas", "muapi"], help="Podcast provider to check")
+    doctor.add_argument("--provider", choices=["local", "dashscope", "groq"], help="Podcast provider to check")
 
     quickstart = sub.add_parser("quickstart", help="Run the first-use offline acceptance flow")
     quickstart.add_argument("--force-init", action="store_true", help="Overwrite chubby.yaml before checks")
@@ -1380,6 +1431,90 @@ def build_parser():
     retry.add_argument("--all-failed", action="store_true", help="Retry all latest failed sources")
     retry.add_argument("--source", help="Resupply a source URL whose credentials were redacted")
     add_ingest_options(retry)
+
+    subscribe = sub.add_parser("subscribe", help="Discover and process durable feed subscriptions")
+    subscribe.add_argument("--subscriptions", help="Override subscriptions.json path")
+    subscribe_sub = subscribe.add_subparsers(dest="subscribe_command", required=True)
+    subscribe_sub.add_parser("init", help="Create the subscription config and SQLite state")
+    subscribe_sub.add_parser("validate", help="Validate subscription config and state database")
+    subscribe_sub.add_parser("list", help="List declared subscriptions")
+    subscribe_status = subscribe_sub.add_parser("status", help="Show subscription health and pending queue")
+    subscribe_status.add_argument("--json", action="store_true")
+
+    subscribe_add = subscribe_sub.add_parser("add", help="Add a feed or YouTube channel subscription")
+    subscribe_add.add_argument("--id", required=True, help="Stable subscription id")
+    subscribe_add.add_argument("--name", required=True, help="Human-readable source name")
+    subscribe_add.add_argument("--kind", required=True, choices=["feed", "youtube_channel"])
+    subscribe_add.add_argument(
+        "--provider",
+        choices=["native", "rsshub_byo", "rssbridge_byo", "generic_byo"],
+        help="Diagnostic provenance only; does not run or configure a provider",
+    )
+    subscribe_add.add_argument("--feed", help="Public HTTPS RSS/Atom/JSON Feed URL")
+    subscribe_add.add_argument("--format", choices=["auto", "rss", "atom", "json"], default="auto")
+    subscribe_add.add_argument("--channel-id", help="YouTube channel_id for official Atom feed")
+    subscribe_add.add_argument("--resolve", help="YouTube channel URL or @handle; the channel_id is resolved from the public page")
+    subscribe_add.add_argument("--user-agent", help="Override this source's request User-Agent (default: urllib standard identity)")
+    subscribe_add.add_argument("--mode", choices=["auto_ingest", "discover_only"])
+    subscribe_add.add_argument("--content-profile", choices=["auto", "video", "podcast", "article"], default="auto")
+    subscribe_add.add_argument("--poll-minutes", type=int, default=240)
+    subscribe_add.add_argument("--max-new-per-sync", type=int, default=3)
+    subscribe_add.add_argument("--include-title", action="append", help="Regex: only process matching titles")
+    subscribe_add.add_argument("--exclude-title", action="append", help="Regex: skip matching titles")
+    subscribe_add.add_argument("--backfill", action="store_true", help="Allow a bounded initial backfill on explicit sync")
+
+    subscribe_test = subscribe_sub.add_parser("test", help="Fetch and parse one source without writing state")
+    subscribe_test.add_argument("id")
+    subscribe_sync = subscribe_sub.add_parser("sync", help="Discover source updates without executing media work")
+    source_scope = subscribe_sync.add_mutually_exclusive_group()
+    source_scope.add_argument("--due", action="store_true", help="Only sync sources whose next_due_at has passed")
+    source_scope.add_argument("--all", action="store_true", help="Sync every enabled source now")
+    subscribe_sync.add_argument("--backfill", type=int, default=0, help="On initial sync, queue at most N historical items (1-10)")
+    subscribe_sync.add_argument("--dry-run", action="store_true")
+    subscribe_pending = subscribe_sub.add_parser("pending", help="Show discovered, queued or failed entries")
+    subscribe_pending.add_argument("--state", choices=["seen", "discovered", "queued", "ingesting", "succeeded", "retry_wait", "index_retry", "failed_terminal", "skipped"])
+    subscribe_pending.add_argument("--limit", type=int, default=20)
+    subscribe_pending.add_argument("--json", action="store_true")
+    subscribe_promote = subscribe_sub.add_parser("promote", help="Move discovered (or baseline-seen) entries into the execution queue")
+    subscribe_promote.add_argument("entry_ids", type=int, nargs="+")
+    subscribe_requeue = subscribe_sub.add_parser("requeue", help="Requeue failed_terminal entries after an environment fix")
+    subscribe_requeue.add_argument("entry_ids", type=int, nargs="+")
+    subscribe_remove = subscribe_sub.add_parser("remove", help="Remove a subscription source (history is kept)")
+    subscribe_remove.add_argument("id", help="Subscription id to remove")
+    subscribe_skip = subscribe_sub.add_parser("skip", help="Skip discovered or queued entries")
+    subscribe_skip.add_argument("entry_ids", type=int, nargs="+")
+    subscribe_skip.add_argument("--reason", default="user_skipped")
+    subscribe_process = subscribe_sub.add_parser("process", help="Execute queued entries through the existing pipeline")
+    subscribe_process.add_argument("--limit", type=int, default=3)
+    subscribe_process.add_argument("--subscription", help="Only process one source id")
+    subscribe_process.add_argument("--retry-failed", action="store_true", help="Include retry_wait and index_retry entries")
+    subscribe_process.add_argument("--dry-run", action="store_true")
+    subscribe_process.add_argument("--timeout", type=int, help="Per-ingest timeout in seconds")
+    subscribe_tick = subscribe_sub.add_parser("tick", help="Atomic scheduled sync followed by bounded processing")
+    subscribe_tick.add_argument("--due", action="store_true", help="Accepted for scheduler readability; tick always syncs due sources")
+    subscribe_tick.add_argument("--process-limit", type=int, default=0)
+    subscribe_tick.add_argument("--no-process", action="store_true")
+    subscribe_tick.add_argument("--dry-run", action="store_true")
+    subscribe_tick.add_argument("--timeout", type=int, help="Per-ingest timeout in seconds")
+    subscribe_pause = subscribe_sub.add_parser("pause", help="Disable a source without deleting its cursor")
+    subscribe_pause.add_argument("id")
+    subscribe_resume = subscribe_sub.add_parser("resume", help="Enable a paused source")
+    subscribe_resume.add_argument("id")
+    subscribe_digest = subscribe_sub.add_parser(
+        "digest", help="Daily intelligence digest over recent subscription entries"
+    )
+    subscribe_digest.add_argument("--days", type=int, default=1, help="Window in days (1-30, default 1)")
+    subscribe_digest.add_argument("--output", help="Output Markdown path (default: <vault>/30_Output/)")
+    subscribe_digest.add_argument("--enrich", action="store_true", help="Optional DeepSeek prescreen/score/summary layer (DEEPSEEK_API_KEY)")
+    subscribe_digest.add_argument("--no-vault-links", action="store_true", help="Skip vault related-notes lookup")
+    subscribe_digest.add_argument("--cluster-threshold", type=float, default=0.5, help="Title Jaccard similarity for event clustering (default 0.5)")
+    subscribe_site = subscribe_sub.add_parser("site", help="Static daily-report site generator")
+    site_sub = subscribe_site.add_subparsers(dest="site_command", required=True)
+    site_build = site_sub.add_parser("build", help="Build the static site (overwrites the output directory)")
+    site_build.add_argument("--output", help="Output directory (default: <vault>/30_Output/site/)")
+    site_build.add_argument("--days", type=int, default=7, help="Window in days (1-90, default 7)")
+    site_build.add_argument("--site-name", help="Site name injected into every page")
+    site_build.add_argument("--base-url", default="", help="URL prefix for all internal links (e.g. /repo-name for GitHub Pages)")
 
     search = sub.add_parser("search", help="Sync the vault index and search collected notes")
     search.add_argument("query")
@@ -1456,6 +1591,12 @@ def main(argv=None):
         return command_status(args, config)
     if args.command == "retry":
         return command_retry(args, config)
+    if args.command == "subscribe":
+        try:
+            from tools import subscriptions
+        except ModuleNotFoundError:
+            import subscriptions
+        return subscriptions.command_subscribe(args, config)
     if args.command == "search":
         return command_search(args, config)
     if args.command == "brief":

@@ -31,6 +31,14 @@ chubby.yaml
 *.png
 *.webp
 
+# Personal vault instance created by `init --vault` (see README quickstart).
+# Holds private notes plus generated briefs, digests and site output — never commit.
+creator-vault/
+
+# Local working artifacts: release tarballs, feasibility notes, exports.
+# Root-anchored on purpose — examples/outputs/ is tracked sample data.
+/outputs/
+
 # IDE
 .vscode/
 .idea/
@@ -44,3 +52,7 @@ Thumbs.db
 # Model cache
 .cache/
 modelscope/
+
+# Scratch working directories
+.work/
+.manus/

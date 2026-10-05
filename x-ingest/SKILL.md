@@ -51,7 +51,7 @@ X_COOKIES="auth_token=...; ct0=..." python scripts/fetch_tweet.py "链接" -o ./
 - **视频推文**：提取最高码率 mp4 直链 → ffmpeg 抽音频 → SenseVoice 转录（`language=auto`，X 中英混杂）写入 `## 视频文字稿`；`--no-video` 只留视频链接；缺 funasr/ffmpeg 时自动降级为存链接
 - **Thread（作者自回复串）**：加 `--thread` 后读取作者的公开 syndication 时间线（`showReplies=true`），沿 `in_reply_to_status_id` 指向的同作者回复顺序拼为一篇 Markdown；每条推文单独成节，图片与视频沿用上面的分流逻辑。frontmatter 标记 `note_type: thread`、`thread_count` 和 `thread_ids`。
 - **X 长文章（Article）**：取文章标题、正文、封面图（封面本地化嵌入）。⚠️ syndication 不返回长文章全文，默认只能拿到开头预览，采集时会有 stderr 明确告警，Markdown 会标注「预览，全文见原文链接」。补全全文两种方式：
-  - `--cookies`（或环境变量 `X_COOKIES`）提供**自己账号**的 `auth_token` + `ct0`（浏览器 DevTools → Application → Cookies 复制），脚本走登录态 GraphQL `TweetResultByRestId` 抓全文。注意：这是 X 内部接口，queryId 随发版轮换，失效时会告警并回退为预览；且需要网络可达 x.com
+  - `--cookies`（或环境变量 `X_COOKIES`）提供**自己账号**的 `auth_token` + `ct0`（浏览器 DevTools → Application → Cookies 复制），脚本走登录态 GraphQL `TweetResultByRestId` 抓全文。queryId 随 X 前端发版轮换，脚本按「新鲜缓存（`~/.cache/x-ingest/tweet-result-query-ids.json`，TTL 24h）→ 实时从 x.com 首页引用的 `main.*.js` bundle 提取（正则 `queryId:"...",operationName:"TweetResultByRestId"`）→ 过期缓存 → 内置兜底列表」的顺序取 queryId，全部失效时告警并回退为预览；需要网络可达 x.com
   - 网络不可达 x.com（如部分网络环境）时，手动复制正文用 `--fallback-text`
 
 ## ⚠️ 关于可用性

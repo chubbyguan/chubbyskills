@@ -38,3 +38,48 @@ python3 tools/platform_smoke.py --mode live --platform x --platform youtube \
 GitHub 的 **Real text and subtitle verification (manual)** workflow 可手动选择一条公开链接，保留七天产物。它只提供图文/字幕依赖，不安装 ASR 或登录 Cookie；这些能力需要另外准备环境，不能依靠该 workflow 验证。
 
 结构检查生成时间见 [platform-status](platform-status.md)，离线/fallback 结果见 [platform-smoke-matrix](platform-smoke-matrix.md)。生成日期不等于真实采集验证日期。
+
+## 2026-10 补充实测记录
+
+以下为 2026-10 期间完成、此前未落档的真实环境验证。均为单次或单点实测，不代表持续可用性。
+
+### PR #27：yt-dlp 浏览器 Cookie 与 JS 挑战组件透传（2026-10-01/02）
+
+环境变量 `YTDLP_COOKIES_FROM_BROWSER`（对应 `--cookies-from-browser`）和 `YTDLP_REMOTE_COMPONENTS`（对应 `--remote-components`，让 yt-dlp 下载 JS 挑战求解组件）透传到所有平台技能的 yt-dlp 调用（commit `7fd82e0`）。实测：在会被 YouTube 拦截为 `Sign in to confirm you are not a bot` 的出口 IP 上，两个变量同时设置后自动字幕下载成功。Cookie 来自用户自己浏览器的登录态，属个人使用路径。
+
+### PR #31：抖音 spider-shell 回退（2026-10）
+
+无 Cookie 访问抖音分享页时平台返回反爬 shell 页（spider shell），下载器检测到后自动回退到 yt-dlp 路径，配合 `YTDLP_COOKIES_FROM_BROWSER` 即可（浏览器访问过 douyin.com 即可，无需登录）。文档化于 commit `2af5d14`，见 [platform-status](platform-status.md) 和 `platforms/douyin.yaml`。
+
+### YouTube 频道订阅单日深度验收（2026-10-03）
+
+按 `docs/subscription-provider-acceptance.md` 对 YouTube 频道路径（3Blue1Brown，原生 Atom + yt-dlp 回退发现）做单日验收，10 项验收标准全部通过：首次基线 25 条入库、后续同步零重复（25 parsed / 0 new / 25 duplicates）、Atom 发现 HTTP 200、yt-dlp 回退路径直测返回与 Atom 完全一致的 25 条 video ID、凭据不泄漏（SQLite/JSON/stdout 检查无 token/cookie）、discover_only 不自动处理、promote 后字幕优先 23 秒完成且不触发音频转录、tick 调度锁竞争时正确跳过、到期语义与按源抖动正常、`status --json` 证据字段齐全。一个部分覆盖项：youtube_channel 源的 Atom 4xx 会被 yt-dlp 回退掩盖为 `network` 退避而非按 404 暂停，属设计取舍，已记为观察项。7 天连续观察（≥48 次检查、success+unchanged ≥95%）尚未完成，不写「已验证」；验收证据存于执行环境未入库目录，结论以本节为准。
+
+### SenseVoice-Small vs Qwen3-ASR-0.6B 本地实测（2026-10-03）
+
+MacBook Pro M3 Pro（18GB）纯 CPU，torch 2.14.1，5 分钟中文双人播客（茶文化专名/人名/数字密集）：SenseVoice-Small RTF **0.11**（32.8 秒），Qwen3-ASR-0.6B RTF **0.80**（240.4 秒），约 7 倍差距。质量互有胜负：Qwen 在专名（岩茶）和人名（朱伟）上更稳，但出现 LLM 式幻觉改写（「黄金」→「皇帝」），且无 ITN（数字输出为中文大写形式）；SenseVoice 有同音字错误但数字下游友好。**结论：CPU 场景保持 SenseVoice-Small 为默认；GPU 或专名敏感场景可选 Qwen3-ASR。**
+
+### 仍待真实验收
+
+- ~~DashScope（`qwen3-asr-flash`）云转录后端~~：已于 2026-10-04 完成真实验收，见下。
+- ~~Groq（`whisper-large-v3-turbo`）云转录后端~~：已于 2026-10-04 完成真实验收，见下。
+- ~~X 长文章（Articles）登录态全文路径（`X_COOKIES`）~~：已于 2026-10-04 完成真实验收，见下。
+
+## 2026-10-04 验收：DashScope 云转录后端
+
+- **实测**：2 分钟中文双人播客（16kHz mono MP3，`qwen3-asr-flash`，OpenAI 兼容接口，默认 `dashscope.aliyuncs.com` 域名对工作空间 key 直接可用），提交后 **4 秒**返回全文。
+- **质量**：三个已测后端中最好——标点与断句完整、ITN 正确（「0809」）、专名全部命中（「岩茶」「三联」「普洱」「一车钞票换一车茶」，其中「三联」是本地两个模型都错的高难词）。
+- **注意**：服务限制单次 5 分钟 / 编码后 10MB，长音频需走本地或 Groq 分片；涉及按量计费。
+
+## 2026-10-04 验收：Groq 云转录后端
+
+- **实测**：5 分钟中文双人播客（16kHz mono，`whisper-large-v3-turbo`），提交后 **3 秒**返回，154 个时间戳分段；二次运行命中本地缓存 0 秒零请求。文本流畅，专名表现稳定（「马连道」正确、「朱伟」第二次出现正确），无幻觉改写，偶有同音字（「茶」→「查」）。
+- **修复**：Groq 的 Cloudflare 前置会拒绝 Python urllib 默认 UA（GET 403、POST 上传中断），`CloudProvider.request` 现统一携带桌面浏览器 UA 与 `Accept: application/json`（对 DashScope 同样无害），并有回归测试锁定。
+- **注意**：本机经代理访问 api.groq.com；免费层有速率限制，长音频分片路径未在本轮实测覆盖。
+
+## 2026-10-04 复测：X 长文章登录态全文抓取修复
+
+- **背景**：线上发现 `x-ingest` 登录态全文抓取失效 —— `fetch_article_graphql()` 内置的两个硬编码 queryId（`DJS3BdhUhcaEpZ7B7irJDg`、`V3vfsYzNEyD9tsf4xoPhgw`）对 `TweetResultByRestId` 全部返回 404，登录 cookie 有效也无济于事，只能拿到 syndication 预览。
+- **诊断**：用桌面 Chrome UA + 登录 cookie 拉 `https://x.com/home`，HTML 引用 `https://abs.twimg.com/responsive-web/client-web/main.<hash>.js`；在该 bundle 中匹配 `queryId:"...",operationName:"TweetResultByRestId"` 挖到当前有效 queryId `LbQZrAWyKPvExi8di3-EoA`。另发现该操作要求 `fieldToggles`（`withArticlePlainText` / `withArticleRichContentState` 置 true）才会返回 `plain_text` / `content_state`，否则 article 结果只有标题和预览；且 `TweetResultByRestId` 必须以**推文 id** 为参数（旧代码误传 syndication 返回的 article rest_id，同样拿不到全文）。
+- **修复**：queryId 获取改为「新鲜缓存（`~/.cache/x-ingest/tweet-result-query-ids.json`，TTL 24h）→ 实时从 x.com 前端 JS bundle 提取并写缓存 → 过期缓存 → 内置兜底列表」；GraphQL 请求补齐新版 features 全集与 `fieldToggles`；正文抓取改用推文 id。
+- **验证**（macOS，登录 cookie 有效）：`python3 x-ingest/scripts/fetch_tweet.py "https://x.com/369Serena/status/2103705402793730449" -o /tmp/x-fixed` 抓到全文 **2859 字**（正文，标题《小红书矩阵获客指南-全网独家，让你的活动 or 课程爆满！！！》），封面图本地化，无「预览」标注；同链接不带 cookie 复跑维持预览 + stderr 告警路径，无回归。

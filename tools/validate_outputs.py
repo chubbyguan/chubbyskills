@@ -41,6 +41,7 @@ KNOWN_PLATFORMS = {
     "knowledge-base",
     "learning",
     "podcast",
+    "rss",
     "tiktok",
     "wechat",
     "weibo",

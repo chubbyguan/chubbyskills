@@ -142,11 +142,16 @@ def translate_text(text: str, api_key: str = None) -> str:
         if len(chunks) > 1:
             print(f"  🌐 Translating chunk {i+1}/{len(chunks)}...", file=sys.stderr)
 
+        # 几乎无可译内容的块（纯时间戳/音乐标记等）直接保留原文，
+        # 避免模型反问"请提供需要翻译的内容"。
+        if len(re.sub(r"[\s\W_]+", "", chunk)) < 20:
+            translated_chunks.append(chunk)
+            continue
         try:
             payload = json.dumps({
                 "model": "deepseek-chat",
                 "messages": [
-                    {"role": "system", "content": "你是专业翻译。将英文翻译成中文，保持原文风格和格式。不要添加额外解释。"},
+                    {"role": "system", "content": "你是专业翻译。将英文翻译成中文，保持原文风格和格式。直接输出译文，即使内容很短、不完整或包含语气词/歌词标记，也不要提问或要求补充内容。"},
                     {"role": "user", "content": f"翻译以下英文为中文：\n\n{chunk}"}
                 ],
                 "temperature": 0.3

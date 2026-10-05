@@ -9,7 +9,7 @@
 Import documents, capture articles and transcripts, and search the original text when you need it. Export a source-backed brief for your agent to work from.
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.13.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.13.0)
+[![Version](https://img.shields.io/badge/Version-0.14.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.14.0)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skills)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -30,6 +30,7 @@ Your library stays in ordinary Markdown files. The repository provides import, p
 | A growing Markdown library | Local keyword search and lightweight semantic retrieval |
 | A writing or research question | A Markdown/JSON brief with exact excerpts, source links, line numbers, and file hashes |
 | An agent that supports skills or MCP | Reusable workflows and direct access to your own source material |
+| Public feeds, YouTube channels, and BYO Provider output | Subscription discovery, review queue, controlled transcription, and Markdown ingestion |
 
 **New in [v0.13.0](./docs/release-0.13.0.md):** unified local document import, experimental Atlas/MuAPI podcast transcription with saved task recovery, and portable installation bundles for the new tools.
 
@@ -44,21 +45,62 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 | Bilibili / YouTube | Stable | Subtitle-first, only needs `yt-dlp` |
 | WeChat OA | Beta | HTML needs `beautifulsoup4`, PDF fallback |
 | Douyin / TikTok / Weibo / Zhihu | Beta, heavy deps | Video transcription needs `funasr` + `ffmpeg` |
-| Podcasts | Heavy deps | `faster-whisper`, optional cloud transcription |
-| X / Xiaohongshu | Manual fallback | Zero-dependency capture, manual text fallback |
+| Podcasts | Heavy deps | `funasr` (SenseVoice-Small), optional DashScope/Groq cloud transcription |
+| X / Xiaohongshu | Manual fallback | Zero-dependency capture; X long-form articles support logged-in full text via `X_COOKIES`; manual text fallback |
+| RSS / YouTube channel subscriptions | P0 + P1 | Public feeds; BYO RSSHub/RSS-Bridge provenance labels; discovery-only is the safe default |
 | Local documents | Stable | Zero dependency, Markdown/TXT/PDF text layer |
 
 ## Try the local workflow
 
-We recommend Python 3.11 or 3.12 and a macOS/Linux shell. The following example imports a small document you create yourself, searches it, and exports a brief. **No pip packages, API keys, or models are needed for this Markdown/TXT workflow.**
+Requires Python 3.11 or newer on a macOS/Linux shell — check with `python3 --version` first: the 3.9 that ships with macOS runs the core commands but breaks the `subscribe` chain on import (`datetime.UTC`), so install a newer Python or use the virtualenv step below. The core path uses only the standard library: **no pip packages, no API keys, no model downloads.** (The CLI reports in Chinese; the commands are language-neutral.)
+
+### Path one: capture a real link
+
+X posts and Xiaohongshu image notes both go through the Python standard library only — **no yt-dlp, no ffmpeg, no model download** (per-platform capability and failure modes: [platform status](./docs/platform-status.md)):
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 -m venv .venv
-source .venv/bin/activate
-
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
+python3 tools/chubby.py ingest "https://x.com/OpenAI/status/1663696190960173056" --no-enrich
+python3 tools/chubby.py search "ChatGPT"
+```
+
+```text
+✅ 已写入配置：/path/to/chubbyskills/chubby.yaml
+✅ 已准备队列：/path/to/chubbyskills/inbox/links.txt
+✅ 已准备状态：/path/to/chubbyskills/.chubby/runs.jsonl
+✅ 已准备报告目录：/path/to/chubbyskills/runs
+
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+/path/to/chubbyskills/creator-vault/00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<source-hash>.md
+
+The ChatGPT iOS app is now available in
+  00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<source-hash>.md
+  # The ChatGPT iOS app is now available in   > 👤 OpenAI @OpenAI | 👍 754 · 💬 115 …
+```
+
+The captured note keeps the source, author, timestamp and engagement counts, so a quote can always be traced back to the original post:
+
+```yaml
+title: "The ChatGPT iOS app is now available in "
+platform: x
+source: "https://x.com/OpenAI/status/1663696190960173056"
+author: "OpenAI @OpenAI"
+created: 2023-05-30
+likes: 754
+```
+
+Swap the link for any post or Xiaohongshu note you want to keep.
+
+> **Platform capture varies.** This is **one sample**, not a success rate: without a logged-in session a platform may block the request, and X long-form articles return only a preview by default. When it fails, see [platform status](./docs/platform-status.md) and [fallback routes](./docs/platform-fallbacks.md), or save the body and use the path below.
+
+### Path two: import your own files
+
+This one never touches the network and works in any environment. Create one document, import it, and search it back — swap the sample for your own `.md`, `.markdown` or `.txt`, and add `--source-url "https://…"` when you know the original page:
+
+```bash
 mkdir -p demo-input
 cat > demo-input/sample.md <<'MARKDOWN'
 ---
@@ -73,11 +115,57 @@ MARKDOWN
 
 python3 tools/chubby.py import demo-input/sample.md --no-enrich
 python3 tools/chubby.py search "source library"
+```
+
+```text
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+
+Source library demo
+  00_Inbox/Source-library-demo--<source-hash>.md
+  # Source library demo  This is a manually written example. A source library keeps the original text…
+```
+
+Then export the brief — the artifact this project actually exists to produce:
+
+```bash
 python3 tools/chubby.py brief --topic "source library" \
   --output "$PWD/creator-vault/30_Output/source-library-brief.md"
 ```
 
-Open the imported note in `creator-vault/00_Inbox` and the brief in `creator-vault/30_Output`. The brief has a companion JSON file and points back to exact lines in the imported note. For this local example, provenance points to the original local file.
+```text
+{
+  "markdown": "/path/to/chubbyskills/creator-vault/30_Output/source-library-brief.md",
+  "json": "/path/to/chubbyskills/creator-vault/30_Output/source-library-brief.json"
+}
+```
+
+The Markdown brief carries verbatim excerpts, original line numbers, the source link and a file SHA-256, so every claim can be traced back. Both derived values move with your own paths and timestamps: the filename suffix comes from the source path, and the hash covers the imported copy including its metadata.
+
+```text
+## E1 · Source library demo
+
+笔记相对路径：`00_Inbox/Source-library-demo--<source-hash>.md`
+原始来源：未提供可打开的网页链接。
+文件 SHA-256：`<content hash of the imported copy>`
+
+原文第 22–22 行：
+```
+
+Three things land on disk: `creator-vault/00_Inbox/` (the note plus any referenced local attachments), `creator-vault/30_Output/` (the brief and its JSON companion), and `.chubby/runs.jsonl` with `runs/` (task state and run reports). Everything above runs offline; the brief never calls a cloud model and never judges whether the source is right.
+
+### Optional: install the `chubby` command
+
+The workflow above uses `python3 tools/chubby.py` and needs no install. For the `chubby …` form:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python3 -m pip install -e .   # provides the `chubby` command
+```
+
+A plain package install works too (`pip install .`, or `pipx install git+https://github.com/chubbyguan/chubbyskills.git`). The knowledge-base commands are all available — `init` / `import` / `search` / `brief` / `index` / `doctor` / `subscribe` (including `digest` and `site build`) — and user state is written to **your current directory**, never into the install directory.
+
+**Platform capture (`ingest`) still needs a full checkout.** Skills are distributed as directories (install them into your agent with `tools/install_skill.py`) and are not part of the Python package. The command says so directly instead of failing inside a subprocess.
 
 The import preserves the original document, copies supported local attachments, and updates the index. Repeating the same import can reuse a valid result; changing the document or its attachments creates a new result while retaining the old one. If you repeat the brief export, choose a different output filename or explicitly add `--force` to replace the previous brief.
 
@@ -106,7 +194,7 @@ Choose the runtime dependencies for the content you need. Run installation comma
 | X/Xiaohongshu text and image posts | `bash setup.sh light` checks Python and prints configuration guidance; it does not install packages |
 | Bilibili/YouTube captions | `python3 -m pip install yt-dlp` |
 | Local video transcription | `bash setup.sh video`; requires system `ffmpeg` and installs transcription dependencies |
-| Local podcast transcription | `bash setup.sh podcast`; installs `faster-whisper` dependencies |
+| Local podcast transcription | `bash setup.sh podcast`; installs the SenseVoice-Small (funasr) transcription dependencies |
 | WeChat article/PDF processing | `bash setup.sh wechat` |
 
 `setup.sh` handles runtime checks and selected dependencies; `tools/install_skill.py` builds skill directories. See [installation](./docs/installation.md) for all profiles, agent paths, and upgrade details.
@@ -128,6 +216,10 @@ Platform capture is implemented for Bilibili, YouTube, Douyin, TikTok, Weibo, Zh
 
 These are supported code paths, not a guarantee that every live link works. See [platform status](./docs/platform-status.md), the [dated live verification report](./docs/live-verification.md), and [failure/fallback guidance](./docs/platform-fallbacks.md).
 
+YouTube may demand sign-in proof on flagged exit IPs (`Sign in to confirm you are not a bot`). Two optional environment variables pass through to every yt-dlp call across all platform skills: `YTDLP_COOKIES_FROM_BROWSER` (e.g. `chrome`, maps to `--cookies-from-browser`) and `YTDLP_REMOTE_COMPONENTS` (e.g. `ejs:github`, lets yt-dlp download its JS challenge solver).
+
+X long-form articles only return preview text by default, with an explicit warning. Setting `--cookies` or `X_COOKIES` (your own account's `auth_token` + `ct0`) fetches the full text through the logged-in GraphQL endpoint, falling back to the preview when it fails. See [x-ingest](./x-ingest/SKILL.md).
+
 ### Podcasts and optional cloud transcription
 
 To transcribe local audio with the local provider:
@@ -137,9 +229,11 @@ python3 tools/chubby.py ingest "/path/to/episode.mp3" \
   --skill podcast --provider local --no-enrich
 ```
 
-Podcast transcription defaults to local `faster-whisper`. Atlas Cloud and MuAPI are **experimental, opt-in** providers. Their request lifecycle, saved task recovery, and error handling are tested with simulated responses; **real paid-service transcription has not been validated for v0.13.0**.
+The local provider defaults to SenseVoice-Small; Qwen3-ASR-0.6B is an optional alternative (`--provider local --model qwen3-asr-0.6b`, requires a manual `pip install qwen-asr transformers torch`). Measured on an M3 Pro CPU with a 5-minute Chinese podcast (2026-10): SenseVoice RTF 0.11 vs Qwen RTF 0.80 (about 7x slower). Quality is a trade-off — Qwen is steadier on proper nouns and names but can hallucinate rewrites and has no ITN (numbers come out as words); SenseVoice output needs emotion-tag cleanup. Keep the SenseVoice default on CPU; pick Qwen on GPU machines or when proper-noun accuracy matters. See [podcast-transcribe](./podcast-transcribe/SKILL.md).
 
-Cloud mode sends audio to the selected provider and may incur charges. Ordinary recovery resumes a saved task; `--resubmit` explicitly creates a new task and may charge again. Follow the [cloud transcription guide](./docs/cloud-transcription.md) for credentials, configuration, limits, and recovery.
+Podcast transcription defaults to local SenseVoice-Small (via `funasr`). Alibaba Cloud Model Studio's DashScope `qwen3-asr-flash` (`--provider dashscope`, requires `DASHSCOPE_API_KEY`) and Groq's `whisper-large-v3-turbo` (`--provider groq`, requires `GROQ_API_KEY`; free tier caps single files at 25 MB plus rate limits — **longer audio is automatically chunked with resumable per-chunk progress**) are **optional, opt-in** cloud providers. Its request lifecycle, saved result recovery, and error handling are tested with simulated responses; **real paid-service transcription has not been validated**.
+
+Cloud mode sends audio to the selected provider and may incur charges. DashScope inputs are limited to 10 MB after base64 encoding and at most 5 minutes of audio; oversized files are rejected before submission with a hint to use the local SenseVoice-Small provider instead. Groq handles long audio by splitting it into 20-minute MP3 chunks (~9.6 MB each), submitting them in order with per-chunk persisted progress (rerun the same command to resume without resubmitting finished chunks), and stitching text and offset-adjusted timestamps back together; HTTP 429 responses are waited out via Retry-After / exponential backoff within `--cloud-timeout`. Completed results are persisted and reused after interruptions; `--resubmit` explicitly creates a new task and may charge again. Follow the [cloud transcription guide](./docs/cloud-transcription.md) for credentials, configuration, limits, and recovery.
 
 Automatic podcast/RSS downloads accept only direct public HTTP(S) addresses, without redirects or proxies. For a source requiring either, download the audio yourself first and pass its local file path.
 
@@ -154,6 +248,22 @@ python3 tools/chubby.py retry --all-failed
 ```
 
 The index updates after ingestion and before unified searches. See the [creator workflow](./docs/creator-workflow.md) for retry behavior and [knowledge automation](./docs/knowledge-automation.md) for index migration or rebuilding.
+
+### Subscribe to feeds, podcasts, and YouTube channels (P0)
+
+Subscriptions keep source discovery separate from expensive media work. The first sync creates a seen baseline; new entries enter a review queue by default. Once a source proves reliable, `auto_ingest` can route its YouTube videos or podcast enclosures through the existing subtitle-first / transcription pipeline.
+
+```bash
+python3 tools/chubby.py subscribe init
+python3 tools/chubby.py subscribe add \
+  --id yt-3blue1brown --name "3Blue1Brown" \
+  --kind youtube_channel --channel-id UCYO_jab_esuFRV4b17AJtAw \
+  --content-profile video --mode discover_only
+python3 tools/chubby.py subscribe sync --all
+python3 tools/chubby.py subscribe pending
+```
+
+Schedule `python3 tools/chubby.py subscribe tick --due --process-limit 3` through launchd or cron. `subscribe digest` turns the last N days of queued entries into a daily intelligence brief — zero-LLM by default (event clustering plus vault related-note links), with an optional `--enrich` DeepSeek layer whose model output is always labeled. `subscribe site build` renders the same clusters as a zero-JS static site for GitHub Pages, publishing only titles, sources, links and heat — never bodies or local paths — alongside a `feed.xml` and an `llms.txt` so agents can consume the same events. The workflow consumes public RSS / Atom / JSON feeds and official YouTube channel feeds, including final public output from a user-managed RSSHub, RSS-Bridge, or another provider. A Provider label never enables platform crawling, authentication, or proxying. It does not claim unattended account scanning for X, Xiaohongshu, Douyin, Bilibili, or WeChat. See [subscription and scheduling (Chinese)](./docs/subscriptions.md) and the [7-day Provider acceptance](./docs/subscription-provider-acceptance.md) guide.
 
 ## Install skills for your agent
 
@@ -201,10 +311,10 @@ Configure your actual client with the server command and `VAULT_DIR` pointing to
 | [weibo-transcribe](./weibo-transcribe/SKILL.md) | Weibo video transcription |
 | [zhihu-transcribe](./zhihu-transcribe/SKILL.md) | Zhihu video transcription |
 | [youtube-transcribe](./youtube-transcribe/SKILL.md) | YouTube captions, transcription, optional translation |
-| [podcast-transcribe](./podcast-transcribe/SKILL.md) | Podcasts, RSS, and local audio; optional cloud providers |
+| [podcast-transcribe](./podcast-transcribe/SKILL.md) | Podcasts, RSS, and local audio; optional DashScope/Groq cloud providers |
 | [wechat-article-ingest](./wechat-article-ingest/SKILL.md) | WeChat articles and PDF ingestion |
 | [xiaohongshu-ingest](./xiaohongshu-ingest/SKILL.md) | Xiaohongshu text, images, and video |
-| [x-ingest](./x-ingest/SKILL.md) | X/Twitter text, images, and video |
+| [x-ingest](./x-ingest/SKILL.md) | X/Twitter text, long-form articles (logged-in full text), images, and video |
 | [content-enrich](./content-enrich/SKILL.md) | Optional API-based summaries, key points, and tags |
 | [knowledge-base-management](./knowledge-base-management/SKILL.md) | Document import, indexing, briefs, and MCP |
 | [industry-intelligence-radar](./industry-intelligence-radar/SKILL.md) | Multi-source research workflow |
@@ -217,11 +327,12 @@ Source material is stored locally by default. Network access depends on the oper
 | Operation | Where content is processed |
 |---|---|
 | Local import, keyword search, semantic-lite, briefs | Local; document import does not fetch remote attachments |
-| Platform capture | The source platform; some paths need your own login state |
+| Platform capture | The source platform; some paths need your own login state (`XHS_COOKIE`, `X_COOKIES`, or `YTDLP_COOKIES_FROM_BROWSER` for yt-dlp paths) |
 | Local transcription | Local inference; the first run may download a model |
 | Optional enrichment, translation, learning-note extraction | The configured API, using `DEEPSEEK_API_KEY` |
 | Optional OpenAI embeddings | OpenAI API, using `OPENAI_API_KEY` |
-| Atlas/MuAPI transcription | The selected provider, using `ATLAS_API_KEY` or `MUAPI_API_KEY` |
+| DashScope podcast transcription | Alibaba Cloud Model Studio, using `DASHSCOPE_API_KEY` |
+| Groq podcast transcription | Groq, using `GROQ_API_KEY` |
 | A cloud agent reading notes | The material it reads enters that agent's model context |
 
 API services may charge. Keep credentials and cookies out of notes and version control. Other parsers can hand off Markdown to the local importer; see [optional integrations](./docs/integrations.md) for cue-omni-reader and its current verification status.
@@ -258,10 +369,12 @@ Most detailed guides are currently in Chinese.
 | [Document import](./docs/document-import.md) | File formats, attachments, provenance, and PDF limits |
 | [Installation](./docs/installation.md) | Runtime dependencies and portable skill installation |
 | [MCP configuration](./docs/mcp-workflow.md) | Connect an agent to your library |
-| [Cloud transcription](./docs/cloud-transcription.md) | Atlas/MuAPI configuration and task recovery |
+| [Cloud transcription](./docs/cloud-transcription.md) | DashScope (qwen3-asr-flash) / Groq (whisper-large-v3-turbo) configuration and task recovery |
+| [Subscription and scheduling (Chinese)](./docs/subscriptions.md) | Public feeds / YouTube subscriptions, queue, scheduling, and recovery |
 | [Knowledge automation](./docs/knowledge-automation.md) | Retrieval, optional embeddings, and archive/card workflows |
 | [Optional integrations](./docs/integrations.md) | Import Markdown produced by other tools |
 | [Community triage](./docs/community-triage.md) | Contribution attribution and adoption decisions |
+| [Verification model (Chinese)](./docs/verification-model.md) | Claim-strength tiers, live-acceptance protocol, publish boundaries, third-party evidence |
 | [Changelog](./CHANGELOG.md) | Changes by version |
 
 ## Usage limits

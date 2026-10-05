@@ -5,11 +5,11 @@ script: scripts/transcribe.py
 category: audio
 status: heavy
 source_types: [audio, rss, local_file]
-required_deps: [cmd:ffmpeg, python:faster_whisper]
+required_deps: [cmd:ffmpeg, python:funasr]
 optional_deps: []
 output_contract: markdown_schema_v1
 fallback: local audio file
-failure_modes: [rss_unreachable, audio_download_failed, ffmpeg_missing, faster_whisper_missing, long_audio_timeout]
+failure_modes: [rss_unreachable, audio_download_failed, ffmpeg_missing, funasr_missing, long_audio_timeout]
 fallback_command: download audio locally, then run python3 tools/chubby.py ingest "<local-audio>" --skill podcast
 sample_source: /path/to/audio.mp3
-notes: Long-form audio is slow but stable when local dependencies are ready.
+notes: Long-form audio is slow but stable when local dependencies are ready. Optional synchronous cloud providers: dashscope (qwen3-asr-flash, 10MB/5min) and groq (whisper-large-v3-turbo, 25MB free tier).

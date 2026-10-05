@@ -52,28 +52,28 @@ class ProviderPipelineTest(unittest.TestCase):
     def test_effective_environment_provider_is_frozen_in_command_and_retry(self):
         with patch.dict(
             os.environ,
-            {"PODCAST_TRANSCRIBE_PROVIDER": "atlas", "ATLAS_API_KEY": "private-key"},
+            {"PODCAST_TRANSCRIBE_PROVIDER": "dashscope", "DASHSCOPE_API_KEY": "private-key"},
         ):
             first = self.capture()
         extra = first["execution"]["extra"]
-        self.assertEqual(extra[extra.index("--provider") + 1], "atlas")
-        self.assertEqual(extra[extra.index("--model") + 1], "bytedance/seed-asr-2.0")
+        self.assertEqual(extra[extra.index("--provider") + 1], "dashscope")
+        self.assertEqual(extra[extra.index("--model") + 1], "qwen3-asr-flash")
         self.assertIn("--base-url", extra)
         self.assertNotIn("private-key", json.dumps(first))
         self.args.skill = None
-        with patch.dict(os.environ, {"PODCAST_TRANSCRIBE_PROVIDER": "muapi"}):
+        with patch.dict(os.environ, {"PODCAST_TRANSCRIBE_PROVIDER": "local"}):
             restored, config = chubby.retry_arguments(first, self.args, self.config)
             self.assertEqual(
-                restored.extra[restored.extra.index("--provider") + 1], "atlas"
+                restored.extra[restored.extra.index("--provider") + 1], "dashscope"
             )
-        with patch.dict(os.environ, {"PODCAST_TRANSCRIBE_PROVIDER": "muapi"}):
+        with patch.dict(os.environ, {"PODCAST_TRANSCRIBE_PROVIDER": "local"}):
             self.args.skill = "podcast"
             second = self.capture()
         self.assertNotEqual(first["execution_hash"], second["execution_hash"])
 
     def test_explicit_local_wins_and_invalid_provider_does_not_spawn(self):
         self.args.extra = ["--provider=local"]
-        with patch.dict(os.environ, {"PODCAST_TRANSCRIBE_PROVIDER": "muapi"}):
+        with patch.dict(os.environ, {"PODCAST_TRANSCRIBE_PROVIDER": "dashscope"}):
             result = self.capture()
         extra = result["execution"]["extra"]
         self.assertEqual(extra[extra.index("--provider") + 1], "local")
@@ -86,7 +86,7 @@ class ProviderPipelineTest(unittest.TestCase):
         run.assert_not_called()
 
     def test_resubmit_is_one_shot_and_not_inherited_by_retry(self):
-        self.args.extra = ["--provider", "atlas", "--resubmit"]
+        self.args.extra = ["--provider", "dashscope", "--resubmit"]
         record = self.capture()
         self.assertIn("--resubmit", record["command"])
         self.args.extra = []
@@ -100,21 +100,21 @@ class ProviderPipelineTest(unittest.TestCase):
         self.assertEqual(extra[extra.index("--language") + 1], "")
 
     def test_retry_switches_provider_without_inheriting_old_endpoint_or_model(self):
-        self.args.extra = ["--provider", "muapi"]
+        self.args.extra = ["--provider", "local"]
         record = self.capture()
-        self.args.extra = ["--provider=atlas"]
+        self.args.extra = ["--provider=dashscope"]
         restored, _ = chubby.retry_arguments(record, self.args, self.config)
         _, settings = podcast_options.resolve_extra(restored.extra)
-        self.assertEqual(settings["model"], "bytedance/seed-asr-2.0")
-        self.assertIn("api.atlascloud.ai", settings["base_url"])
+        self.assertEqual(settings["model"], "qwen3-asr-flash")
+        self.assertIn("dashscope.aliyuncs.com", settings["base_url"])
         self.args.extra = ["--provider", "local"]
         restored, _ = chubby.retry_arguments(record, self.args, self.config)
         _, settings = podcast_options.resolve_extra(restored.extra)
-        self.assertEqual(settings["model"], "small")
+        self.assertEqual(settings["model"], "SenseVoiceSmall")
         self.assertEqual(settings["base_url"], "")
 
     def test_interrupted_parent_keeps_cloud_attempt_and_final_event_replaces_it(self):
-        self.args.extra = ["--provider", "atlas"]
+        self.args.extra = ["--provider", "dashscope"]
         with patch.object(chubby.subprocess, "run", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 chubby.run_ingest_source("https://example.com/audio.mp3", self.args, self.config)
@@ -145,7 +145,7 @@ class ProviderDoctorTest(unittest.TestCase):
     def test_cloud_does_not_require_local_models_and_never_displays_key(self):
         output = io.StringIO()
         with (
-            patch.dict(os.environ, {"MUAPI_API_KEY": "private-key"}),
+            patch.dict(os.environ, {"DASHSCOPE_API_KEY": "private-key"}),
             patch.object(
                 check_env.platform_health,
                 "check_dependency",
@@ -154,12 +154,12 @@ class ProviderDoctorTest(unittest.TestCase):
             contextlib.redirect_stdout(output),
         ):
             code = check_env.main(
-                ["--platform", "podcast", "--provider", "muapi", "--json"]
+                ["--platform", "podcast", "--provider", "dashscope", "--json"]
             )
         self.assertEqual(code, 0)
         self.assertNotIn("private-key", output.getvalue())
         self.assertEqual(
-            json.loads(output.getvalue())["platforms"][0]["provider"], "muapi"
+            json.loads(output.getvalue())["platforms"][0]["provider"], "dashscope"
         )
 
     def test_missing_cloud_credentials_fails_without_network(self):
@@ -168,7 +168,7 @@ class ProviderDoctorTest(unittest.TestCase):
             contextlib.redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(
-                check_env.main(["--platform", "podcast", "--provider", "atlas"]), 1
+                check_env.main(["--platform", "podcast", "--provider", "dashscope"]), 1
             )
 
 

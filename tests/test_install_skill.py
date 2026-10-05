@@ -172,7 +172,7 @@ class SetupDependencyRoutingTest(unittest.TestCase):
                 if name in {"douyin-transcribe", "bilibili-transcribe", "youtube-transcribe", "tiktok-transcribe", "weibo-transcribe", "zhihu-transcribe"}:
                     self.assertIn("pip install funasr", calls)
                 elif name == "podcast-transcribe":
-                    self.assertIn("pip install faster-whisper", calls)
+                    self.assertIn("pip install funasr", calls)
                 elif name == "wechat-article-ingest":
                     self.assertIn("pip install beautifulsoup4", calls)
                 else:

@@ -1,0 +1,10 @@
+{
+  "user": {"name": "Example Author", "screen_name": "example"},
+  "text": "https://t.co/article",
+  "created_at": "2026-09-30T08:00:00Z",
+  "favorite_count": 42, "conversation_count": 3,
+  "article": {"title": "Building reliable AI agents", "preview_text": "A practical guide to reliable agent workflows. #AI",
+    "rest_id": "2102982854732922880",
+    "cover_media": {"media_info": {"original_img_url": "https://pbs.twimg.com/media/example.jpg"}}
+  }
+}
