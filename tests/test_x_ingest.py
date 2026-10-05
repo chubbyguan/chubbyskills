@@ -116,6 +116,20 @@ class XIngestFallbackTest(unittest.TestCase):
 
 
 class XArticleTest(unittest.TestCase):
+    def test_syndication_article_matches_golden_output(self):
+        fixture = os.path.join(ROOT, "fixtures", "golden", "x-article-syndication.json")
+        golden = os.path.join(ROOT, "fixtures", "golden", "x-article-preview.md")
+        with open(fixture, encoding="utf-8") as source:
+            data = fetch_tweet.parse_tweet(json.load(source))
+        title = fetch_tweet.compute_title(data)
+        image_refs = [("url", url) for url in data["photos"]]
+        actual = fetch_tweet.build_markdown(
+            data, "https://x.com/example/status/2102982854732922880", title, image_refs
+        )
+
+        with open(golden, encoding="utf-8") as expected:
+            self.assertEqual(actual, expected.read())
+
     def test_parse_syndication_article_marks_preview(self):
         tw = {
             "user": {"name": "Ada", "screen_name": "ada"},
