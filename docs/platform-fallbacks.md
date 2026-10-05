@@ -49,6 +49,30 @@ python3 tools/platform_smoke.py --mode live --check
 
 如果需求是大规模、持续、多账号地抓取平台数据（舆情监控、商业数据管道等），[MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) 这类以浏览器自动化为核心的项目更合适——它们投入对应的维护资源，也要求使用者自行承担账号与合规风险。两条路线服务的是不同场景，不存在谁替代谁。
 
+## 凭据体检
+
+登录态失效是采集类工具最常见的失败原因，而它的表现往往只是一个笼统的"采集失败"。先跑这条命令，它会告诉你**哪些凭据配了、缺的那些怎么拿、以及上一次真实采集的结果**：
+
+```bash
+python3 tools/chubby.py doctor --credentials
+```
+
+```text
+【未配置】
+  ⚪ X_COOKIES
+     作用：抓 X 长文章（Article）全文；未配置时只取到预览文本
+     获取：
+       浏览器登录 x.com → 开发者工具 → Application → Cookies → https://x.com
+       复制 auth_token 与 ct0 两个值
+       export X_COOKIES='auth_token=<值>; ct0=<值>'
+
+【最近一次相关采集】
+  x          2026-10-05 11:14  success
+  youtube    2026-10-03 15:37  success
+```
+
+两点刻意的设计：**凭据的值永远不会被打印**（这份输出常被贴进 issue，值会跟着外传）；**不做主动探活**——探活本身要走真实平台请求，正是可能触发风控的那类流量。凭据是否还有效，以上一次真实采集的结果为准。
+
 ## Issue Triage
 
 提交平台失败 issue 时至少贴：

@@ -48,7 +48,7 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 | 公众号 | 测试 | HTML 需 `beautifulsoup4`，PDF 兜底 |
 | 抖音 / TikTok / 微博 / 知乎 | 测试·重依赖 | 视频转录需 `funasr` + `ffmpeg` |
 | 播客 | 重依赖 | `funasr`（SenseVoice-Small），可选 DashScope / Groq 云转录 |
-| X / 小红书 | 手动兜底 | 零依赖采集正文；X 长文章可配 `X_COOKIES` 抓登录态全文，失败可手动补全文 |
+| X / 小红书 | 手动兜底 | 零依赖采集正文；X 长文章可配 `X_COOKIES` 抓登录态全文，失败可手动补全文。凭据怎么拿、上次是否成功：`chubby doctor --credentials` |
 | RSS / YouTube 频道订阅 | P0 + P1 | 公开 Feed；支持 RSSHub / RSS-Bridge BYO 标签，默认只发现 |
 | 本地文档 | 稳定 | 零依赖，Markdown/TXT/PDF 文字层 |
 

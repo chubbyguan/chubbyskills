@@ -1044,6 +1044,11 @@ def command_doctor(args, config):
         command.extend(["--platform", args.platform])
     if getattr(args, "provider", None):
         command.extend(["--provider", args.provider])
+    if getattr(args, "credentials", False):
+        command.append("--credentials")
+        state_file = config.get("state_file")
+        if state_file:
+            command.extend(["--state-file", str(resolve_path(state_file))])
     result = subprocess.run(command, cwd=str(Path.cwd()))
     return result.returncode
 
@@ -1399,6 +1404,7 @@ def build_parser():
     doctor.set_defaults(handler=command_doctor)
     doctor.add_argument("--platform", choices=sorted(chubby_ingest.SKILL_COMMANDS))
     doctor.add_argument("--provider", choices=["local", "dashscope", "groq"], help="Podcast provider to check")
+    doctor.add_argument("--credentials", action="store_true", help="Show which credentials are configured, how to obtain the missing ones, and the last real outcome per skill")
 
     quickstart = sub.add_parser("quickstart", help="Run the first-use offline acceptance flow")
     quickstart.add_argument("--force-init", action="store_true", help="Overwrite chubby.yaml before checks")

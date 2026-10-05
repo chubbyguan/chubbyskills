@@ -46,7 +46,7 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 | WeChat OA | Beta | HTML needs `beautifulsoup4`, PDF fallback |
 | Douyin / TikTok / Weibo / Zhihu | Beta, heavy deps | Video transcription needs `funasr` + `ffmpeg` |
 | Podcasts | Heavy deps | `funasr` (SenseVoice-Small), optional DashScope/Groq cloud transcription |
-| X / Xiaohongshu | Manual fallback | Zero-dependency capture; X long-form articles support logged-in full text via `X_COOKIES`; manual text fallback |
+| X / Xiaohongshu | Manual fallback | Zero-dependency capture; X long-form articles support logged-in full text via `X_COOKIES`; manual text fallback. How to obtain credentials and whether they last worked: `chubby doctor --credentials` |
 | RSS / YouTube channel subscriptions | P0 + P1 | Public feeds; BYO RSSHub/RSS-Bridge provenance labels; discovery-only is the safe default |
 | Local documents | Stable | Zero dependency, Markdown/TXT/PDF text layer |
 

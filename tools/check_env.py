@@ -33,6 +33,141 @@ def has_mod(m):
         return False
 
 
+# Credentials the project reads, what each one unlocks, and how to obtain it.
+# `secret` controls whether the value may be echoed: a browser name is not a
+# secret, a session cookie is, and neither may ever be written to a report.
+CREDENTIALS = (
+    {
+        "name": "YTDLP_COOKIES_FROM_BROWSER",
+        "secret": False,
+        "skills": ("youtube", "bilibili", "douyin", "tiktok", "weibo", "zhihu", "podcast"),
+        "unlocks": "YouTube / B站 等被判定为机器人时，用本机浏览器的登录态证明",
+        "how": ["export YTDLP_COOKIES_FROM_BROWSER=chrome   # 或 safari / edge / firefox"],
+    },
+    {
+        "name": "YTDLP_REMOTE_COMPONENTS",
+        "secret": False,
+        "skills": ("youtube",),
+        "unlocks": "YouTube 的 JS 挑战求解组件，缺它时部分视频拿不到格式",
+        "how": ["export YTDLP_REMOTE_COMPONENTS=ejs:github"],
+    },
+    {
+        "name": "X_COOKIES",
+        "secret": True,
+        "skills": ("x",),
+        "unlocks": "抓 X 长文章（Article）全文；未配置时只取到预览文本",
+        "how": [
+            "浏览器登录 x.com → 开发者工具 → Application → Cookies → https://x.com",
+            "复制 auth_token 与 ct0 两个值",
+            "export X_COOKIES='auth_token=<值>; ct0=<值>'",
+        ],
+    },
+    {
+        "name": "XHS_COOKIE",
+        "secret": True,
+        "skills": ("xiaohongshu",),
+        "unlocks": "提高小红书图文采集的成功率；未配置时更容易被风控拦住",
+        "how": ["登录小红书网页版，从开发者工具复制 Cookie 头，整串写入 XHS_COOKIE"],
+    },
+    {
+        "name": "DEEPSEEK_API_KEY",
+        "secret": True,
+        "skills": ("content-enrich", "industry-intelligence-radar"),
+        "unlocks": "内容加工、爆款拆解、学习笔记，以及 subscribe digest --enrich",
+        "how": ["在 DeepSeek 控制台创建 API Key", "export DEEPSEEK_API_KEY=sk-..."],
+    },
+    {
+        "name": "DASHSCOPE_API_KEY",
+        "secret": True,
+        "skills": ("podcast",),
+        "unlocks": "播客云转录（qwen3-asr-flash），免本地模型",
+        "how": ["在阿里云百炼创建 API Key", "export DASHSCOPE_API_KEY=sk-..."],
+    },
+    {
+        "name": "GROQ_API_KEY",
+        "secret": True,
+        "skills": ("podcast",),
+        "unlocks": "播客云转录（whisper-large-v3-turbo），免费额度可用",
+        "how": ["在 Groq 控制台创建 API Key", "export GROQ_API_KEY=gsk_..."],
+    },
+)
+
+
+def _last_runs_by_skill(state_file, skills, limit=400):
+    """Most recent recorded outcome per skill, read from the run journal."""
+    latest = {}
+    if not state_file or not os.path.isfile(state_file):
+        return latest
+    rows = []
+    with open(state_file, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                continue
+    for record in rows[-limit:]:
+        skill = record.get("skill")
+        if skill in skills:
+            latest[skill] = record
+    return latest
+
+
+def credentials_report(state_file=None):
+    """Report configuration state, how to obtain each credential, and the last
+    real outcome of the paths that depend on them.
+
+    Deliberately no liveness probe: that would mean a real authenticated request
+    to each platform, which is exactly the traffic that triggers the risk
+    controls this report is meant to help with. Whether a credential still works
+    is answered by the last recorded run, not by guessing.
+    """
+    print("🔑 凭据体检\n")
+    configured, missing = [], []
+    for item in CREDENTIALS:
+        (configured if os.environ.get(item["name"]) else missing).append(item)
+
+    print("【已配置】")
+    if not configured:
+        print("  （无）")
+    for item in configured:
+        value = os.environ.get(item["name"], "")
+        shown = value if not item["secret"] else "（已设置，值不显示）"
+        print(f"  ✅ {item['name']} = {shown}")
+        print(f"     {item['unlocks']}")
+
+    print("\n【未配置】")
+    if not missing:
+        print("  （无）")
+    for item in missing:
+        print(f"  ⚪ {item['name']}")
+        print(f"     作用：{item['unlocks']}")
+        print("     获取：")
+        for step in item["how"]:
+            print(f"       {step}")
+
+    skills = {skill for item in CREDENTIALS for skill in item["skills"]}
+    latest = _last_runs_by_skill(state_file, skills)
+    print("\n【最近一次相关采集】")
+    if not latest:
+        print("  （还没有记录。运行一次 ingest 后，这里会显示真实结果）")
+    for skill in sorted(latest):
+        record = latest[skill]
+        stamp = (record.get("started_at") or "")[:16].replace("T", " ")
+        status = record.get("status") or "?"
+        detail = ""
+        if status != "success":
+            error = (record.get("error") or "").strip().splitlines()
+            detail = f"：{error[0][:80]}" if error else ""
+        print(f"  {skill:<10} {stamp}  {status}{detail}")
+
+    print("\n说明：这里只报告「是否配置」和「上一次的真实结果」，不会主动发探活请求——"
+          "探活本身要走真实平台，正是可能触发风控的那类流量。凭据是否还有效，以上次结果为准。")
+    return 0
+
+
 def report_all():
     print("🩺 chubbyskills 依赖体检\n")
 
@@ -140,7 +275,11 @@ def main(argv=None):
     parser.add_argument("--platform", action="append", help="Platform ID; repeat to check more than one")
     parser.add_argument("--provider", choices=["local", "dashscope", "groq"], help="Provider for --platform podcast")
     parser.add_argument("--json", action="store_true", help="Return the platform dependency report as JSON")
+    parser.add_argument("--credentials", action="store_true", help="Report credential state and how to obtain each one")
+    parser.add_argument("--state-file", help="Run journal used to show the last real outcome per skill")
     args = parser.parse_args(argv)
+    if args.credentials:
+        return credentials_report(args.state_file)
     if args.provider and (not args.platform or "podcast" not in args.platform):
         parser.error("--provider requires --platform podcast")
     if not args.platform and not args.json:
