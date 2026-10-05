@@ -7,7 +7,8 @@ for publishing to GitHub Pages.
 Public-site content boundary (hard rule): entry titles, source names,
 publish times, original links, cluster heat and source health stats only.
 Never entry bodies/transcripts, local vault paths, related-note titles, or
-any credentials.
+any credentials. The RSS feed and `llms.txt` emitted next to the HTML follow
+exactly the same boundary.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import html
 import re
 import shutil
 from datetime import datetime, timedelta
+from email.utils import format_datetime
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -118,6 +120,21 @@ def _escape(value: Any) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
+def _escape_text(value: Any) -> str:
+    """Escape for text nodes — Markdown and XML alike.
+
+    Only the characters that would otherwise open markup or be read back as an
+    entity are touched; quotes stay literal so `Euler's Formula` reads as
+    written instead of as `Euler&#x27;s Formula`.
+    """
+    return (
+        str(value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
 def _safe_href(url: str) -> str:
     """Only http(s) links are emitted; anything else degrades to '#'."""
     if re.match(r"^https?://", url or "", re.IGNORECASE):
@@ -146,9 +163,9 @@ def _chip(label: str, color: str) -> str:
 
 
 def _heat_badge(cluster: dict[str, Any]) -> str:
-    if cluster["heat"] <= 1:
+    if cluster["heat"] < 2:
         return ""
-    return f'<span class="heat-badge">🔥 ×{cluster["heat"]}</span>'
+    return f'<span class="heat-badge">🔥 ×{cluster["heat"]:g}</span>'
 
 
 def _render_card(cluster: dict[str, Any], names: dict[str, str]) -> str:
@@ -272,6 +289,157 @@ def _assets_prefix(base_url: str, depth: int) -> str:
     return "." if depth == 0 else "/".join(".." for _ in range(depth))
 
 
+FEED_LIMIT = 200
+
+
+def _cluster_link(cluster: dict[str, Any]) -> str:
+    """First http(s) original link in the cluster; "" when there is none."""
+    for entry in cluster["entries"]:
+        url = entry.get("canonical_url") or ""
+        if re.match(r"^https?://", url, re.IGNORECASE):
+            return url
+    return ""
+
+
+def _cluster_stamp(cluster: dict[str, Any]) -> datetime | None:
+    stamps = [
+        stamp
+        for stamp in (subscription_digest.entry_stamp(entry) for entry in cluster["entries"])
+        if stamp is not None
+    ]
+    return max(stamps) if stamps else None
+
+
+def _cluster_guid(cluster: dict[str, Any]) -> str:
+    """Stable per event: derived from its original links, so re-renders agree."""
+    key = "|".join(sorted(entry.get("canonical_url") or "" for entry in cluster["entries"]))
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+
+
+def _markdown_link_target(url: str) -> str:
+    """Markdown link destination: http(s) only, with the characters that would
+    break out of `](...)` percent-encoded. `&` is left alone — escaping it
+    would corrupt ordinary query strings."""
+    if not re.match(r"^https?://", url or "", re.IGNORECASE):
+        return ""
+    for raw, encoded in ((" ", "%20"), ("(", "%28"), (")", "%29"), ("<", "%3C"), (">", "%3E")):
+        url = url.replace(raw, encoded)
+    return url
+
+
+def _cluster_notes(cluster: dict[str, Any], names: dict[str, str]) -> str:
+    """`来源A、来源B · 6 条 · 热度 3.5` — same facts the cards show, no bodies."""
+    sources = sorted(
+        {names.get(entry["subscription_id"], entry["subscription_id"]) for entry in cluster["entries"]}
+    )
+    parts = ["、".join(sources), f"{len(cluster['entries'])} 条"]
+    label = subscription_digest.heat_label(cluster)
+    if label:
+        parts.append(label)
+    return " · ".join(parts)
+
+
+def _render_feed(
+    clusters: list[dict[str, Any]],
+    names: dict[str, str],
+    *,
+    site_name: str,
+    base_url: str,
+    now: str,
+) -> str:
+    """RSS 2.0 over the same events as the index page.
+
+    Item links point at the original sources: the site indexes, it does not
+    republish. Without an absolute `--base-url` there is no canonical site URL
+    to advertise, so the channel links to the project and `atom:link` is
+    omitted rather than emitting a relative URL a reader cannot resolve.
+    """
+    site_url = base_url.rstrip("/") + "/" if re.match(r"^https?://", base_url) else PROJECT_URL
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
+        "  <channel>",
+        f"    <title>{_escape_text(site_name)}</title>",
+        f"    <link>{_escape_text(site_url)}</link>",
+        f"    <description>{_escape_text(ABOUT_TEXT)}</description>",
+        "    <language>zh-CN</language>",
+        f"    <lastBuildDate>{format_datetime(subscription_store.parse_iso(now))}</lastBuildDate>",
+    ]
+    if site_url != PROJECT_URL:
+        lines.append(
+            f'    <atom:link href="{_escape(site_url + "feed.xml")}" '
+            'rel="self" type="application/rss+xml"/>'
+        )
+    for cluster in clusters[:FEED_LIMIT]:
+        link = _cluster_link(cluster) or site_url
+        lines += [
+            "    <item>",
+            f"      <title>{_escape_text(cluster['title'])}</title>",
+            f"      <link>{_escape_text(link)}</link>",
+            f'      <guid isPermaLink="false">{_cluster_guid(cluster)}</guid>',
+        ]
+        stamp = _cluster_stamp(cluster)
+        if stamp is not None:
+            lines.append(f"      <pubDate>{format_datetime(stamp)}</pubDate>")
+        lines.append(f"      <description>{_escape_text(_cluster_notes(cluster, names))}</description>")
+        for source in sorted(
+            {names.get(entry["subscription_id"], entry["subscription_id"]) for entry in cluster["entries"]}
+        ):
+            lines.append(f"      <category>{_escape_text(source)}</category>")
+        lines.append("    </item>")
+    lines += ["  </channel>", "</rss>", ""]
+    return "\n".join(lines)
+
+
+def _render_llms_txt(
+    clusters: list[dict[str, Any]],
+    names: dict[str, str],
+    health_rows: list[dict[str, Any]],
+    *,
+    site_name: str,
+    now: str,
+    days: int,
+    entry_count: int,
+    source_count: int,
+) -> str:
+    """Agent-readable index (llmstxt.org shape) under the same content boundary."""
+    lines = [
+        f"# {site_name}",
+        "",
+        f"> {ABOUT_TEXT}",
+        "",
+        f"生成时间：{now[:19].replace('T', ' ')} · 窗口：近 {days} 天 · "
+        f"{entry_count} 条 / {len(clusters)} 个事件 / {source_count} 个来源",
+        "",
+        "## 最近事件",
+        "",
+    ]
+    for cluster in clusters:
+        # Markdown renders inline HTML, so titles and source names are escaped
+        # exactly like the HTML pages; the URL keeps its query string intact.
+        title = _escape_text(cluster["title"]).replace("[", "\\[").replace("]", "\\]")
+        notes = _escape_text(_cluster_notes(cluster, names))
+        link = _markdown_link_target(_cluster_link(cluster))
+        lines.append(f"- [{title}]({link}) — {notes}" if link else f"- {title} — {notes}")
+    lines += ["", "## 订阅源", ""]
+    for row in health_rows:
+        rate = f"{row['success_rate']}%" if row["success_rate"] is not None else "—"
+        lines.append(
+            f"- {_escape_text(row['name'])}（{_escape_text(row['kind'])}）："
+            f"近 7 天检查 {row['checks']} 次，成功率 {rate}"
+        )
+    lines += [
+        "",
+        "## 内容边界",
+        "",
+        "- 只输出条目标题、来源名、发布时间、原始链接、事件热度与来源健康统计",
+        "- 不含条目正文或转录、本地知识库路径、笔记标题、任何凭据",
+        "- 条目版权归原发布方所有，请通过原始链接访问来源",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def build_site(
     args: Any,
     config: dict[str, Any],
@@ -298,7 +466,8 @@ def build_site(
 
     entries = collect_site_entries(store, days, now=now)
     names = {item["id"]: item["name"] for item in document["subscriptions"]}
-    clusters = subscription_digest.cluster_entries(entries)
+    reference = subscription_store.parse_iso(now)
+    clusters = subscription_digest.cluster_entries(entries, now=reference)
     index_cutoff = (
         subscription_store.parse_iso(now) - timedelta(days=INDEX_WINDOW_DAYS)
     ).isoformat()
@@ -318,6 +487,7 @@ def build_site(
         :ARCHIVE_WINDOW_DAYS
     ]
 
+    health_rows = compute_source_health(store, document, now=now)
     templates = _templates(template_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "archive").mkdir(exist_ok=True)
@@ -348,7 +518,7 @@ def build_site(
             page_title=f"订阅源 · {site_name}",
             assets=root_assets,
             active="sources",
-            rows=_render_source_rows(compute_source_health(store, document, now=now)),
+            rows=_render_source_rows(health_rows),
         ),
         output_dir
         / "about.html": _page(
@@ -364,7 +534,7 @@ def build_site(
         ),
     }
     for date in archive_dates:
-        day_clusters = subscription_digest.cluster_entries(by_date[date])
+        day_clusters = subscription_digest.cluster_entries(by_date[date], now=reference)
         pages[output_dir / "archive" / f"{date}.html"] = _page(
             templates,
             "archive",
@@ -402,6 +572,20 @@ def build_site(
         else '    <p class="empty">暂无归档。</p>',
     )
 
+    pages[output_dir / "feed.xml"] = _render_feed(
+        index_clusters, names, site_name=site_name, base_url=base_url, now=now
+    )
+    pages[output_dir / "llms.txt"] = _render_llms_txt(
+        index_clusters,
+        names,
+        health_rows,
+        site_name=site_name,
+        now=now,
+        days=INDEX_WINDOW_DAYS,
+        entry_count=len(entries),
+        source_count=len(document["subscriptions"]),
+    )
+
     for path, content in pages.items():
         path.write_text(content, encoding="utf-8")
     css_source = (Path(template_dir) if template_dir else TEMPLATE_DIR) / "style.css"
@@ -414,6 +598,7 @@ def build_site(
         f"   {len(entries)} 条 · {len(clusters)} 个事件 · "
         f"{len(archive_dates)} 天归档 · {len(document['subscriptions'])} 个来源"
     )
+    print(f"   Agent 出口：{output_dir / 'feed.xml'} · {output_dir / 'llms.txt'}")
     return 0
 
 

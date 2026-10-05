@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import timedelta
 import types
 import unittest
 from pathlib import Path
@@ -136,6 +137,60 @@ class SubscriptionDigestTest(unittest.TestCase):
         self.assertEqual(len(hot["entries"]), 2)
         strict = subscription_digest.cluster_entries(entries, threshold=1.0)
         self.assertEqual(len(strict), 3)
+
+    def test_heat_decays_with_report_age(self):
+        """Heat is a recency-weighted distinct source count, not a raw tally."""
+        now = subscription_store.parse_iso(self.now)
+        fresh = now.isoformat()
+        aged = (now - timedelta(hours=30)).isoformat()
+        stale = (now - timedelta(hours=72)).isoformat()
+
+        def heat(*stamps):
+            entries = [
+                {
+                    "title": "OpenAI releases GPT-6 model",
+                    "subscription_id": f"feed-{index}",
+                    "published_at": stamp,
+                    "discovered_at": stamp,
+                }
+                for index, stamp in enumerate(stamps)
+            ]
+            clusters = subscription_digest.cluster_entries(entries, threshold=0.5, now=now)
+            return clusters[0]["heat"], clusters[0]["source_count"]
+
+        self.assertEqual(heat(fresh, fresh), (2.0, 2))  # inside 24h: full weight
+        self.assertEqual(heat(fresh, aged), (1.5, 2))  # 24-48h: halved
+        self.assertEqual(heat(fresh, stale), (1.0, 2))  # past 48h: no contribution
+        self.assertEqual(heat(stale, stale), (0.0, 2))
+
+    def test_heat_counts_each_source_once_at_its_freshest_report(self):
+        now = subscription_store.parse_iso(self.now)
+        fresh = now.isoformat()
+        stale = (now - timedelta(hours=72)).isoformat()
+
+        def cluster_of(*stamps):
+            entries = [
+                {
+                    "title": f"OpenAI releases GPT-6 model{' today' if index else ''}",
+                    "subscription_id": "feed-a",
+                    "published_at": stamp,
+                    "discovered_at": stamp,
+                }
+                for index, stamp in enumerate(stamps)
+            ]
+            return subscription_digest.cluster_entries(entries, threshold=0.5, now=now)[0]
+
+        repeated = cluster_of(fresh, fresh)
+        self.assertEqual((repeated["heat"], repeated["source_count"]), (1.0, 1))
+        # One source reporting an old and a fresh item still counts once, at
+        # the freshest weight — otherwise a single feed could inflate its own heat.
+        mixed = cluster_of(stale, fresh)
+        self.assertEqual((mixed["heat"], mixed["source_count"]), (1.0, 1))
+
+    def test_heat_label_hides_events_colder_than_the_window(self):
+        self.assertEqual(subscription_digest.heat_label({"heat": 3.0}), "热度 3")
+        self.assertEqual(subscription_digest.heat_label({"heat": 2.5}), "热度 2.5")
+        self.assertEqual(subscription_digest.heat_label({"heat": 0.0}), "")
 
     def test_succeeded_entry_links_local_note_and_frontmatter_counts(self):
         note = self.vault / "10_Sources" / "note.md"

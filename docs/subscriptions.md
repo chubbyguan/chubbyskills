@@ -184,7 +184,8 @@ python3 tools/chubby.py subscribe digest --days 7 --output digest.md
 
 数据源是订阅 SQLite 的 entries 表（`discovered` / `queued` / `ingesting` / `succeeded` 等在途与已处理状态；`seen` 基线与 `skipped` 不计入）。窗口内没有条目时只提示、不写文件。
 
-- **事件聚簇**：标题归一化（小写、去标点、提取关键词 token + 中文二元组）后按 Jaccard 相似度贪心聚簇，同一事件被多个来源报道时聚成一簇，热度 = 报道来源数。阈值用 `--cluster-threshold` 调（默认 0.5，越高越严格）。
+- **事件聚簇**：标题归一化（小写、去标点、提取关键词 token + 中文二元组）后按 Jaccard 相似度贪心聚簇，同一事件被多个来源报道时聚成一簇。阈值用 `--cluster-threshold` 调（默认 0.5，越高越严格）。
+- **热度带时间衰减**：每个独立来源只计一次（同一来源重复报道不叠加），权重按该来源最新一条报道的年龄算——24 小时内满权、24–48 小时减半、超过 48 小时不再计入。这个模型借自 AIHOT 的事件热度：否则一周前被 5 个来源报道过的旧事件会一直压住今早 3 个来源的新事件，在 7 天窗口的站点上尤其明显。全部报道都过期时热度为 0，只显示「N 条 / M 源」而不显示一个误导性的「热度 0」。排序与展示用的是同一个衰减值，不会出现「热度 3 排在热度 5 上面」的错乱。
 - **知识库关联**：每个事件用条目标题在 vault 索引里做检索，显示"知识库已有 N 篇相关笔记"（top 3 标题 + 路径）。`--no-vault-links` 可跳过。
 - **证据可回查**：已处理（`succeeded`）的条目链接到本地笔记路径；未处理的保留原始 URL。
 
@@ -215,7 +216,8 @@ python3 tools/chubby.py subscribe site build --days 30 \
 
 页面：`index.html`（近 7 天事件流，按热度+时间排序的聚簇卡片）、`archive/<date>.html`（近 30 天每日归档）、`sources.html`（订阅源表：名称、类型、最近检查时间、7 天检查数与成功率，读 source_checks）、`about.html`（项目说明与免责）+ `style.css`。聚簇复用 digest 的标题相似度逻辑，不依赖 digest 的 Markdown 产物。
 
-**公开站内容边界（硬规则）**：只放条目标题、来源名、发布时间、原始链接、聚簇热度和来源健康统计；**绝不**输出正文/转录全文、本地 vault 路径、关联笔记标题或任何凭据。所有用户内容 HTML 转义；泄漏断言由测试保障。注意输出目录是生成物，重复 build 会**覆盖**（与 digest 的不覆盖惯例不同）。
+**Agent 出口**：站点根同时生成 `feed.xml`（RSS 2.0，每个事件一条 item，条目链接指向原始来源而非本站）和 `llms.txt`（llmstxt.org 形状：事件索引 + 订阅源健康表 + 内容边界声明），让站点不只给人看、也能被 Agent 直接消费。`index.html` 的 `<head>` 用 `<link rel="alternate" type="application/rss+xml">` 指向 feed。只有当 `--base-url` 是绝对 URL 时才输出 `atom:link rel="self"`——宁可不写，也不发一个读者解析不了的相对自我地址。Markdown/XML 文本节点只转义 `&`、`<`、`>`（引号保持原样，`Euler's Formula` 不会变成 `Euler&#x27;s Formula`），而 HTML 属性仍用完整转义。
+**公开站内容边界（硬规则）**：只放条目标题、来源名、发布时间、原始链接、聚簇热度和来源健康统计；**绝不**输出正文/转录全文、本地 vault 路径、关联笔记标题或任何凭据。`feed.xml` 与 `llms.txt` 受完全相同的约束。所有用户内容转义；泄漏断言由测试保障，且扫描范围覆盖这三个出口。注意输出目录是生成物，重复 build 会**覆盖**（与 digest 的不覆盖惯例不同）。
 
 部署到 GitHub Pages（示例）：
 

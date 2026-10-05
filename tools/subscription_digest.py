@@ -15,7 +15,7 @@ import os
 import re
 import sys
 import urllib.request
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,15 @@ DIGEST_STATES = (
 
 DEFAULT_CLUSTER_THRESHOLD = 0.5
 MAX_ENRICH_CLUSTERS = 10
+
+# Cluster heat decays with age (adapted from AIHOT's event-based trending):
+# inside HEAT_FRESH_HOURS every distinct source counts once, up to
+# HEAT_WINDOW_HOURS it counts half, and past that it stops contributing.
+# Without this a five-source story from last week outranks a three-source
+# story from this morning, which is exactly the multi-day site view.
+HEAT_FRESH_HOURS = 24
+HEAT_WINDOW_HOURS = 48
+HEAT_AGED_WEIGHT = 0.5
 
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from",
@@ -107,12 +116,65 @@ def collect_window_entries(
     return [dict(row) for row in rows]
 
 
+def entry_stamp(entry: dict[str, Any]) -> datetime | None:
+    """Publish time, falling back to discovery time; naive values are UTC."""
+    raw = entry.get("published_at") or entry.get("discovered_at") or ""
+    if not raw:
+        return None
+    try:
+        stamp = subscription_store.parse_iso(raw)
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+
+
+def heat_weight(age_hours: float) -> float:
+    """Recency weight for one reporting source."""
+    if age_hours <= HEAT_FRESH_HOURS:
+        return 1.0
+    if age_hours <= HEAT_WINDOW_HOURS:
+        return HEAT_AGED_WEIGHT
+    return 0.0
+
+
+def _cluster_heat(entries: list[dict[str, Any]], reference: datetime) -> float:
+    """Each distinct source counts once, weighted by its freshest report."""
+    weights = []
+    for source in {entry["subscription_id"] for entry in entries}:
+        freshest = max(
+            (
+                stamp
+                for stamp in (
+                    entry_stamp(entry)
+                    for entry in entries
+                    if entry["subscription_id"] == source
+                )
+                if stamp is not None
+            ),
+            default=None,
+        )
+        if freshest is None:
+            weights.append(1.0)
+            continue
+        age_hours = max((reference - freshest).total_seconds() / 3600.0, 0.0)
+        weights.append(heat_weight(age_hours))
+    return round(sum(weights), 1)
+
+
 def cluster_entries(
-    entries: list[dict[str, Any]], threshold: float = DEFAULT_CLUSTER_THRESHOLD
+    entries: list[dict[str, Any]],
+    threshold: float = DEFAULT_CLUSTER_THRESHOLD,
+    *,
+    now: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    """Greedy title-similarity clustering; heat = distinct reporting sources."""
+    """Greedy title-similarity clustering.
+
+    `heat` is the recency-weighted distinct source count (see HEAT_* above);
+    `source_count` keeps the raw count for display.
+    """
     if not 0.1 <= threshold <= 1.0:
         raise DigestError("--cluster-threshold must be between 0.1 and 1.0")
+    reference = now or datetime.now(timezone.utc)
     clusters: list[dict[str, Any]] = []
     for entry in entries:
         tokens = title_tokens(entry["title"])
@@ -130,7 +192,8 @@ def cluster_entries(
     for cluster in clusters:
         sources = {entry["subscription_id"] for entry in cluster["entries"]}
         cluster["sources"] = sorted(sources)
-        cluster["heat"] = len(sources)
+        cluster["source_count"] = len(sources)
+        cluster["heat"] = _cluster_heat(cluster["entries"], reference)
         cluster["title"] = cluster["entries"][0]["title"]
         cluster["tokens"] = frozenset(cluster["tokens"])
     clusters.sort(
@@ -300,6 +363,23 @@ def _entry_link(entry: dict[str, Any], vault_root: Path) -> str:
     return f"[{title}]({entry['canonical_url']})"
 
 
+def heat_label(cluster: dict[str, Any]) -> str:
+    """`热度 3.5`, or "" once every report is older than the decay window."""
+    heat = cluster["heat"]
+    return "" if heat < 1 else f"热度 {heat:g}"
+
+
+def _heat_suffix(cluster: dict[str, Any]) -> str:
+    """` · 热度 3.5（6 条 / 5 源）`.
+
+    Heat below 1 means every report is older than the decay window, so only
+    the raw counts are shown rather than a misleading "热度 0".
+    """
+    counts = f"{len(cluster['entries'])} 条 / {cluster['source_count']} 源"
+    label = heat_label(cluster)
+    return f" · {counts}" if not label else f" · {label}（{counts}）"
+
+
 def render_markdown(
     clusters: list[dict[str, Any]],
     *,
@@ -334,7 +414,7 @@ def render_markdown(
         entries = cluster["entries"]
         headline = cluster.get("llm_headline") or entries[0]["title"]
         marker = "🤖 " if cluster.get("llm_headline") else ""
-        heat = f" · 热度 {cluster['heat']}（{len(entries)} 条 / {cluster['heat']} 源）"
+        heat = _heat_suffix(cluster)
         score = (
             f" · 🤖 评分 {cluster['llm_score']}/10" if "llm_score" in cluster else ""
         )
@@ -386,7 +466,7 @@ def run_digest(args: Any, config: dict[str, Any], document: dict[str, Any], stor
         print(f"ℹ️  近 {days} 天窗口内没有订阅条目；先运行 subscribe sync 积累数据。")
         return 0
 
-    clusters = cluster_entries(entries, threshold=threshold)
+    clusters = cluster_entries(entries, threshold=threshold, now=subscription_store.parse_iso(now))
     names = {item["id"]: item["name"] for item in document["subscriptions"]}
     source_count = len({entry["subscription_id"] for entry in entries})
 

@@ -1,5 +1,6 @@
 import getpass
 import tempfile
+from datetime import timedelta
 import types
 import unittest
 from pathlib import Path
@@ -100,6 +101,13 @@ class SubscriptionSiteTest(unittest.TestCase):
             path.read_text(encoding="utf-8") for path in self.output.rglob("*.html")
         )
 
+    def all_public_output(self):
+        """Every file the site publishes, HTML plus the agent-facing exits."""
+        return self.all_html() + "\n" + "\n".join(
+            (self.output / name).read_text(encoding="utf-8")
+            for name in ("feed.xml", "llms.txt")
+        )
+
     def test_build_renders_all_pages_and_css(self):
         self.add_entry("feed-a", "n1", "OpenAI releases GPT-6")
         self.add_entry("feed-b", "n2", "OpenAI releases GPT-6 today")
@@ -173,7 +181,7 @@ class SubscriptionSiteTest(unittest.TestCase):
                 (str(note), entry_id),
             )
         self.build()
-        blob = self.all_html()
+        blob = self.all_public_output()
         self.assertNotIn(str(self.vault), blob)
         self.assertNotIn("00_Inbox", blob)
         self.assertNotIn("private-note", blob)
@@ -182,6 +190,60 @@ class SubscriptionSiteTest(unittest.TestCase):
         self.assertNotIn("secret summary", blob)
         self.assertNotIn('<img onerror="x">', blob)
         self.assertIn("&lt;img onerror=", blob)  # titles are HTML-escaped
+
+    def test_feed_and_llms_txt_are_emitted_for_agents(self):
+        an_hour_ago = (
+            subscription_store.parse_iso(self.now) - timedelta(hours=1)
+        ).isoformat()
+        self.add_entry("feed-a", "one", "OpenAI releases GPT-6 model", published=an_hour_ago)
+        self.add_entry("feed-b", "two", "OpenAI releases GPT-6 model today", published=self.now)
+        self.build(site_name="测试情报站")
+
+        feed = (self.output / "feed.xml").read_text(encoding="utf-8")
+        self.assertIn('<rss version="2.0"', feed)
+        self.assertIn("<language>zh-CN</language>", feed)
+        self.assertIn('<guid isPermaLink="false">', feed)
+        self.assertIn("<pubDate>", feed)
+        # 同一事件跨两个来源聚合为一条 item；最新一条代表事件本身
+        self.assertEqual(feed.count("<item>"), 1)
+        self.assertIn("<title>OpenAI releases GPT-6 model today</title>", feed)
+        self.assertIn("<link>https://feed-b.example/two</link>", feed)
+        self.assertIn("Feed A、Feed B", feed)
+        self.assertIn("热度 2", feed)
+        self.assertEqual(feed.count("<category>"), 2)
+        # 没有绝对 --base-url 时不谎报自我地址
+        self.assertNotIn("atom:link", feed)
+
+        llms = (self.output / "llms.txt").read_text(encoding="utf-8")
+        self.assertTrue(llms.startswith("# 测试情报站\n"))
+        for section in ("## 最近事件", "## 订阅源", "## 内容边界"):
+            self.assertIn(section, llms)
+        self.assertIn("[OpenAI releases GPT-6 model today](https://feed-b.example/two)", llms)
+        self.assertIn("Feed A、Feed B", llms)
+
+    def test_feed_advertises_itself_only_with_an_absolute_base_url(self):
+        self.add_entry("feed-a", "one", "Solo item", published=self.now)
+        self.build(site_name="测试情报站", base_url="https://example.github.io/digest/")
+        feed = (self.output / "feed.xml").read_text(encoding="utf-8")
+        self.assertIn(
+            '<atom:link href="https://example.github.io/digest/feed.xml" '
+            'rel="self" type="application/rss+xml"/>',
+            feed,
+        )
+        self.assertIn("<link>https://example.github.io/digest/</link>", feed)
+        layout = (self.output / "index.html").read_text(encoding="utf-8")
+        self.assertIn('href="https://example.github.io/digest/feed.xml"', layout)
+
+    def test_expired_events_lose_their_heat_badge(self):
+        """A week-old three-source story must not outrank today's reporting."""
+        old_stamp = (
+            subscription_store.parse_iso(self.now) - timedelta(hours=96)
+        ).isoformat()
+        self.add_entry("feed-a", "old-a", "Old story about chips", published=old_stamp)
+        self.add_entry("feed-b", "old-b", "Old story about chips today", published=old_stamp)
+        self.build()
+        index = (self.output / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("heat-badge", index)
 
     def test_source_health_counts_checks(self):
         for outcome in ("success", "success", "unchanged", "error"):
