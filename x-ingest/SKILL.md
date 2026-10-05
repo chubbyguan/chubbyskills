@@ -60,7 +60,7 @@ X_COOKIES="auth_token=...; ct0=..." python scripts/fetch_tweet.py "链接" -o ./
 
 - 受保护账号、已删除、成人/受限内容可能取不到
 - 端点或 token 算法（`fetch_tweet.py` 里的 `make_token`）若被 X 调整，需相应更新
-- `--thread` 依赖公开作者时间线发现后续回复。该 syndication 时间线是非官方接口、结果可能陈旧或不完整；没找到后续回复时会明确告警。线程抓取只沿直接自回复链，不会把其他用户的回复或作者另起的分支拼入。
+- `--thread` 依赖公开作者时间线发现后续回复。该 syndication 时间线是非官方接口、结果可能陈旧或不完整，**也可能直接限流**（2026-10-05 实测：单次请求即返回 `HTTP 429`，未做重试）；没找到后续回复时会明确告警。线程抓取只沿直接自回复链，不会把其他用户的回复或作者另起的分支拼入。**不加 `--thread` 时不访问该接口**，常规单条采集不受影响。
 
 抓取失败时可以使用 `--fallback-text`：把浏览器里能看到的正文复制到 txt/md 文件，脚本仍会生成统一 frontmatter 的 Markdown，保证后续 `content-enrich` / 入库工作流不断。也可以使用 `--fallback-json` 读取单条推文对象、对象列表，或 `tweet` / `data` / `result` / `item` 包装的对象。
 

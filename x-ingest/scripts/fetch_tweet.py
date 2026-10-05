@@ -1059,6 +1059,13 @@ def main():
             timeline = fetch_author_timeline(screen_name)
         except Exception as e:
             print(f"❌ 获取作者公开时间线失败：{e}", file=sys.stderr)
+            if "429" in str(e):
+                print(
+                    "   该时间线接口会限流；稍后重试，或去掉 --thread 只采集这一条。",
+                    file=sys.stderr,
+                )
+            else:
+                print("   去掉 --thread 仍可正常采集单条推文。", file=sys.stderr)
             sys.exit(1)
         thread_tweets = collect_thread_tweets(tweet_id, tw, timeline)
         if len(thread_tweets) == 1:
