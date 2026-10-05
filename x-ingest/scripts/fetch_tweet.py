@@ -269,15 +269,15 @@ def collect_thread_tweets(root_id, root_tweet, timeline_tweets):
             if root_author_id and author_id
             else bool(root_screen_name and screen_name == root_screen_name)
         )
-        conversation_id = _conversation_id(tweet)
+        # Keep the root's conversation id: assigning to `conversation_id` here
+        # would shadow it, making the comparison below compare a value with
+        # itself and turn the guard into dead code.
+        tweet_conversation_id = _conversation_id(tweet)
         if (
             tweet_id
             and tweet_id != str(root_id)
             and same_author
-            and (
-                not _conversation_id(tweet)
-                or _conversation_id(tweet) == conversation_id
-            )
+            and (not tweet_conversation_id or tweet_conversation_id == conversation_id)
             and _reply_to_id(tweet)
         ):
             candidates[tweet_id] = tweet
