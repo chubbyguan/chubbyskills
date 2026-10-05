@@ -52,6 +52,7 @@ _TWEET_RESULT_QUERY_IDS = [
     "DJS3BdhUhcaEpZ7B7irJDg",
     "V3vfsYzNEyD9tsf4xoPhgw",
 ]
+THREAD_REQUEST_DELAY_SECONDS = 1
 
 _QUERY_ID_CACHE_TTL = 24 * 3600  # 秒
 _QUERY_ID_CACHE_PATH = os.path.join(
@@ -186,6 +187,126 @@ def fetch_tweet(tweet_id):
     )
     with urllib.request.urlopen(req, timeout=20) as resp:
         return json.loads(resp.read().decode("utf-8", "replace"))
+
+
+def parse_syndication_timeline(html):
+    """Extract tweets from the anonymous profile-timeline syndication page."""
+    match = re.search(
+        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    if not match:
+        raise ValueError("syndication profile timeline did not contain __NEXT_DATA__")
+    payload = json.loads(match.group(1))
+    page_props = ((payload.get("props") or {}).get("pageProps") or {})
+    timeline = page_props.get("timeline")
+    if not isinstance(timeline, dict) or not isinstance(timeline.get("entries"), list):
+        raise ValueError("syndication profile timeline has an unexpected data shape")
+    entries = timeline["entries"]
+    tweets = []
+    for entry in entries:
+        tweet = ((entry.get("content") or {}).get("tweet"))
+        if isinstance(tweet, dict):
+            tweets.append(tweet)
+    return tweets
+
+
+def fetch_author_timeline(screen_name):
+    """Fetch an author's public syndication timeline, including replies."""
+    timeline_url = (
+        "https://syndication.twitter.com/srv/timeline-profile/screen-name/"
+        f"{urllib.parse.quote(screen_name)}"
+    )
+    query = urllib.parse.urlencode(
+        {
+            "lang": "en",
+            "showReplies": "true",
+            "showHeader": "false",
+            "transparent": "false",
+        }
+    )
+    req = urllib.request.Request(
+        f"{timeline_url}?{query}",
+        headers={"User-Agent": UA, "Accept": "text/html"},
+    )
+    time.sleep(THREAD_REQUEST_DELAY_SECONDS)
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        html = resp.read().decode("utf-8", "replace")
+    return parse_syndication_timeline(html)
+
+
+def _tweet_id(tweet):
+    return str(tweet.get("id_str") or tweet.get("id") or "")
+
+
+def _reply_to_id(tweet):
+    return str(
+        tweet.get("in_reply_to_status_id_str")
+        or tweet.get("in_reply_to_status_id")
+        or ""
+    )
+
+
+def _conversation_id(tweet):
+    return str(tweet.get("conversation_id_str") or tweet.get("conversation_id") or "")
+
+
+def collect_thread_tweets(root_id, root_tweet, timeline_tweets):
+    """Follow the author's direct self-reply chain from the root tweet."""
+    root_user = root_tweet.get("user") or {}
+    root_author_id = str(root_user.get("id_str") or root_user.get("id") or "")
+    root_screen_name = str(root_user.get("screen_name") or "").casefold()
+    conversation_id = _conversation_id(root_tweet) or str(root_id)
+    candidates = {}
+    for tweet in timeline_tweets:
+        tweet_id = _tweet_id(tweet)
+        user = tweet.get("user") or {}
+        author_id = str(user.get("id_str") or user.get("id") or "")
+        screen_name = str(user.get("screen_name") or "").casefold()
+        same_author = (
+            author_id == root_author_id
+            if root_author_id and author_id
+            else bool(root_screen_name and screen_name == root_screen_name)
+        )
+        # Keep the root's conversation id: assigning to `conversation_id` here
+        # would shadow it, making the comparison below compare a value with
+        # itself and turn the guard into dead code.
+        tweet_conversation_id = _conversation_id(tweet)
+        if (
+            tweet_id
+            and tweet_id != str(root_id)
+            and same_author
+            and (not tweet_conversation_id or tweet_conversation_id == conversation_id)
+            and _reply_to_id(tweet)
+        ):
+            candidates[tweet_id] = tweet
+
+    thread = [root_tweet]
+    seen = {str(root_id)}
+    parent_id = str(root_id)
+    while True:
+        replies = [
+            tweet
+            for tweet_id, tweet in candidates.items()
+            if tweet_id not in seen and _reply_to_id(tweet) == parent_id
+        ]
+        if not replies:
+            break
+        replies.sort(
+            key=lambda tweet: (
+                0,
+                int(_tweet_id(tweet)),
+            )
+            if _tweet_id(tweet).isdigit()
+            else (1, _tweet_id(tweet))
+        )
+        next_tweet = replies[0]
+        next_id = _tweet_id(next_tweet)
+        thread.append(next_tweet)
+        seen.add(next_id)
+        parent_id = next_id
+    return thread
 
 
 def load_cookies(source):
@@ -401,10 +522,11 @@ def parse_tweet(tw):
         "article_title": article_title,
         "article_rest_id": article_rest_id,
         "article_is_preview": bool(article),
+        "tweet_id": _tweet_id(tw),
     }
 
 
-def download_images(urls, out_dir, base):
+def download_images(urls, out_dir, base, filename_prefix=""):
     refs = []
     if not urls:
         return refs
@@ -415,7 +537,7 @@ def download_images(urls, out_dir, base):
             req = urllib.request.Request(u, headers={"User-Agent": UA})
             with urllib.request.urlopen(req, timeout=30) as resp:
                 blob = resp.read()
-            fn = f"img_{i}.jpg"
+            fn = f"{filename_prefix}img_{i}.jpg"
             with open(os.path.join(asset_dir, fn), "wb") as f:
                 f.write(blob)
             print(
@@ -550,6 +672,83 @@ def build_markdown(data, url, title, image_refs, transcript=None):
             lines.append(f"![]({val})" if kind == "local" else f"- {val}")
     lines.append("")
     return "\n".join(lines)
+
+
+def build_thread_markdown(sections, url, title):
+    """Render processed tweets as ordered sections with aggregate thread metadata."""
+    root = sections[0]["data"]
+    tags = list(
+        dict.fromkeys(tag for section in sections for tag in section["data"]["tags"])
+    )
+    handle = f"@{root['screen_name']}" if root["screen_name"] else ""
+    author_line = f"{root['author']} {handle}".strip() or "未知"
+    created = _safe_date(root.get("created")) or datetime.now().strftime("%Y-%m-%d")
+    tweet_ids = [str(section["data"].get("tweet_id") or "") for section in sections]
+    likes = [_safe_count(section["data"].get("likes")) for section in sections]
+    replies = [_safe_count(section["data"].get("replies")) for section in sections]
+    total_likes = sum(value for value in likes if value != "")
+    total_replies = sum(value for value in replies if value != "")
+    if not any(value != "" for value in likes):
+        total_likes = ""
+    if not any(value != "" for value in replies):
+        total_replies = ""
+
+    lines = [
+        "---",
+        f"title: {yaml_scalar(title)}",
+        "type: note",
+        "platform: x",
+        "note_type: thread",
+        f"source: {yaml_scalar(url)}",
+        f"author: {yaml_scalar(author_line)}",
+        f"created: {created}",
+        f"tags: [{', '.join(yaml_scalar(tag) for tag in ['X'] + tags)}]",
+        f"thread_count: {len(sections)}",
+        f"thread_ids: [{', '.join(yaml_scalar(tweet_id) for tweet_id in tweet_ids)}]",
+        f"likes: {total_likes}",
+        f"replies: {total_replies}",
+        "---",
+        "",
+        f"# {title}",
+    ]
+    for index, section in enumerate(sections, 1):
+        data = section["data"]
+        section_author = data["author"] or data["screen_name"] or "未知"
+        section_handle = f"@{data['screen_name']}" if data["screen_name"] else ""
+        section_author_line = f"{section_author} {section_handle}".strip()
+        likes_count = _safe_count(data.get("likes"))
+        replies_count = _safe_count(data.get("replies"))
+        body = data["text"] or "（推文无正文）"
+        if data["note_type"] == "article" and data.get("article_is_preview"):
+            body = "> 📄 X 长文章，以下为预览，全文见原文链接\n\n" + body
+        lines += [
+            "",
+            f"## 推文 {index}",
+            "",
+            f"> 👤 {section_author_line or '未知'} | 👍 {likes_count} · 💬 {replies_count}",
+            "",
+            body,
+        ]
+        if section.get("transcript"):
+            lines += ["", "### 视频文字稿", "", section["transcript"]]
+        elif data["note_type"] == "video" and data.get("video_url"):
+            lines += ["", "### 视频", "", f"- {data['video_url']}"]
+        if section.get("image_refs"):
+            lines += ["", "### 图片", ""]
+            for kind, value in section["image_refs"]:
+                lines.append(f"![]({value})" if kind == "local" else f"- {value}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_thread_markdown(sections, source_url, output_dir, title):
+    base = sanitize(title)
+    os.makedirs(output_dir, exist_ok=True)
+    markdown = build_thread_markdown(sections, source_url, title)
+    output_path = os.path.join(output_dir, f"{base}.md")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+    return output_path
 
 
 def read_fallback_text(path):
@@ -762,6 +961,11 @@ def main():
     parser.add_argument(
         "--no-video", action="store_true", help="视频不转录，只留视频链接"
     )
+    parser.add_argument(
+        "--thread",
+        action="store_true",
+        help="沿作者自回复链采集可用的 thread 推文",
+    )
     fallback = parser.add_mutually_exclusive_group()
     fallback.add_argument(
         "--fallback-text", help="抓取失败时使用这个 txt/md 文件生成标准 Markdown"
@@ -781,6 +985,9 @@ def main():
         help="不访问网络，直接使用 fallback 数据",
     )
     args = parser.parse_args()
+
+    if args.thread and (args.fallback_only or args.fallback_text or args.fallback_json):
+        parser.error("--thread cannot be combined with fallback data")
 
     if args.fallback_only:
         if not (args.fallback_text or args.fallback_json):
@@ -836,6 +1043,31 @@ def main():
         sys.exit(1)
 
     data = parse_tweet(tw)
+    if not data["tweet_id"]:
+        data["tweet_id"] = tweet_id
+    thread_tweets = [tw]
+    if args.thread:
+        screen_name = (tw.get("user") or {}).get("screen_name")
+        if not screen_name:
+            print(
+                "❌ 无法采集 thread：首条推文没有作者用户名，无法读取公开时间线。",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print(f"  🧵 查找 @{screen_name} 的自回复...", file=sys.stderr)
+        try:
+            timeline = fetch_author_timeline(screen_name)
+        except Exception as e:
+            print(f"❌ 获取作者公开时间线失败：{e}", file=sys.stderr)
+            sys.exit(1)
+        thread_tweets = collect_thread_tweets(tweet_id, tw, timeline)
+        if len(thread_tweets) == 1:
+            print(
+                "  ⚠️  未找到后续自回复；公开 syndication 时间线可能不含完整或较早的回复。",
+                file=sys.stderr,
+            )
+        else:
+            print(f"  ✅ 找到 {len(thread_tweets)} 条 thread 推文", file=sys.stderr)
 
     if data["note_type"] == "article" and data.get("article_is_preview"):
         cookies = args.cookies or os.environ.get("X_COOKIES")
@@ -872,6 +1104,58 @@ def main():
     title = compute_title(data)
     base = sanitize(title)
     os.makedirs(args.output, exist_ok=True)
+
+    if args.thread:
+        sections = []
+        for index, tweet in enumerate(thread_tweets, 1):
+            section_data = data if index == 1 else parse_tweet(tweet)
+            transcript = None
+            if (
+                section_data["note_type"] == "video"
+                and section_data["video_url"]
+                and not args.no_video
+            ):
+                print(
+                    f"  🎬 推文 {index} 为视频，开始转录...", file=sys.stderr
+                )
+                try:
+                    transcript = transcribe_video(section_data["video_url"])
+                    print(
+                        f"  ✅ 转录完成（{len(transcript)} 字）", file=sys.stderr
+                    )
+                except Exception as e:
+                    print(f"  ⚠️  视频转录失败：{e}", file=sys.stderr)
+                    print(
+                        "     需 ffmpeg + funasr；或加 --no-video 只存视频链接",
+                        file=sys.stderr,
+                    )
+
+            image_refs = []
+            if not transcript and section_data["photos"] and not args.no_images:
+                prefix = f"tweet_{index:02d}_"
+                print(
+                    f"  ⬇️  推文 {index} 下载 {len(section_data['photos'])} 张图片...",
+                    file=sys.stderr,
+                )
+                image_refs = download_images(
+                    section_data["photos"], args.output, base, prefix
+                )
+            elif not transcript and section_data["photos"]:
+                image_refs = [("url", photo) for photo in section_data["photos"]]
+            sections.append(
+                {
+                    "data": section_data,
+                    "image_refs": image_refs,
+                    "transcript": transcript,
+                }
+            )
+
+        output_path = save_thread_markdown(
+            sections, source_url, args.output, title
+        )
+        print(f"✅ Saved thread: {output_path}", file=sys.stderr)
+        print(output_path)
+        return
 
     transcript = None
     if data["note_type"] == "video" and data["video_url"] and not args.no_video:

@@ -308,3 +308,192 @@ class XQueryIdDiscoveryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def _timeline_tweet(tweet_id, *, parent="", author="ada", author_id="1",
+                    conversation="", text="", likes=None, replies=None):
+    """A syndication-shaped tweet. `parent` sets the self-reply edge."""
+    tweet = {
+        "id_str": str(tweet_id),
+        "user": {"name": author.title(), "screen_name": author, "id_str": author_id},
+        "text": text or f"tweet {tweet_id}",
+        "created_at": "Wed Oct 05 00:00:00 +0000 2026",
+    }
+    if parent:
+        tweet["in_reply_to_status_id_str"] = str(parent)
+    if conversation:
+        tweet["conversation_id_str"] = str(conversation)
+    if likes is not None:
+        tweet["favorite_count"] = likes
+    if replies is not None:
+        tweet["conversation_count"] = replies
+    return tweet
+
+
+def _timeline_html(payload):
+    return (
+        '<html><body><script id="__NEXT_DATA__" type="application/json">'
+        + json.dumps(payload)
+        + "</script></body></html>"
+    )
+
+
+def _timeline_page(entries):
+    return _timeline_html({"props": {"pageProps": {"timeline": {"entries": entries}}}})
+
+
+class XIngestThreadTimelineTest(unittest.TestCase):
+    """Parsing the anonymous profile timeline that `--thread` depends on."""
+
+    def test_extracts_tweets_in_page_order(self):
+        html = _timeline_page([
+            {"content": {"tweet": _timeline_tweet(2)}},
+            {"content": {"tweet": _timeline_tweet(1)}},
+        ])
+        tweets = fetch_tweet.parse_syndication_timeline(html)
+        self.assertEqual([t["id_str"] for t in tweets], ["2", "1"])
+
+    def test_missing_next_data_is_a_clear_error(self):
+        with self.assertRaises(ValueError) as caught:
+            fetch_tweet.parse_syndication_timeline("<html><body>nothing</body></html>")
+        self.assertIn("__NEXT_DATA__", str(caught.exception))
+
+    def test_unexpected_shape_is_a_clear_error(self):
+        html = _timeline_html({"props": {"pageProps": {"timeline": {"entries": "nope"}}}})
+        with self.assertRaises(ValueError) as caught:
+            fetch_tweet.parse_syndication_timeline(html)
+        self.assertIn("shape", str(caught.exception))
+
+    def test_entries_without_a_tweet_object_are_skipped(self):
+        html = _timeline_page([
+            {"content": {"tweet": _timeline_tweet(2)}},
+            {"content": {}},
+            {"content": {"tweet": "not a dict"}},
+        ])
+        self.assertEqual(len(fetch_tweet.parse_syndication_timeline(html)), 1)
+
+
+class XIngestThreadCollectionTest(unittest.TestCase):
+    """Following the author's direct self-reply chain."""
+
+    def collect(self, root, *timeline):
+        return fetch_tweet.collect_thread_tweets(str(root["id_str"]), root, list(timeline))
+
+    def test_follows_the_direct_reply_chain_in_order(self):
+        root = _timeline_tweet(100, conversation="100")
+        timeline = [
+            _timeline_tweet(102, parent="101", conversation="100"),
+            _timeline_tweet(101, parent="100", conversation="100"),
+            root,
+        ]
+        thread = self.collect(root, *timeline)
+        self.assertEqual([t["id_str"] for t in thread], ["100", "101", "102"])
+
+    def test_other_users_replies_are_never_included(self):
+        root = _timeline_tweet(100, conversation="100")
+        timeline = [
+            _timeline_tweet(101, parent="100", conversation="100"),
+            _timeline_tweet(200, parent="101", author="bob", author_id="2", conversation="100"),
+            _timeline_tweet(201, parent="200", author="bob", author_id="2", conversation="100"),
+        ]
+        thread = self.collect(root, *timeline)
+        self.assertEqual([t["id_str"] for t in thread], ["100", "101"])
+
+    def test_replies_pointing_outside_the_chain_are_ignored(self):
+        root = _timeline_tweet(100, conversation="100")
+        timeline = [
+            _timeline_tweet(101, parent="100", conversation="100"),
+            # The author's own reply, but to a different branch of their timeline.
+            _timeline_tweet(900, parent="800", conversation="800"),
+        ]
+        thread = self.collect(root, *timeline)
+        self.assertEqual([t["id_str"] for t in thread], ["100", "101"])
+
+    def test_no_self_replies_returns_the_root_alone(self):
+        root = _timeline_tweet(100, conversation="100")
+        self.assertEqual([t["id_str"] for t in self.collect(root)], ["100"])
+
+    def test_a_cycle_terminates_instead_of_hanging(self):
+        root = _timeline_tweet(100, conversation="100")
+        timeline = [
+            _timeline_tweet(101, parent="100", conversation="100"),
+            _timeline_tweet(100, conversation="100"),
+        ]
+        self.assertEqual([t["id_str"] for t in self.collect(root, *timeline)], ["100", "101"])
+
+    def test_a_candidate_from_another_conversation_is_dropped(self):
+        """The guard matters because the upstream timeline may be inconsistent.
+
+        X's conversation id always matches for a real direct reply, but the
+        syndication endpoint is documented as possibly stale or incomplete — so
+        a tweet that merely *points* at the root is not enough to include it.
+        """
+        root = _timeline_tweet(100, conversation="100")
+        timeline = [_timeline_tweet(101, parent="100", conversation="777")]
+        self.assertEqual([t["id_str"] for t in self.collect(root, *timeline)], ["100"])
+
+
+class XIngestThreadMarkdownTest(unittest.TestCase):
+    """Rendering the collected thread as one note."""
+
+    def section(self, tweet_id, *, text="", likes=None, replies=None, **extra):
+        data = fetch_tweet.parse_tweet(
+            _timeline_tweet(tweet_id, text=text, likes=likes, replies=replies)
+        )
+        data.update(extra)
+        return {"data": data, "image_refs": [], "transcript": None}
+
+    def test_frontmatter_records_the_thread_and_aggregates_engagement(self):
+        sections = [
+            self.section(100, text="first", likes=10, replies=2),
+            self.section(101, text="second", likes=5, replies=1),
+        ]
+        markdown = fetch_tweet.build_thread_markdown(
+            sections, "https://x.com/ada/status/100", "标题"
+        )
+        self.assertIn("note_type: thread", markdown)
+        self.assertIn("thread_count: 2", markdown)
+        self.assertIn('thread_ids: ["100", "101"]', markdown)
+        self.assertIn("likes: 15", markdown)
+        self.assertIn("replies: 3", markdown)
+
+    def test_each_tweet_gets_its_own_section(self):
+        sections = [self.section(100, text="first"), self.section(101, text="second")]
+        markdown = fetch_tweet.build_thread_markdown(
+            sections, "https://x.com/ada/status/100", "标题"
+        )
+        self.assertIn("## 推文 1", markdown)
+        self.assertIn("## 推文 2", markdown)
+        self.assertLess(markdown.index("## 推文 1"), markdown.index("## 推文 2"))
+        self.assertIn("first", markdown)
+        self.assertIn("second", markdown)
+
+    def test_missing_engagement_stays_empty_rather_than_zero(self):
+        sections = [self.section(100, text="first"), self.section(101, text="second")]
+        markdown = fetch_tweet.build_thread_markdown(
+            sections, "https://x.com/ada/status/100", "标题"
+        )
+        self.assertIn("likes: \n", markdown)
+        self.assertIn("replies: \n", markdown)
+
+    def test_transcripts_and_image_refs_render_per_section(self):
+        first = self.section(100, text="first")
+        first["transcript"] = "视频文字稿内容"
+        second = self.section(101, text="second")
+        second["image_refs"] = [("local", "img_00_1.jpg"), ("url", "https://img/2.jpg")]
+        markdown = fetch_tweet.build_thread_markdown(
+            [first, second], "https://x.com/ada/status/100", "标题"
+        )
+        self.assertIn("### 视频文字稿", markdown)
+        self.assertIn("视频文字稿内容", markdown)
+        self.assertIn("![](img_00_1.jpg)", markdown)
+        self.assertIn("- https://img/2.jpg", markdown)
+
+    def test_saved_thread_note_is_written_as_markdown(self):
+        sections = [self.section(100, text="first"), self.section(101, text="second")]
+        with tempfile.TemporaryDirectory() as folder:
+            path = fetch_tweet.save_thread_markdown(
+                sections, "https://x.com/ada/status/100", folder, "标题"
+            )
+            markdown = open(path, encoding="utf-8").read()
+        self.assertTrue(path.endswith(".md"))
+        self.assertIn("note_type: thread", markdown)
