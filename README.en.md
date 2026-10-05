@@ -93,7 +93,7 @@ python3 tools/chubby.py search "source library"
 🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
 
 Source library demo
-  00_Inbox/Source-library-demo--c2f47ab83782202c.md
+  00_Inbox/Source-library-demo--<source-hash>.md
   # Source library demo  This is a manually written example. A source library keeps the original text…
 ```
 
@@ -111,14 +111,14 @@ python3 tools/chubby.py brief --topic "source library" \
 }
 ```
 
-The Markdown brief carries verbatim excerpts, original line numbers, the source link and a file SHA-256, so every claim can be traced back:
+The Markdown brief carries verbatim excerpts, original line numbers, the source link and a file SHA-256, so every claim can be traced back. Both derived values move with your own paths and timestamps: the filename suffix comes from the source path, and the hash covers the imported copy including its metadata.
 
 ```text
 ## E1 · Source library demo
 
-笔记相对路径：`00_Inbox/Source-library-demo--c2f47ab83782202c.md`
+笔记相对路径：`00_Inbox/Source-library-demo--<source-hash>.md`
 原始来源：未提供可打开的网页链接。
-文件 SHA-256：`a447fe17417d824d613ecc66abee0281439a213dcc2e596b58f547c5330d244a`
+文件 SHA-256：`<content hash of the imported copy>`
 
 原文第 22–22 行：
 ```
@@ -133,6 +133,10 @@ The workflow above uses `python3 tools/chubby.py` and needs no install. For the 
 python3 -m venv .venv && source .venv/bin/activate
 python3 -m pip install -e .   # provides the `chubby` command
 ```
+
+A plain package install works too (`pip install .`, or `pipx install git+https://github.com/chubbyguan/chubbyskills.git`). The knowledge-base commands are all available — `init` / `import` / `search` / `brief` / `index` / `doctor` / `subscribe` (including `digest` and `site build`) — and user state is written to **your current directory**, never into the install directory.
+
+**Platform capture (`ingest`) still needs a full checkout.** Skills are distributed as directories (install them into your agent with `tools/install_skill.py`) and are not part of the Python package. The command says so directly instead of failing inside a subprocess.
 
 The import preserves the original document, copies supported local attachments, and updates the index. Repeating the same import can reuse a valid result; changing the document or its attachments creates a new result while retaining the old one. If you repeat the brief export, choose a different output filename or explicitly add `--force` to replace the previous brief.
 

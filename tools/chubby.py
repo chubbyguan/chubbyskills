@@ -25,6 +25,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS_DIR = ROOT / "tools"
 
+# Base for relative paths in the config. Without an install this is the
+# repository checkout, but a non-editable install lives in site-packages, and
+# user state (output_dir / runs / .chubby / chubby.yaml) must never be written
+# there. `load_config` sets this to the config file's own directory, which
+# keeps the documented "relative to this repository" promise for a checkout and
+# still writes next to the user's config once installed.
+CONFIG_BASE = Path.cwd()
+
+SKILL_CHECKOUT_HINT = (
+    "平台采集需要完整仓库 checkout：skill 以目录形式分发，不随 Python 包安装。\n"
+    "  git clone https://github.com/chubbyguan/chubbyskills.git && cd chubbyskills\n"
+    "  或按 README 的 Skill 目录把对应技能装进你的 Agent。"
+)
+
 try:
     from tools import chubby_ingest
     from tools import platform_health
@@ -61,10 +75,22 @@ QUICKSTART_SOURCE = "https://x.com/example/status/123456"
 
 
 def read_version():
+    """Packaged version.
+
+    A checkout keeps VERSION authoritative (releases bump the file, which may
+    be newer than an older editable install's metadata); an installed copy has
+    no VERSION next to the package, so it falls back to the distribution
+    metadata that the build wrote from that same file.
+    """
     version_path = ROOT / "VERSION"
     if version_path.exists():
         return version_path.read_text(encoding="utf-8").strip()
-    return "0.0.0"
+    try:
+        from importlib.metadata import version as distribution_version
+
+        return distribution_version("chubbyskills")
+    except Exception:
+        return "0.0.0"
 
 
 def now_iso():
@@ -111,12 +137,32 @@ def parse_int(value, default):
         return default
 
 
+def default_config_path():
+    """Where `chubby.yaml` lives: beside the user, or the checkout's own.
+
+    Order matters. An existing config in the working directory wins, so a
+    configured project keeps working from anywhere. Then an existing config at
+    the package root, which is how a checkout behaves when the command is run
+    from a subdirectory. Only when there is no config anywhere do we return the
+    working directory — creating it there is what keeps `init` from writing
+    into site-packages, where a non-editable install would have no business
+    putting user state.
+    """
+    local = Path.cwd() / "chubby.yaml"
+    if local.exists():
+        return local
+    root_config = ROOT / "chubby.yaml"
+    if root_config.exists():
+        return root_config
+    return local
+
+
 def resolve_path(value):
     value = clean_scalar(value)
     value = os.path.expandvars(os.path.expanduser(value))
     path = Path(value)
     if not path.is_absolute():
-        path = ROOT / path
+        path = CONFIG_BASE / path
     return path
 
 
@@ -136,7 +182,9 @@ def parse_config_file(path):
 
 
 def load_config(path=None):
-    config_path = resolve_path(path) if path else ROOT / "chubby.yaml"
+    global CONFIG_BASE
+    config_path = resolve_path(path) if path else default_config_path()
+    CONFIG_BASE = config_path.parent
     config = dict(DEFAULT_CONFIG)
     config.update(parse_config_file(config_path))
     config["_config_path"] = str(config_path)
@@ -194,7 +242,7 @@ def ensure_runtime_dirs(config):
 
 
 def init_workspace(args):
-    config_path = resolve_path(args.config) if args.config else ROOT / "chubby.yaml"
+    config_path = resolve_path(args.config) if args.config else default_config_path()
     if config_path.exists() and not args.force:
         if getattr(args, "vault", None):
             update_vault_config(config_path, args.vault)
@@ -646,7 +694,10 @@ def run_ingest_source(source, args, config, batch_id=None, skill=None):
     try:
         process = subprocess.run(
             cmd,
-            cwd=ROOT,
+            # Run where the user invoked us: a relative --source or local path
+            # they typed resolves against their directory, not against the
+            # package location (site-packages after a pip install).
+            cwd=str(Path.cwd()),
             capture_output=True,
             text=True,
             timeout=timeout_seconds if timeout_seconds > 0 else None,
@@ -993,7 +1044,7 @@ def command_doctor(args, config):
         command.extend(["--platform", args.platform])
     if getattr(args, "provider", None):
         command.extend(["--provider", args.provider])
-    result = subprocess.run(command, cwd=ROOT)
+    result = subprocess.run(command, cwd=str(Path.cwd()))
     return result.returncode
 
 

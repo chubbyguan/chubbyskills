@@ -92,10 +92,10 @@ python3 tools/chubby.py search "内容复用"
 ```text
 ✅ 完成：success=1 / failed=0 / dry_run=0
 🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
-/path/to/chubbyskills/creator-vault/00_Inbox/内容复用笔记--c2f47ab83782202c.md
+/path/to/chubbyskills/creator-vault/00_Inbox/内容复用笔记--<来源哈希>.md
 
 内容复用笔记
-  00_Inbox/内容复用笔记--c2f47ab83782202c.md
+  00_Inbox/内容复用笔记--<来源哈希>.md
   # 内容复用笔记  内容复用从保留原文和来源开始。同一份材料可以用于选题、文章和播客，但引用前要重新核对上下文。
 ```
 
@@ -113,7 +113,7 @@ python3 tools/chubby.py brief --topic "内容复用" \
 }
 ```
 
-`brief.md` 里是逐字摘录、原文行号、来源链接和文件 SHA-256，可以直接回查：
+`brief.md` 里是逐字摘录、原文行号、来源链接和文件 SHA-256，可以直接回查（文件名后缀由来源路径推导，SHA-256 覆盖导入副本的内容与元数据，两者都会随你实际使用的路径和时间变化）：
 
 ```text
 ## E1 · 内容复用笔记
@@ -121,7 +121,7 @@ python3 tools/chubby.py brief --topic "内容复用" \
 笔记相对路径：`00_Inbox/内容复用笔记--c2f47ab83782202c.md`
 原始来源：未提供可打开的网页链接。
 采集时间：2026-10-05T10:54:57+08:00
-文件 SHA-256：`a447fe17417d824d613ecc66abee0281439a213dcc2e596b58f547c5330d244a`
+文件 SHA-256：`<导入副本的内容哈希>`
 
 原文第 22–22 行：
 ```
@@ -142,6 +142,10 @@ python3 tools/chubby.py brief --topic "内容复用" \
 python3 -m venv .venv && source .venv/bin/activate
 python3 -m pip install -e .   # 提供 chubby 命令，等价于 python3 tools/chubby.py
 ```
+
+也可以装成普通包（`pip install .`，或 `pipx install git+https://github.com/chubbyguan/chubbyskills.git`）。非 editable 安装下，知识库命令全部可用——`init` / `import` / `search` / `brief` / `index` / `doctor` / `subscribe`（含 `digest` 与 `site build`），用户状态写在**你当前所在目录**，不会写进安装目录。
+
+**平台采集 `ingest` 仍需完整仓库 checkout。** 技能以目录形式分发（装进 Agent 用 `tools/install_skill.py`），不随 Python 包安装；命令会直接告诉你这一点，而不是在子进程里失败。
 
 已有知识库时把 `--vault` 换成它的根目录（例如 `docs/quickstart.md` 里的 `$HOME/Documents/creator-vault`）；已有配置的调整见[创作者工作流](./docs/creator-workflow.md)。
 
