@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Repository hygiene: the personal vault instance that `init --vault` creates at the README's `creator-vault/` path is now git-ignored, as is the root `outputs/` working directory — a plain `git add .` can no longer publish private notes, generated digests, site output or locally built release tarballs. The output rule is root-anchored (`/outputs/`) so the tracked `examples/outputs/` samples keep working, and both rules only cover paths that were never tracked. `uv.lock` is now tracked as well: the development environment is built with uv (`uv lock --check` passes against `pyproject.toml`), so the resolved toolchain is reproducible instead of reappearing as an untracked file on every `uv run`.
+
 - DashScope cloud backend live-verified (2026-10-04): 2-minute Chinese podcast via qwen3-asr-flash returned in 4s with the best transcript quality of the three verified backends (correct punctuation, ITN and proper nouns). Both cloud backends are now acceptance-verified.
 
 - Fixed Groq cloud transcription being rejected before any upload: Groq's Cloudflare front blocks Python's default urllib User-Agent (403 on GET, connection reset mid-upload on POST). `CloudProvider.request` now always sends a desktop browser User-Agent and `Accept: application/json`. Verified live (2026-10-04): a 5-minute Chinese podcast returned in 3 seconds with 154 timestamped segments, and the second run replayed from cache with zero API calls.
