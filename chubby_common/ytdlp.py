@@ -84,7 +84,15 @@ def download_audio(cfg, url: str, output_dir: str, filename: str = "audio.mp3") 
         except subprocess.TimeoutExpired as exc:
             last_err = exc
             print("  ⚠️  下载超时，重试...", file=sys.stderr)
+    hint = "可能原因：链接失效、需要登录 cookie、或平台限制。"
+    if "403" in str(last_err) or "Forbidden" in str(last_err):
+        # Measured 2026-10-05: a YouTube subtitle/download attempt 403s without
+        # this, and succeeds with it. Naming the actual lever beats a generic
+        # "platform restriction".
+        hint += (
+            "\n   403 多见于 YouTube 反爬：先设 YTDLP_REMOTE_COMPONENTS=ejs:github"
+            "（JS 挑战求解组件），仍失败再加 YTDLP_COOKIES_FROM_BROWSER=<浏览器名>。"
+        )
     raise RuntimeError(
-        f"{cfg.name} 下载失败（已重试 {cfg.max_retry} 次）。"
-        f"可能原因：链接失效、需要登录 cookie、或平台限制。原始错误：{last_err}"
+        f"{cfg.name} 下载失败（已重试 {cfg.max_retry} 次）。{hint}原始错误：{last_err}"
     )

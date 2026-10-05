@@ -15,6 +15,7 @@ from chubby_common.config import PlatformConfig
 
 
 FAIL = "import sys; sys.stderr.write('ERROR: HTTP Error 412: Precondition Failed'); sys.exit(7)"
+FORBIDDEN = "import sys; sys.stderr.write('ERROR: unable to download video data: HTTP Error 403: Forbidden'); sys.exit(1)"
 SUCCEED = "from pathlib import Path; import sys; Path(sys.argv[sys.argv.index('-o') + 1]).write_bytes(b'audio')"
 
 
@@ -81,6 +82,29 @@ class YtdlpFailureTest(unittest.TestCase):
         self.assertIn("退出码 7", message)
         self.assertIn("HTTP Error 412: Precondition Failed", message)
         self.assertNotIn("退出成功", message)
+
+    def test_a_403_names_the_lever_that_actually_fixes_it(self):
+        """Measured 2026-10-05: YouTube 403s without the JS challenge component.
+
+        A generic "platform restriction" hint sent the reader looking for
+        cookies, which is not the first thing that helps.
+        """
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+            ytdlp.subprocess, "run", side_effect=self.child(FORBIDDEN)
+        ), patch.object(ytdlp.time, "sleep"):
+            with self.assertRaises(RuntimeError) as ctx:
+                ytdlp.download_audio(self.cfg, "https://example.invalid/video", folder)
+        message = str(ctx.exception)
+        self.assertIn("YTDLP_REMOTE_COMPONENTS=ejs:github", message)
+        self.assertIn("YTDLP_COOKIES_FROM_BROWSER", message)
+
+    def test_an_unrelated_failure_does_not_claim_a_403(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+            ytdlp.subprocess, "run", side_effect=self.child(FAIL)
+        ), patch.object(ytdlp.time, "sleep"):
+            with self.assertRaises(RuntimeError) as ctx:
+                ytdlp.download_audio(self.cfg, "https://example.invalid/video", folder)
+        self.assertNotIn("YTDLP_REMOTE_COMPONENTS", str(ctx.exception))
 
     def test_failure_without_stderr_still_reports_exit_code(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(
