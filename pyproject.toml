@@ -34,7 +34,17 @@ Issues = "https://github.com/chubbyguan/chubbyskills/issues"
 Changelog = "https://github.com/chubbyguan/chubbyskills/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
-packages = ["tools", "chubby_common"]
+# `platforms/` and `templates/` are pure data directories, but their names are
+# legal package names, so shipping them here is what lets a non-editable
+# install resolve platform definitions and site/digest templates. The skill
+# directories cannot join them: `bilibili-transcribe` and friends are not valid
+# package names, and skills are distributed as directories for agents to
+# install rather than as importable modules.
+packages = ["tools", "chubby_common", "platforms", "templates"]
+
+[tool.setuptools.package-data]
+platforms = ["*.yaml"]
+templates = ["site/*", "sites/*", "digest-prompts/*"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}

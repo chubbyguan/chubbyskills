@@ -103,3 +103,58 @@ jobs:
       - name: Lint
         run: |
           ruff check . --select E,F,W --ignore E402,E501
+
+  installed-cli:
+    # A checkout and a `pip install .` share code but not layout: user state must
+    # never land in site-packages, and the version must not silently become 0.0.0.
+    # Both regressions shipped unnoticed until this job existed.
+    name: Non-editable install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install as a package (not editable)
+        run: python -m pip install .
+
+      - name: Run the knowledge-base CLI from outside the checkout
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          site_packages="$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+
+          version="$(chubby --version)"
+          echo "$version"
+          test "$version" != "chubbyskills 0.0.0"
+
+          printf '# Installed run\n\nAn installed copy must not write user state into site-packages.\n' > notes.md
+          chubby init --vault "$workdir/vault"
+          chubby import notes.md --no-enrich
+          chubby search "installed"
+          chubby brief --topic "installed" --output "$workdir/brief.md"
+          # `x` reads platforms/x.yaml and needs no external command; the
+          # youtube path would fail here because the runner has no yt-dlp.
+          chubby doctor --platform x
+
+          for stray in chubby.yaml inbox runs output .chubby; do
+            if [ -e "$site_packages/$stray" ]; then
+              echo "::error::$stray was written into site-packages"
+              exit 1
+            fi
+          done
+          test -f "$workdir/chubby.yaml"
+          test -f "$workdir/brief.md"
+          test -f "$workdir/vault/00_Inbox"/*.md
+
+      - name: Platform capture refuses a partial install with a clear hint
+        run: |
+          cd "$(mktemp -d)"
+          # The run report and the failure line both go to stdout, so capture both.
+          if chubby ingest "https://www.youtube.com/watch?v=aircAruvnKk" >capture.log 2>&1; then
+            echo "::error::ingest must fail when the skill directories are absent"
+            exit 1
+          fi
+          grep -q "git clone" capture.log
