@@ -54,12 +54,16 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 
 Requires Python 3.11 or newer on a macOS/Linux shell — check with `python3 --version` first: the 3.9 that ships with macOS runs the core commands but breaks the `subscribe` chain on import (`datetime.UTC`), so install a newer Python or use the virtualenv step below. The core path uses only the standard library: **no pip packages, no API keys, no model downloads.** (The CLI reports in Chinese; the commands are language-neutral.)
 
-### Clone to first note in about a minute
+### Path one: capture a real link
+
+X posts and Xiaohongshu image notes both go through the Python standard library only — **no yt-dlp, no ffmpeg, no model download** (per-platform capability and failure modes: [platform status](./docs/platform-status.md)):
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
+python3 tools/chubby.py ingest "https://x.com/OpenAI/status/1663696190960173056" --no-enrich
+python3 tools/chubby.py search "ChatGPT"
 ```
 
 ```text
@@ -67,9 +71,34 @@ python3 tools/chubby.py init --vault "$PWD/creator-vault"
 ✅ 已准备队列：/path/to/chubbyskills/inbox/links.txt
 ✅ 已准备状态：/path/to/chubbyskills/.chubby/runs.jsonl
 ✅ 已准备报告目录：/path/to/chubbyskills/runs
+
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+/path/to/chubbyskills/creator-vault/00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<source-hash>.md
+
+The ChatGPT iOS app is now available in
+  00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<source-hash>.md
+  # The ChatGPT iOS app is now available in   > 👤 OpenAI @OpenAI | 👍 754 · 💬 115 …
 ```
 
-Create one document, import it, and search it back. Swap the sample file for your own `.md`, `.markdown` or `.txt`; add `--source-url "https://…"` when you know the original page:
+The captured note keeps the source, author, timestamp and engagement counts, so a quote can always be traced back to the original post:
+
+```yaml
+title: "The ChatGPT iOS app is now available in "
+platform: x
+source: "https://x.com/OpenAI/status/1663696190960173056"
+author: "OpenAI @OpenAI"
+created: 2023-05-30
+likes: 754
+```
+
+Swap the link for any post or Xiaohongshu note you want to keep.
+
+> **Platform capture varies.** This is **one sample**, not a success rate: without a logged-in session a platform may block the request, and X long-form articles return only a preview by default. When it fails, see [platform status](./docs/platform-status.md) and [fallback routes](./docs/platform-fallbacks.md), or save the body and use the path below.
+
+### Path two: import your own files
+
+This one never touches the network and works in any environment. Create one document, import it, and search it back — swap the sample for your own `.md`, `.markdown` or `.txt`, and add `--source-url "https://…"` when you know the original page:
 
 ```bash
 mkdir -p demo-input

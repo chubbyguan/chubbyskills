@@ -60,12 +60,16 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 
 核心链路只用 Python 标准库：**不装第三方包、不配 API Key、不下载模型**。需要 Python 3.11 及以上——先 `python3 --version` 确认一下：macOS 自带的是 3.9，核心命令能跑，但 `subscribe` 订阅链路会在导入时失败，建议 `brew install python@3.12` 或直接用下面的 venv 步骤。
 
-### 60 秒跑通：克隆 → 导入 → 搜索 → 资料包
+### 60 秒跑通（一）：抓一条真实链接
+
+X 推文和小红书图文都走 Python 标准库，**不需要 yt-dlp、ffmpeg 或任何模型**（逐平台能力与失败模式见[平台状态](./docs/platform-status.md)）：
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
+python3 tools/chubby.py ingest "https://x.com/OpenAI/status/1663696190960173056" --no-enrich
+python3 tools/chubby.py search "ChatGPT"
 ```
 
 ```text
@@ -73,9 +77,34 @@ python3 tools/chubby.py init --vault "$PWD/creator-vault"
 ✅ 已准备队列：/path/to/chubbyskills/inbox/links.txt
 ✅ 已准备状态：/path/to/chubbyskills/.chubby/runs.jsonl
 ✅ 已准备报告目录：/path/to/chubbyskills/runs
+
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+/path/to/chubbyskills/creator-vault/00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<来源哈希>.md
+
+The ChatGPT iOS app is now available in
+  00_Inbox/The-ChatGPT-iOS-app-is-now-available-in---<来源哈希>.md
+  # The ChatGPT iOS app is now available in   > 👤 OpenAI @OpenAI | 👍 754 · 💬 115 …
 ```
 
-导入一份文档，再搜回它（把示例文件换成你自己的 `.md`、`.markdown` 或 `.txt`；已知原始网页时加 `--source-url "原始网页地址"`）：
+抓下来的笔记自带来源、作者、时间和互动数，引用时能回查到原帖：
+
+```yaml
+title: "The ChatGPT iOS app is now available in "
+platform: x
+source: "https://x.com/OpenAI/status/1663696190960173056"
+author: "OpenAI @OpenAI"
+created: 2023-05-30
+likes: 754
+```
+
+把链接换成你要存的任意推文或小红书图文即可。
+
+> **平台采集会波动。** 上面是**一条样本**，不构成成功率：没有登录态时可能被风控拦住，X 长文章默认只取到预览。失败时先看[平台状态](./docs/platform-status.md)和[替代处理方式](./docs/platform-fallbacks.md)，或保存正文后走下面这条。
+
+### 60 秒跑通（二）：导入自己的文件
+
+这条完全不碰外网，任何环境都能跑通。导入一份文档，再把它搜回来（把示例换成你自己的 `.md`、`.markdown` 或 `.txt`；已知原始网页时加 `--source-url "原始网页地址"`）：
 
 ```bash
 mkdir -p demo-input
