@@ -31,6 +31,7 @@ pip install funasr modelscope torch torchaudio
 # 采集推文 → 统一 frontmatter Markdown
 python scripts/fetch_tweet.py "https://x.com/user/status/1234567890" -o ./out
 python scripts/fetch_tweet.py "https://twitter.com/user/status/1234567890" -o ./out
+python scripts/fetch_tweet.py "链接" -o ./out --thread   # 沿作者自回复链采集 thread
 
 python scripts/fetch_tweet.py "链接" -o ./out --no-images   # 图文：只留图片链接不下载
 python scripts/fetch_tweet.py "链接" -o ./out --no-video    # 视频：不转录，只留视频链接
@@ -44,10 +45,11 @@ X_COOKIES="auth_token=...; ct0=..." python scripts/fetch_tweet.py "链接" -o ./
 
 ## 产出
 
-`fetch_tweet.py` → 统一 frontmatter Markdown（`platform: x`，含 `note_type: image|video|text|article`），含作者(`name @handle`)、互动数据（赞/回复）、话题标签。**按内容类型分流**：
+`fetch_tweet.py` → 统一 frontmatter Markdown（`platform: x`，含 `note_type: image|video|text|article|thread`），含作者(`name @handle`)、互动数据（赞/回复）、话题标签。**按内容类型分流**：
 
 - **图文 / 纯文字推文**：正文 + 图片下载到本地 `<标题>.assets/` 并以 `![]()` 嵌入；`--no-images` 只留链接，单张失败自动回退为链接
 - **视频推文**：提取最高码率 mp4 直链 → ffmpeg 抽音频 → SenseVoice 转录（`language=auto`，X 中英混杂）写入 `## 视频文字稿`；`--no-video` 只留视频链接；缺 funasr/ffmpeg 时自动降级为存链接
+- **Thread（作者自回复串）**：加 `--thread` 后读取作者的公开 syndication 时间线（`showReplies=true`），沿 `in_reply_to_status_id` 指向的同作者回复顺序拼为一篇 Markdown；每条推文单独成节，图片与视频沿用上面的分流逻辑。frontmatter 标记 `note_type: thread`、`thread_count` 和 `thread_ids`。
 - **X 长文章（Article）**：取文章标题、正文、封面图（封面本地化嵌入）。⚠️ syndication 不返回长文章全文，默认只能拿到开头预览，采集时会有 stderr 明确告警，Markdown 会标注「预览，全文见原文链接」。补全全文两种方式：
   - `--cookies`（或环境变量 `X_COOKIES`）提供**自己账号**的 `auth_token` + `ct0`（浏览器 DevTools → Application → Cookies 复制），脚本走登录态 GraphQL `TweetResultByRestId` 抓全文。注意：这是 X 内部接口，queryId 随发版轮换，失效时会告警并回退为预览；且需要网络可达 x.com
   - 网络不可达 x.com（如部分网络环境）时，手动复制正文用 `--fallback-text`
@@ -58,7 +60,7 @@ X_COOKIES="auth_token=...; ct0=..." python scripts/fetch_tweet.py "链接" -o ./
 
 - 受保护账号、已删除、成人/受限内容可能取不到
 - 端点或 token 算法（`fetch_tweet.py` 里的 `make_token`）若被 X 调整，需相应更新
-- 目前仅支持**单条推文**；thread（连串推文）是未来增强方向
+- `--thread` 依赖公开作者时间线发现后续回复。该 syndication 时间线是非官方接口、结果可能陈旧或不完整；没找到后续回复时会明确告警。线程抓取只沿直接自回复链，不会把其他用户的回复或作者另起的分支拼入。
 
 抓取失败时可以使用 `--fallback-text`：把浏览器里能看到的正文复制到 txt/md 文件，脚本仍会生成统一 frontmatter 的 Markdown，保证后续 `content-enrich` / 入库工作流不断。也可以使用 `--fallback-json` 读取单条推文对象、对象列表，或 `tweet` / `data` / `result` / `item` 包装的对象。
 

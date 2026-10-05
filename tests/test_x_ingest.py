@@ -1,7 +1,10 @@
 import importlib.util
+import io
 import os
 import tempfile
 import unittest
+from io import BytesIO
+from unittest import mock
 
 from tools import validate_outputs
 
@@ -192,6 +195,225 @@ class XArticleTest(unittest.TestCase):
     def test_load_cookies_rejects_missing_keys(self):
         with self.assertRaisesRegex(ValueError, "auth_token"):
             fetch_tweet.load_cookies("foo=bar")
+
+
+class XThreadTest(unittest.TestCase):
+    def test_parse_syndication_timeline_extracts_tweet_entries(self):
+        payload = {
+            "props": {
+                "pageProps": {
+                    "timeline": {
+                        "entries": [
+                            {"content": {"tweet": {"id_str": "2", "text": "Reply"}}},
+                            {"content": {"tweet": {"id_str": "3", "text": "Next"}}},
+                            {"content": {"other": {"id_str": "ignored"}}},
+                        ]
+                    }
+                }
+            }
+        }
+        html = (
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + fetch_tweet.json.dumps(payload)
+            + "</script>"
+        )
+
+        self.assertEqual(
+            fetch_tweet.parse_syndication_timeline(html),
+            [{"id_str": "2", "text": "Reply"}, {"id_str": "3", "text": "Next"}],
+        )
+        with self.assertRaisesRegex(ValueError, "__NEXT_DATA__"):
+            fetch_tweet.parse_syndication_timeline("<html></html>")
+
+    def test_fetch_author_timeline_uses_public_replies_enabled_endpoint(self):
+        html = (
+            '<script id="__NEXT_DATA__" type="application/json">'
+            '{"props":{"pageProps":{"timeline":{"entries":[]}}}}'
+            "</script>"
+        )
+        with (
+            mock.patch.object(fetch_tweet.time, "sleep") as sleep,
+            mock.patch.object(
+                fetch_tweet.urllib.request,
+                "urlopen",
+                return_value=BytesIO(html.encode()),
+            ) as urlopen,
+        ):
+            tweets = fetch_tweet.fetch_author_timeline("ada")
+
+        self.assertEqual(tweets, [])
+        self.assertIn("showReplies=true", urlopen.call_args.args[0].full_url)
+        sleep.assert_called_once_with(fetch_tweet.THREAD_REQUEST_DELAY_SECONDS)
+
+    def test_collect_thread_follows_only_same_author_direct_replies(self):
+        root = {
+            "id_str": "100",
+            "user": {"id_str": "ada-id", "screen_name": "ada"},
+        }
+        timeline = [
+            {
+                "id_str": "102",
+                "conversation_id_str": "100",
+                "in_reply_to_status_id_str": "101",
+                "user": {"id_str": "ada-id", "screen_name": "ada"},
+            },
+            {
+                "id_str": "101",
+                "conversation_id_str": "100",
+                "in_reply_to_status_id_str": "100",
+                "user": {"id_str": "ada-id", "screen_name": "ada"},
+            },
+            {
+                "id_str": "103",
+                "conversation_id_str": "100",
+                "in_reply_to_status_id_str": "100",
+                "user": {"id_str": "other-id", "screen_name": "other"},
+            },
+            {
+                "id_str": "104",
+                "conversation_id_str": "999",
+                "in_reply_to_status_id_str": "101",
+                "user": {"id_str": "ada-id", "screen_name": "ada"},
+            },
+        ]
+
+        thread = fetch_tweet.collect_thread_tweets("100", root, timeline)
+
+        self.assertEqual([tweet["id_str"] for tweet in thread], ["100", "101", "102"])
+
+    def test_thread_markdown_has_thread_frontmatter_and_ordered_media_sections(self):
+        first = fetch_tweet.parse_tweet(
+            {
+                "id_str": "100",
+                "user": {"name": "Ada", "screen_name": "ada"},
+                "text": "First #research",
+                "favorite_count": 3,
+                "conversation_count": 1,
+                "photos": [{"url": "https://img.example/first.jpg"}],
+            }
+        )
+        second = fetch_tweet.parse_tweet(
+            {
+                "id_str": "101",
+                "user": {"name": "Ada", "screen_name": "ada"},
+                "text": "Second #video",
+                "favorite_count": 4,
+                "conversation_count": 2,
+                "video": {
+                    "variants": [
+                        {
+                            "type": "video/mp4",
+                            "bitrate": 100,
+                            "src": "https://video.example/clip.mp4",
+                        }
+                    ]
+                },
+            }
+        )
+        markdown = fetch_tweet.build_thread_markdown(
+            [
+                {
+                    "data": first,
+                    "image_refs": [("local", "Thread.assets/tweet_01_img_1.jpg")],
+                    "transcript": None,
+                },
+                {
+                    "data": second,
+                    "image_refs": [],
+                    "transcript": "Video words",
+                },
+            ],
+            "https://x.com/ada/status/100",
+            "Thread title",
+        )
+
+        with tempfile.NamedTemporaryFile("w", suffix=".md", encoding="utf-8") as output:
+            output.write(markdown)
+            output.flush()
+            errors = [
+                problem
+                for problem in validate_outputs.validate_file(output.name)
+                if problem["level"] == "error"
+            ]
+
+        self.assertIn("note_type: thread", markdown)
+        self.assertIn("thread_count: 2", markdown)
+        self.assertIn('thread_ids: ["100", "101"]', markdown)
+        self.assertIn("likes: 7", markdown)
+        self.assertIn("replies: 3", markdown)
+        self.assertLess(markdown.index("First #research"), markdown.index("Second #video"))
+        self.assertIn("![](Thread.assets/tweet_01_img_1.jpg)", markdown)
+        self.assertIn("### 视频文字稿\n\nVideo words", markdown)
+        self.assertEqual(errors, [])
+
+    def test_thread_cli_processes_each_tweet_media_and_saves_one_markdown(self):
+        root = {
+            "id_str": "100",
+            "user": {"name": "Ada", "screen_name": "ada"},
+            "text": "First post",
+            "photos": [{"url": "https://img.example/first.jpg"}],
+        }
+        reply = {
+            "id_str": "101",
+            "conversation_id_str": "100",
+            "in_reply_to_status_id_str": "100",
+            "user": {"name": "Ada", "screen_name": "ada"},
+            "text": "Second post",
+            "video": {
+                "variants": [
+                    {
+                        "type": "video/mp4",
+                        "bitrate": 100,
+                        "src": "https://video.example/clip.mp4",
+                    }
+                ]
+            },
+        }
+        with tempfile.TemporaryDirectory() as output_dir:
+            with (
+                mock.patch.object(
+                    fetch_tweet,
+                    "fetch_tweet",
+                    return_value=root,
+                ),
+                mock.patch.object(
+                    fetch_tweet,
+                    "fetch_author_timeline",
+                    return_value=[reply],
+                ),
+                mock.patch.object(
+                    fetch_tweet,
+                    "download_images",
+                    return_value=[("local", "First-post.assets/tweet_01_img_1.jpg")],
+                ) as download_images,
+                mock.patch.object(
+                    fetch_tweet, "transcribe_video", return_value="Video words"
+                ) as transcribe_video,
+                mock.patch(
+                    "sys.argv",
+                    [
+                        "fetch_tweet.py",
+                        "https://x.com/ada/status/100",
+                        "--output",
+                        output_dir,
+                        "--thread",
+                    ],
+                ),
+                mock.patch("sys.stdout", new_callable=io.StringIO),
+            ):
+                fetch_tweet.main()
+
+            output_path = os.path.join(output_dir, "First-post.md")
+            with open(output_path, encoding="utf-8") as saved:
+                markdown = saved.read()
+
+        self.assertIn("thread_count: 2", markdown)
+        self.assertIn("## 推文 2", markdown)
+        self.assertIn("![](First-post.assets/tweet_01_img_1.jpg)", markdown)
+        self.assertIn("### 视频文字稿\n\nVideo words", markdown)
+        download_images.assert_called_once()
+        self.assertEqual(download_images.call_args.args[3], "tweet_01_")
+        transcribe_video.assert_called_once_with("https://video.example/clip.mp4")
 
 
 if __name__ == "__main__":
