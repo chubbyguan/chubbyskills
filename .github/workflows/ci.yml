@@ -135,7 +135,9 @@ jobs:
           chubby import notes.md --no-enrich
           chubby search "installed"
           chubby brief --topic "installed" --output "$workdir/brief.md"
-          chubby doctor --platform youtube
+          # `x` reads platforms/x.yaml and needs no external command; the
+          # youtube path would fail here because the runner has no yt-dlp.
+          chubby doctor --platform x
 
           for stray in chubby.yaml inbox runs output .chubby; do
             if [ -e "$site_packages/$stray" ]; then
