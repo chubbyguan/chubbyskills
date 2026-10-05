@@ -8,7 +8,6 @@ from unittest import mock
 
 from tools import validate_outputs
 
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, "x-ingest", "scripts", "fetch_tweet.py")
 SPEC = importlib.util.spec_from_file_location("x_ingest_fetch_tweet", SCRIPT)
