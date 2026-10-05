@@ -1508,6 +1508,19 @@ def build_parser():
     subscribe_digest.add_argument("--enrich", action="store_true", help="Optional DeepSeek prescreen/score/summary layer (DEEPSEEK_API_KEY)")
     subscribe_digest.add_argument("--no-vault-links", action="store_true", help="Skip vault related-notes lookup")
     subscribe_digest.add_argument("--cluster-threshold", type=float, default=0.5, help="Title Jaccard similarity for event clustering (default 0.5)")
+    subscribe_schedule = subscribe_sub.add_parser(
+        "schedule", help="Install and inspect the OS timer that runs tick"
+    )
+    schedule_sub = subscribe_schedule.add_subparsers(dest="schedule_command", required=True)
+    for name, help_text in (
+        ("install", "Write and load the timer (launchd on macOS, systemd user units on Linux)"),
+        ("status", "Show the timer state and the most recent tick results"),
+        ("uninstall", "Stop and remove the timer"),
+    ):
+        command = schedule_sub.add_parser(name, help=help_text)
+        command.add_argument("--interval-minutes", type=int, default=60, help="Tick interval (5-1440, default 60)")
+        if name == "install":
+            command.add_argument("--dry-run", action="store_true", help="Print the unit without writing it")
     subscribe_site = subscribe_sub.add_parser("site", help="Static daily-report site generator")
     site_sub = subscribe_site.add_subparsers(dest="site_command", required=True)
     site_build = site_sub.add_parser("build", help="Build the static site (overwrites the output directory)")

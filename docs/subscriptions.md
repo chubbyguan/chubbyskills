@@ -233,34 +233,44 @@ gh api repos/{owner}/<repo>/pages -X POST -f "build_type=workflow"  # 或用 Set
 
 订阅 CLI 不启动常驻服务。每小时由系统定时器触发一次；每个来源仍按自身 `poll_minutes` 决定是否实际请求。每个来源的下一次到期时间带按来源哈希的确定性抖动（约 ±10%），批量添加的源不会在同一秒集中请求同一个 host。
 
+一条命令装好（macOS 用 launchd，Linux 用 systemd user timer）：
+
+```bash
+python3 tools/chubby.py subscribe schedule install              # 默认每 60 分钟
+python3 tools/chubby.py subscribe schedule install --interval-minutes 30
+python3 tools/chubby.py subscribe schedule install --dry-run    # 只打印生成的单元文件
+```
+
+解释器、入口脚本、配置路径和日志目录都取自你**当前运行的这个环境**，不需要手动替换占位符，日志目录会自动创建。用 `--subscriptions` 指向别的订阅配置时，生成的命令会一并带上。
+
+```text
+✅ 已写入：/Users/you/Library/LaunchAgents/im.chubby.chubbyskills.subscribe.plist
+✅ 已加载：每 60 分钟执行一次
+   解释器：/path/to/.venv/bin/python
+   日志：/path/to/.chubby/logs
+```
+
+查看状态，含最近几次 tick 的结果：
+
+```bash
+python3 tools/chubby.py subscribe schedule status
+```
+
+```text
+配置：/path/to/chubbyskills/chubby.yaml
+日志：/path/to/chubbyskills/.chubby/tick-log.jsonl
+定时器：not running；累计运行 3 次；上次退出码 0
+最近 2 次：
+  2026-10-05T03:19:01Z（12 分钟前）due=0 healthy=0 unchanged=0 errors=0 processed=0
+  2026-10-05T02:19:01Z（72 分钟前）due=5 healthy=4 unchanged=1 errors=0 processed=0
+```
+
+每次 tick 都把结果追加到 `<配置目录>/.chubby/tick-log.jsonl`。**没有记录的调度和已经停掉的调度是无法区分的**，所以 tick 自己写日志，不依赖外层包装脚本；连"已有任务在执行所以跳过"也会记一行。移除定时器用 `subscribe schedule uninstall`。
+
+其它系统，或者你想自己管调度器，直接调这条命令即可：
+
 ```bash
 python3 tools/chubby.py subscribe tick --due --process-limit 3
-```
-
-macOS 推荐 launchd。将下列文件保存为 `~/Library/LaunchAgents/im.chubby.chubbyskills.subscribe.plist`，并替换解释器、仓库和日志的绝对路径：
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>im.chubby.chubbyskills.subscribe</string>
-  <key>ProgramArguments</key><array>
-    <string>/absolute/path/to/.venv/bin/python</string>
-    <string>/absolute/path/to/chubbyskills/tools/chubby.py</string>
-    <string>subscribe</string><string>tick</string><string>--due</string>
-    <string>--process-limit</string><string>3</string>
-  </array>
-  <key>StartInterval</key><integer>3600</integer>
-  <key>StandardOutPath</key><string>/absolute/path/to/logs/subscription.out.log</string>
-  <key>StandardErrorPath</key><string>/absolute/path/to/logs/subscription.err.log</string>
-</dict></plist>
-```
-
-加载和查看状态：
-
-```bash
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/im.chubby.chubbyskills.subscribe.plist
-launchctl print "gui/$(id -u)/im.chubby.chubbyskills.subscribe"
 ```
 
 SQLite 内部 lease 负责阻止重叠 tick；launchd / cron 的重复触发不会并行转录同一条内容。手动 `process` 与定时 `tick` 共用同一把调度锁（4 小时，按最长单条转录时长设定）。条目被领取后，执行线程每 60 秒写一次心跳；只有心跳停止超过 6 小时（即进程崩溃）条目才会被回收重试——长时间转录不会被误判为卡死。

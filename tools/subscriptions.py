@@ -7,6 +7,7 @@ import re
 import sys
 import threading
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ try:
         subscription_adapters,
         subscription_digest,
         subscription_executor,
+        subscription_schedule,
         subscription_site,
         subscription_store,
     )
@@ -22,6 +24,7 @@ except ModuleNotFoundError:
     import subscription_adapters
     import subscription_digest
     import subscription_executor
+    import subscription_schedule
     import subscription_site
     import subscription_store
 
@@ -103,6 +106,39 @@ def _context(args: Any, config: dict[str, Any]):
     store.migrate()
     store.ensure_sources(document["subscriptions"])
     return document_path, document, store
+
+
+def _write_tick_log(document_path, summaries, *, status="ok", processed=0) -> None:
+    """Append one JSON line per tick beside the subscription config.
+
+    A scheduler that silently records nothing is indistinguishable from one
+    that stopped running, so the tick writes its own result instead of relying
+    on a wrapper script: `subscribe schedule status` reads this back.
+    """
+    counts = {"due": len(summaries), "healthy": 0, "unchanged": 0, "errors": 0}
+    # `status` uses the singular "error" while the log field is plural.
+    status_key = {"healthy": "healthy", "unchanged": "unchanged", "error": "errors"}
+    for item in summaries:
+        key = status_key.get(item.get("status"))
+        if key:
+            counts[key] += 1
+    record = {
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "due": counts["due"],
+        "healthy": counts["healthy"],
+        "unchanged": counts["unchanged"],
+        "errors": counts["errors"],
+        "processed": processed,
+        "status": status,
+    }
+    path = Path(document_path).parent / "tick-log.jsonl"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        # Logging must never turn a successful sync into a failed tick.
+        print(f"⚠️  tick 日志写入失败：{exc}", file=sys.stderr)
 
 
 def _print_table(headers: list[str], rows: list[list[Any]]) -> None:
@@ -703,24 +739,34 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         if action == "process":
             return process_entries(args, config)[0]
         if action == "tick":
-            _, document, store = _context(args, config)
+            document_path, document, store = _context(args, config)
             token = store.acquire_lock("tick", seconds=TICK_LOCK_SECONDS)
             if not token:
                 print("已有订阅任务执行中，当前 tick 跳过。")
+                _write_tick_log(document_path, [], status="lock_held")
                 return 0
             try:
-                sync_code, _ = sync_subscriptions(args, config, due=True)
+                sync_code, summaries = sync_subscriptions(args, config, due=True)
                 if args.no_process:
+                    _write_tick_log(
+                        document_path, summaries, status="error" if sync_code else "ok"
+                    )
                     return sync_code
                 # A scheduled tick owns recovery; manual `process` keeps an
                 # explicit --retry-failed switch for safer ad-hoc use.
                 args.retry_failed = True
-                process_code, _ = process_entries(
+                process_code, processed = process_entries(
                     args,
                     config,
                     limit=args.process_limit
                     or document["defaults"]["process_limit_per_tick"],
                     holds_lock=True,
+                )
+                _write_tick_log(
+                    document_path,
+                    summaries,
+                    status="error" if (sync_code or process_code) else "ok",
+                    processed=len(processed or []),
                 )
                 return 1 if sync_code or process_code else 0
             finally:
@@ -733,6 +779,15 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
             if getattr(args, "site_command", None) == "build":
                 return subscription_site.build_site(args, config, document, store)
             raise SubscribeCommandError(f"unknown subscribe site command: {args.site_command}")
+        if action == "schedule":
+            command = getattr(args, "schedule_command", None)
+            if command == "install":
+                return subscription_schedule.install(args, config)
+            if command == "status":
+                return subscription_schedule.status(args, config)
+            if command == "uninstall":
+                return subscription_schedule.uninstall(args, config)
+            raise SubscribeCommandError(f"unknown subscribe schedule command: {command}")
         if action == "pause":
             return _toggle(args, config, False)
         if action == "resume":
@@ -743,6 +798,7 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
         subscription_store.SubscriptionError,
         subscription_adapters.AdapterError,
         subscription_digest.DigestError,
+        subscription_schedule.ScheduleError,
         subscription_site.SiteError,
         ValueError,
     ) as exc:
