@@ -58,22 +58,24 @@ Chubby Skills 是一套面向内容创作者和个人知识库的 **14 个 Agent
 
 ## 快速开始
 
-建议使用 **Python 3.11 或 3.12，macOS / Linux shell**。下面用一份示例 Markdown 跑通「导入 → 搜索 → 资料包」，无需安装第三方 Python 包、配置 API Key 或下载模型。
+核心链路只用 Python 标准库：**不装第三方包、不配 API Key、不下载模型**。需要 Python 3.11 及以上——先 `python3 --version` 确认一下：macOS 自带的是 3.9，核心命令能跑，但 `subscribe` 订阅链路会在导入时失败，建议 `brew install python@3.12` 或直接用下面的 venv 步骤。
 
-### 1. 获取项目并配置知识库
+### 60 秒跑通：克隆 → 导入 → 搜索 → 资料包
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e .   # 可选：获得 chubby 命令，等价于 python3 tools/chubby.py
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
 ```
 
-`init` 会创建 `chubby.yaml` 和知识库目录。下面的命令在仓库根目录运行，沿用这份配置。已有知识库可将 `--vault` 换成它的根目录；已有配置的调整见[创作者工作流](./docs/creator-workflow.md)。
+```text
+✅ 已写入配置：/path/to/chubbyskills/chubby.yaml
+✅ 已准备队列：/path/to/chubbyskills/inbox/links.txt
+✅ 已准备状态：/path/to/chubbyskills/.chubby/runs.jsonl
+✅ 已准备报告目录：/path/to/chubbyskills/runs
+```
 
-### 2. 导入一份文档
+导入一份文档，再搜回它（把示例文件换成你自己的 `.md`、`.markdown` 或 `.txt`；已知原始网页时加 `--source-url "原始网页地址"`）：
 
 ```bash
 mkdir -p demo-input
@@ -84,28 +86,64 @@ cat > demo-input/notes.md <<'NOTE'
 NOTE
 
 python3 tools/chubby.py import demo-input/notes.md --no-enrich
+python3 tools/chubby.py search "内容复用"
 ```
 
-将示例路径换成自己的 `.md`、`.markdown` 或 `.txt` 文件即可导入真实材料。已知原始网页时，加 `--source-url "原始网页地址"`；本地文件默认记录文件 URI。
+```text
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+/path/to/chubbyskills/creator-vault/00_Inbox/内容复用笔记--c2f47ab83782202c.md
 
-### 3. 搜索并导出资料包
+内容复用笔记
+  00_Inbox/内容复用笔记--c2f47ab83782202c.md
+  # 内容复用笔记  内容复用从保留原文和来源开始。同一份材料可以用于选题、文章和播客，但引用前要重新核对上下文。
+```
+
+最后导出带出处的资料包——这是这个项目真正产出的东西：
 
 ```bash
-python3 tools/chubby.py search "内容复用"
 python3 tools/chubby.py brief --topic "内容复用" \
   --output "$PWD/creator-vault/30_Output/brief.md"
-python3 tools/chubby.py status --latest
 ```
 
-你会得到：
+```text
+{
+  "markdown": "/path/to/chubbyskills/creator-vault/30_Output/brief.md",
+  "json": "/path/to/chubbyskills/creator-vault/30_Output/brief.json"
+}
+```
+
+`brief.md` 里是逐字摘录、原文行号、来源链接和文件 SHA-256，可以直接回查：
+
+```text
+## E1 · 内容复用笔记
+
+笔记相对路径：`00_Inbox/内容复用笔记--c2f47ab83782202c.md`
+原始来源：未提供可打开的网页链接。
+采集时间：2026-10-05T10:54:57+08:00
+文件 SHA-256：`a447fe17417d824d613ecc66abee0281439a213dcc2e596b58f547c5330d244a`
+
+原文第 22–22 行：
+```
+
+产物落在三处：
 
 - `creator-vault/00_Inbox/`：带来源信息的 Markdown 和引用的本地附件。
-- `creator-vault/30_Output/brief.md` 与 `brief.json`：包含逐字摘录、原文行号、来源和 SHA-256 的资料包。
+- `creator-vault/30_Output/brief.md` 与 `brief.json`：资料包本体。
 - `.chubby/runs.jsonl` 与 `runs/`：任务状态和运行报告，方便检查失败与重试。
 
-打开资料包核对引用，然后交给 Agent 整理选题。`brief` 在本地导出证据，不调用云模型，也不判断原文观点是否正确。上面的演示材料是人工样例；平台采集需要下一节对应的依赖。
+`brief` 全程在本地完成，不调用云模型，也不判断原文观点是否正确；上面的演示材料是人工样例。再次导出请换一个文件名，确认要替换已生成的资料包后再加 `--force`。
 
-再次导出时请换一个输出文件名；确认要替换已生成的资料包后再加 `--force`。
+### 可选：把 `chubby` 装成命令
+
+上面用的是 `python3 tools/chubby.py`，不装也能跑。想要 `chubby init` 这种形式：
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python3 -m pip install -e .   # 提供 chubby 命令，等价于 python3 tools/chubby.py
+```
+
+已有知识库时把 `--vault` 换成它的根目录（例如 `docs/quickstart.md` 里的 `$HOME/Documents/creator-vault`）；已有配置的调整见[创作者工作流](./docs/creator-workflow.md)。
 
 ## 处理你的素材
 
@@ -296,6 +334,7 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [云转录](./docs/cloud-transcription.md) | Provider 配置、任务恢复和计费边界 |
 | [订阅与调度（P0）](./docs/subscriptions.md) | 公开 Feed / YouTube 订阅、队列、调度、故障恢复与限制 |
 | [知识库自动化](./docs/knowledge-automation.md) | 索引、向量检索、归档和知识卡片 |
+| [验证模型](./docs/verification-model.md) | 三种陈述强度、真实来源验收协议、公开内容边界与第三方证据处理 |
 | [MCP 配置](./docs/mcp-workflow.md) | 将知识库接入 Agent |
 | [社区推广 / 榜单提交指南](./docs/community-promotion-submission-guide.zh-CN.md) | 各渠道推广与榜单提交文案（已对齐当前 14 个 Skills 版本） |
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |

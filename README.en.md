@@ -52,16 +52,26 @@ Declared capability (not live probing); dated real-source evidence lives in [liv
 
 ## Try the local workflow
 
-We recommend Python 3.11 or 3.12 and a macOS/Linux shell. The following example imports a small document you create yourself, searches it, and exports a brief. **No pip packages, API keys, or models are needed for this Markdown/TXT workflow.**
+Requires Python 3.11 or newer on a macOS/Linux shell — check with `python3 --version` first: the 3.9 that ships with macOS runs the core commands but breaks the `subscribe` chain on import (`datetime.UTC`), so install a newer Python or use the virtualenv step below. The core path uses only the standard library: **no pip packages, no API keys, no model downloads.** (The CLI reports in Chinese; the commands are language-neutral.)
+
+### Clone to first note in about a minute
 
 ```bash
 git clone https://github.com/chubbyguan/chubbyskills.git
 cd chubbyskills
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e .   # optional: provides the `chubby` command, equivalent to `python3 tools/chubby.py`
-
 python3 tools/chubby.py init --vault "$PWD/creator-vault"
+```
+
+```text
+✅ 已写入配置：/path/to/chubbyskills/chubby.yaml
+✅ 已准备队列：/path/to/chubbyskills/inbox/links.txt
+✅ 已准备状态：/path/to/chubbyskills/.chubby/runs.jsonl
+✅ 已准备报告目录：/path/to/chubbyskills/runs
+```
+
+Create one document, import it, and search it back. Swap the sample file for your own `.md`, `.markdown` or `.txt`; add `--source-url "https://…"` when you know the original page:
+
+```bash
 mkdir -p demo-input
 cat > demo-input/sample.md <<'MARKDOWN'
 ---
@@ -76,11 +86,53 @@ MARKDOWN
 
 python3 tools/chubby.py import demo-input/sample.md --no-enrich
 python3 tools/chubby.py search "source library"
+```
+
+```text
+✅ 完成：success=1 / failed=0 / dry_run=0
+🧾 报告：/path/to/chubbyskills/runs/2026-10-05.md
+
+Source library demo
+  00_Inbox/Source-library-demo--c2f47ab83782202c.md
+  # Source library demo  This is a manually written example. A source library keeps the original text…
+```
+
+Then export the brief — the artifact this project actually exists to produce:
+
+```bash
 python3 tools/chubby.py brief --topic "source library" \
   --output "$PWD/creator-vault/30_Output/source-library-brief.md"
 ```
 
-Open the imported note in `creator-vault/00_Inbox` and the brief in `creator-vault/30_Output`. The brief has a companion JSON file and points back to exact lines in the imported note. For this local example, provenance points to the original local file.
+```text
+{
+  "markdown": "/path/to/chubbyskills/creator-vault/30_Output/source-library-brief.md",
+  "json": "/path/to/chubbyskills/creator-vault/30_Output/source-library-brief.json"
+}
+```
+
+The Markdown brief carries verbatim excerpts, original line numbers, the source link and a file SHA-256, so every claim can be traced back:
+
+```text
+## E1 · Source library demo
+
+笔记相对路径：`00_Inbox/Source-library-demo--c2f47ab83782202c.md`
+原始来源：未提供可打开的网页链接。
+文件 SHA-256：`a447fe17417d824d613ecc66abee0281439a213dcc2e596b58f547c5330d244a`
+
+原文第 22–22 行：
+```
+
+Three things land on disk: `creator-vault/00_Inbox/` (the note plus any referenced local attachments), `creator-vault/30_Output/` (the brief and its JSON companion), and `.chubby/runs.jsonl` with `runs/` (task state and run reports). Everything above runs offline; the brief never calls a cloud model and never judges whether the source is right.
+
+### Optional: install the `chubby` command
+
+The workflow above uses `python3 tools/chubby.py` and needs no install. For the `chubby …` form:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python3 -m pip install -e .   # provides the `chubby` command
+```
 
 The import preserves the original document, copies supported local attachments, and updates the index. Repeating the same import can reuse a valid result; changing the document or its attachments creates a new result while retaining the old one. If you repeat the brief export, choose a different output filename or explicitly add `--force` to replace the previous brief.
 
@@ -289,6 +341,7 @@ Most detailed guides are currently in Chinese.
 | [Knowledge automation](./docs/knowledge-automation.md) | Retrieval, optional embeddings, and archive/card workflows |
 | [Optional integrations](./docs/integrations.md) | Import Markdown produced by other tools |
 | [Community triage](./docs/community-triage.md) | Contribution attribution and adoption decisions |
+| [Verification model (Chinese)](./docs/verification-model.md) | Claim-strength tiers, live-acceptance protocol, publish boundaries, third-party evidence |
 | [Changelog](./CHANGELOG.md) | Changes by version |
 
 ## Usage limits
