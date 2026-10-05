@@ -262,10 +262,13 @@ def status(args: Any, config: dict[str, Any]) -> int:
         if detail.returncode != 0:
             print("定时器：未安装（运行 subscribe schedule install）")
         else:
-            state = re_first(r"state = (\S+)", detail.stdout) or "未知"
-            exit_code = re_first(r"last exit code = (\S+)", detail.stdout) or "尚未运行"
+            state = re_first(r"state = (.+)", detail.stdout) or "未知"
+            exit_code = re_first(r"last exit code = (.+)", detail.stdout) or "尚未运行"
             runs = re_first(r"\bruns = (\d+)", detail.stdout) or "0"
-            print(f"定时器：{state}；累计运行 {runs} 次；上次退出码 {exit_code}")
+            # launchd prints `last exit code = (never exited)` before the first run.
+            if exit_code.startswith("("):
+                exit_code = "尚未运行"
+            print(f"定时器：{state.strip()}；累计运行 {runs} 次；上次退出码 {exit_code.strip()}")
     elif platform.system() == "Linux":
         detail = subprocess.run(
             ["systemctl", "--user", "is-active", SYSTEMD_TIMER],
