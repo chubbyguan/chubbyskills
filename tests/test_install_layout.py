@@ -98,6 +98,34 @@ class SkillScriptPathTest(unittest.TestCase):
         path = chubby_ingest.script_path("document")
         self.assertTrue(os.path.isfile(path))
 
+    def test_skill_dir_prefers_the_distributed_name_in_a_checkout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / "bilibili-transcribe").mkdir()
+            (root / "bilibili_transcribe").mkdir()
+            with patch.object(chubby_ingest, "ROOT", str(root)):
+                self.assertEqual(
+                    Path(chubby_ingest.skill_dir("bilibili-transcribe")).name,
+                    "bilibili-transcribe",
+                )
+
+    def test_skill_dir_falls_back_to_the_importable_name_once_installed(self):
+        """`bilibili-transcribe` is not a legal package name; the wheel maps it."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / "bilibili_transcribe").mkdir()
+            with patch.object(chubby_ingest, "ROOT", str(root)):
+                self.assertEqual(
+                    Path(chubby_ingest.skill_dir("bilibili-transcribe")).name,
+                    "bilibili_transcribe",
+                )
+
+    def test_installed_layout_resolves_a_real_entrypoint(self):
+        """The whole point of #16: a pip install can run platform capture."""
+        path = chubby_ingest.script_path("youtube")
+        self.assertTrue(os.path.isfile(path))
+        self.assertTrue(path.endswith(os.path.join("scripts", "transcribe.py")))
+
 
 if __name__ == "__main__":
     unittest.main()

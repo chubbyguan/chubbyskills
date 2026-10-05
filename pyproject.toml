@@ -40,11 +40,46 @@ Changelog = "https://github.com/chubbyguan/chubbyskills/blob/main/CHANGELOG.md"
 # directories cannot join them: `bilibili-transcribe` and friends are not valid
 # package names, and skills are distributed as directories for agents to
 # install rather than as importable modules.
-packages = ["tools", "chubby_common", "platforms", "templates"]
+packages = ["tools", "chubby_common", "platforms", "templates", "bilibili_transcribe", "content_enrich", "douyin_transcribe", "industry_intelligence_radar", "knowledge_base_management", "learning_notes_automation", "podcast_transcribe", "tiktok_transcribe", "wechat_article_ingest", "weibo_transcribe", "x_ingest", "xiaohongshu_ingest", "youtube_transcribe", "zhihu_transcribe"]
+
+# The skill directories are distributed as directories for agents to install,
+# and their names (`bilibili-transcribe`) are not legal Python package names, so
+# they are mapped onto importable names rather than renamed. The mapping needs
+# no `__init__.py` in the skill directory, which keeps the portable bundle that
+# `install_skill.py` produces byte-identical to the repository copy.
+[tool.setuptools.package-dir]
+bilibili_transcribe = "bilibili-transcribe"
+content_enrich = "content-enrich"
+douyin_transcribe = "douyin-transcribe"
+industry_intelligence_radar = "industry-intelligence-radar"
+knowledge_base_management = "knowledge-base-management"
+learning_notes_automation = "learning-notes-automation"
+podcast_transcribe = "podcast-transcribe"
+tiktok_transcribe = "tiktok-transcribe"
+wechat_article_ingest = "wechat-article-ingest"
+weibo_transcribe = "weibo-transcribe"
+x_ingest = "x-ingest"
+xiaohongshu_ingest = "xiaohongshu-ingest"
+youtube_transcribe = "youtube-transcribe"
+zhihu_transcribe = "zhihu-transcribe"
 
 [tool.setuptools.package-data]
 platforms = ["*.yaml"]
 templates = ["site/*", "sites/*", "digest-prompts/*"]
+bilibili_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+content_enrich = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+douyin_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+industry_intelligence_radar = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+knowledge_base_management = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+learning_notes_automation = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+podcast_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+tiktok_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+wechat_article_ingest = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+weibo_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+x_ingest = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+xiaohongshu_ingest = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+youtube_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
+zhihu_transcribe = ["SKILL.md", "*.md", "*.txt", "*.yaml", "*.yml", "*.json", "scripts/*", "references/*", "assets/*"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}

@@ -165,7 +165,7 @@ python3 -m pip install -e .   # provides the `chubby` command
 
 A plain package install works too (`pip install .`, or `pipx install git+https://github.com/chubbyguan/chubbyskills.git`). The knowledge-base commands are all available — `init` / `import` / `search` / `brief` / `index` / `doctor` / `subscribe` (including `digest` and `site build`) — and user state is written to **your current directory**, never into the install directory.
 
-**Platform capture (`ingest`) still needs a full checkout.** Skills are distributed as directories (install them into your agent with `tools/install_skill.py`) and are not part of the Python package. The command says so directly instead of failing inside a subprocess.
+**Platform capture (`ingest`) works too**: the 14 skill directories ship with the package (their names — `bilibili-transcribe` — are not legal Python package names, so the build maps them to `bilibili_transcribe`; you never see this). To install those skills into an agent rather than calling them through the CLI, use `tools/install_skill.py` from a checkout — the two routes are independent.
 
 The import preserves the original document, copies supported local attachments, and updates the index. Repeating the same import can reuse a valid result; changing the document or its attachments creates a new result while retaining the old one. If you repeat the brief export, choose a different output filename or explicitly add `--force` to replace the previous brief.
 

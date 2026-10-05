@@ -149,12 +149,10 @@ jobs:
           test -f "$workdir/brief.md"
           test -f "$workdir/vault/00_Inbox"/*.md
 
-      - name: Platform capture refuses a partial install with a clear hint
+      - name: Platform capture resolves without the checkout
         run: |
           cd "$(mktemp -d)"
-          # The run report and the failure line both go to stdout, so capture both.
-          if chubby ingest "https://www.youtube.com/watch?v=aircAruvnKk" >capture.log 2>&1; then
-            echo "::error::ingest must fail when the skill directories are absent"
-            exit 1
-          fi
-          grep -q "git clone" capture.log
+          chubby init --vault "$(pwd)/vault"
+          # Resolves the skill entrypoint without touching the network.
+          python -c "from tools import chubby_ingest; p = chubby_ingest.script_path('youtube'); assert 'youtube_transcribe' in p and p.endswith('scripts/transcribe.py'), p; print('entrypoint:', p)"
+          chubby ingest "https://www.youtube.com/watch?v=aircAruvnKk" --dry-run

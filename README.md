@@ -174,7 +174,7 @@ python3 -m pip install -e .   # 提供 chubby 命令，等价于 python3 tools/c
 
 也可以装成普通包（`pip install .`，或 `pipx install git+https://github.com/chubbyguan/chubbyskills.git`）。非 editable 安装下，知识库命令全部可用——`init` / `import` / `search` / `brief` / `index` / `doctor` / `subscribe`（含 `digest` 与 `site build`），用户状态写在**你当前所在目录**，不会写进安装目录。
 
-**平台采集 `ingest` 仍需完整仓库 checkout。** 技能以目录形式分发（装进 Agent 用 `tools/install_skill.py`），不随 Python 包安装；命令会直接告诉你这一点，而不是在子进程里失败。
+**平台采集 `ingest` 同样可用**：14 个 skill 目录随包一起安装（目录名 `bilibili-transcribe` 不是合法 Python 包名，构建时映射为 `bilibili_transcribe`，你不需要关心）。想把这些 skill 直接装进 Agent 而不是通过 CLI 调用，仍从仓库跑 `tools/install_skill.py`；两种方式互不影响。
 
 已有知识库时把 `--vault` 换成它的根目录（例如 `docs/quickstart.md` 里的 `$HOME/Documents/creator-vault`）；已有配置的调整见[创作者工作流](./docs/creator-workflow.md)。
 

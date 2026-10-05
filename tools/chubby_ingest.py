@@ -192,14 +192,25 @@ SKILL_CHECKOUT_HINT = (
 )
 
 
-def script_path(skill):
-    """Filesystem path of a skill entrypoint, refusing a partial install.
+def skill_dir(name):
+    """Locate a skill directory in either layout.
 
-    A pip/pipx install ships the package but not the skill directories, so
-    running a capture command there would fail deep inside a subprocess. Fail
-    here instead, where the message can say what to do.
+    A checkout keeps the directory under the name it is distributed with
+    (`bilibili-transcribe`), because that is what `install_skill.py` copies into
+    an agent. A pip install cannot use that name — it is not a legal Python
+    package — so the wheel maps it to `bilibili_transcribe` via package-dir.
+    Both layouts are resolved here so callers never care which one they are in.
     """
-    path = os.path.join(ROOT, *SKILL_COMMANDS[skill])
+    direct = os.path.join(ROOT, name)
+    if os.path.isdir(direct):
+        return direct
+    return os.path.join(ROOT, name.replace("-", "_"))
+
+
+def script_path(skill):
+    """Filesystem path of a skill entrypoint, refusing a partial install."""
+    parts = SKILL_COMMANDS[skill]
+    path = os.path.join(skill_dir(parts[0]), *parts[1:])
     if not os.path.isfile(path):
         raise RuntimeError(f"{skill} 的采集脚本不在当前安装中：{path}\n{SKILL_CHECKOUT_HINT}")
     return path
@@ -301,7 +312,7 @@ def main():
             if not Path(staged_path).resolve().is_relative_to(Path(stage).resolve()):
                 raise RuntimeError("skill 输出不在本次暂存目录内")
             if args.enrich:
-                enrich_script = os.path.join(ROOT, "content-enrich", "scripts", "enrich.py")
+                enrich_script = os.path.join(skill_dir("content-enrich"), "scripts", "enrich.py")
                 if not os.path.isfile(enrich_script):
                     raise RuntimeError(
                         f"content-enrich 脚本不在当前安装中：{enrich_script}\n{SKILL_CHECKOUT_HINT}"
