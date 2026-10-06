@@ -752,6 +752,16 @@ def command_subscribe(args: Any, config: dict[str, Any]) -> int:
                         document_path, summaries, status="error" if sync_code else "ok"
                     )
                     return sync_code
+                # Everything the per-sync budget deferred becomes eligible now,
+                # up to the same budget per source: a burst larger than
+                # max_new_per_sync must not stall on a manual promote forever.
+                budgets = {
+                    item["id"]: item["policy"]["max_new_per_sync"]
+                    for item in document["subscriptions"]
+                }
+                drained = store.promote(store.deferred_entry_ids(budgets))
+                if drained:
+                    print(f"ℹ️  补入队被预算推迟的 {drained} 条")
                 # A scheduled tick owns recovery; manual `process` keeps an
                 # explicit --retry-failed switch for safer ad-hoc use.
                 args.retry_failed = True

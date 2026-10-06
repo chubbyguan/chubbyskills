@@ -841,5 +841,72 @@ class SubscriptionTest(unittest.TestCase):
         self.assertTrue(store.acquire_lock("tick", seconds=60))
 
 
+    def _seed_deferred(self, store, count, *, state="discovered", reason="max_new_per_sync"):
+        for index in range(count):
+            store.insert_entry(
+                "example-feed",
+                subscriptions.asdict(self.entry(f"e{index}", f"Episode {index}", index)),
+                state=state,
+                skip_reason=reason,
+            )
+
+    def test_the_per_sync_budget_defers_overflow_and_the_tick_can_drain_it(self):
+        """`_sync_one` writes surplus as `discovered`, and a later sync skips it
+        as a duplicate — so without draining, a burst larger than
+        max_new_per_sync waits for a manual promote forever. That is how this
+        vault accumulated entries that were discovered and never ingested.
+        """
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        self._seed_deferred(store, 5)
+
+        deferred = store.deferred_entry_ids({"example-feed": 2})
+
+        self.assertEqual(len(deferred), 2)
+        self.assertEqual(store.promote(deferred), 2)
+        # The drained entries left the deferred set; the rest stay for next time.
+        self.assertEqual(len(store.deferred_entry_ids({"example-feed": 2})), 2)
+
+    def test_only_budget_deferred_entries_are_drained(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        self._seed_deferred(store, 1)
+        self._seed_deferred(store, 1, state="skipped", reason="exclude_title_regex")
+        self._seed_deferred(store, 1, state="seen", reason="initial_baseline")
+
+        # A policy skip and a baseline row are decisions, not overflow.
+        self.assertEqual(len(store.deferred_entry_ids({"example-feed": 5})), 1)
+
+    def test_a_source_with_no_budget_is_left_alone(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        self._seed_deferred(store, 3)
+
+        self.assertEqual(store.deferred_entry_ids({}), [])
+        self.assertEqual(store.deferred_entry_ids({"other-source": 5}), [])
+
+    def test_draining_moves_entries_into_the_execution_queue(self):
+        document = self.write_document()
+        store = self.store()
+        store.migrate()
+        store.ensure_sources(document["subscriptions"])
+        self._seed_deferred(store, 2)
+
+        store.promote(store.deferred_entry_ids({"example-feed": 5}))
+
+        with store.session() as con:
+            queued = con.execute(
+                "SELECT COUNT(*) FROM entries WHERE state = 'queued'"
+            ).fetchone()[0]
+        self.assertEqual(queued, 2)
+        self.assertEqual(store.deferred_entry_ids({"example-feed": 5}), [])
+
+
 if __name__ == "__main__":
     unittest.main()

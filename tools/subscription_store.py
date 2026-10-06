@@ -874,6 +874,36 @@ class SubscriptionStore:
             )
             return con.execute("SELECT changes()").fetchone()[0]
 
+    def deferred_entry_ids(self, budgets: dict[str, int]) -> list[int]:
+        """Discovered entries the per-sync budget pushed aside.
+
+        `_sync_one` writes anything past `max_new_per_sync` as `discovered`
+        with skip_reason 'max_new_per_sync'. A later sync sees those rows as
+        duplicates and skips them, so nothing ever revisits the decision: on a
+        source that publishes in bursts, the surplus waits for a manual
+        `promote` indefinitely. A scheduled tick drains up to the same budget
+        per source, which keeps the pacing the budget exists for while letting
+        the backlog clear itself.
+        """
+        if not budgets:
+            return []
+        with self.session() as con:
+            rows = con.execute(
+                "SELECT id, subscription_id FROM entries "
+                "WHERE state = 'discovered' AND skip_reason = 'max_new_per_sync' "
+                "ORDER BY id"
+            ).fetchall()
+        taken: dict[str, int] = {}
+        selected = []
+        for row in rows:
+            source = row["subscription_id"]
+            limit = int(budgets.get(source, 0))
+            if taken.get(source, 0) >= limit:
+                continue
+            taken[source] = taken.get(source, 0) + 1
+            selected.append(row["id"])
+        return selected
+
     def requeue_terminal(self, entry_ids: Iterable[int], *, now: str | None = None) -> int:
         """Requeue failed_terminal entries after an environment fix.
 
