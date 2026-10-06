@@ -3,6 +3,7 @@
 # 视频转录 (douyin/bilibili/tiktok/weibo/zhihu/youtube)
 # -------------------------------------------------------
 funasr>=1.0.0
+transformers>=4.40   # 见 setup.sh：否则解析到 2021 年的 transformers，其 tokenizers 需要 Rust 编译
 modelscope>=1.10.0
 torch>=2.0.0
 torchaudio>=2.0.0

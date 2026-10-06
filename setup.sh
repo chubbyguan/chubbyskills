@@ -29,6 +29,12 @@ has_cmd() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# funasr alone resolves to transformers 4.12.2 (2021), whose pin on tokenizers
+# 0.10.3 has no wheel and needs a Rust toolchain to build — the documented
+# `setup.sh video` failed there on a clean machine (measured 2026-10-06).
+# Asking for a modern transformers keeps the resolver off that path.
+TRANSFORMERS_FLOOR="transformers>=4.40"
+
 require_cmd() {
     if has_cmd "$1"; then
         info "已安装 $1"
@@ -43,7 +49,20 @@ run_doctor() {
 }
 
 pip_install() {
-    python3 -m pip install "$@"
+    if python3 -m pip --version >/dev/null 2>&1; then
+        python3 -m pip install "$@"
+        return
+    fi
+    # A uv-created venv ships without pip — including this project's own .venv,
+    # so the documented install path failed at "No module named pip".
+    if has_cmd uv; then
+        info "当前环境没有 pip（uv 创建的 venv），改用 uv pip install"
+        uv pip install --python "$(command -v python3)" "$@"
+        return
+    fi
+    error "当前 Python 环境既没有 pip 也没有 uv，无法安装依赖。"
+    error "先运行 python3 -m ensurepip --upgrade，或安装 uv 后重试。"
+    exit 1
 }
 
 install_ytdlp() {
@@ -75,7 +94,7 @@ install_video() {
     require_cmd ffmpeg "macOS: brew install ffmpeg | Ubuntu: sudo apt install ffmpeg"
     install_ytdlp
     warn "即将安装 funasr / modelscope / torch / torchaudio，首次安装体积较大。"
-    pip_install funasr modelscope torch torchaudio
+    pip_install funasr ${TRANSFORMERS_FLOOR} modelscope torch torchaudio
     info "视频转录依赖安装完成"
 }
 
@@ -85,7 +104,7 @@ install_podcast() {
     require_cmd python3 "请先安装 Python 3.9+"
     require_cmd ffmpeg "macOS: brew install ffmpeg | Ubuntu: sudo apt install ffmpeg"
     warn "即将安装 funasr / modelscope / torch / torchaudio，首次安装体积较大。"
-    pip_install funasr modelscope torch torchaudio
+    pip_install funasr ${TRANSFORMERS_FLOOR} modelscope torch torchaudio
     info "播客转录依赖安装完成"
 }
 

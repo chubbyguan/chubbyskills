@@ -16,8 +16,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["PyYAML>=6,<7", "ruff>=0.12,<1"]
-video = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
-podcast = ["funasr>=1.0.0", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
+video = ["funasr>=1.0.0", "transformers>=4.40", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
+podcast = ["funasr>=1.0.0", "transformers>=4.40", "modelscope>=1.10.0", "torch>=2.0.0", "torchaudio>=2.0.0"]
 wechat = ["beautifulsoup4>=4.12.0", "markitdown>=0.0.1", "pymupdf>=1.23.0"]
 
 [dependency-groups]
