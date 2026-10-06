@@ -73,6 +73,27 @@ python3 tools/chubby.py doctor --credentials
 
 两点刻意的设计：**凭据的值永远不会被打印**（这份输出常被贴进 issue，值会跟着外传）；**不做主动探活**——探活本身要走真实平台请求，正是可能触发风控的那类流量。凭据是否还有效，以上一次真实采集的结果为准。
 
+## 先确认你跑的是哪个 yt-dlp
+
+YouTube 的失败经常不是链接问题，而是**你 PATH 上的 `yt-dlp` 不是你以为的那个**。2026-10-06 实测：一台机器上三个 `yt-dlp` 并存，按名字跑到的那个落后了五个月，对 YouTube 报的是 `ERROR: The page needs to be reloaded`——一个不会指向自身版本问题的错误。换用新版本后，同一批 13 条视频全部成功。
+
+```bash
+which -a yt-dlp          # PATH 上有几个
+yt-dlp --version         # 按名字跑到的那个
+python3 -m yt_dlp --version   # 当前解释器里的那个
+```
+
+**常见成因**：`pip install yt-dlp` 会往解释器的 `bin` 写一个 console script（形如 `#!/opt/homebrew/opt/python@3.14/bin/python3.14` 的小文件），它会**顶掉包管理器建立的软链**，而 pip 那份不会随 `brew upgrade` 更新。`brew` 自己会提示这件事：
+
+```text
+The following yt-dlp executables are shadowed by other commands earlier in your PATH:
+  yt-dlp (shadowed by /opt/homebrew/bin/yt-dlp)
+```
+
+**处理**：把遮蔽的那个脚本移走，让包管理的软链恢复（本仓库的定时器不受影响——生成的单元文件把解释器自己的 `bin` 放在 `PATH` 最前）。
+
+同类问题也出现在 **yt-dlp 落后于平台改版**时：它的版本警告只打在 stderr 里，容易被日志淹没。采集失败且错误里出现 `403` / `needs to be reloaded` 时，先升级再排查别的。
+
 ## Issue Triage
 
 提交平台失败 issue 时至少贴：
