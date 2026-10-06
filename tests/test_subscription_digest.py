@@ -138,6 +138,40 @@ class SubscriptionDigestTest(unittest.TestCase):
         strict = subscription_digest.cluster_entries(entries, threshold=1.0)
         self.assertEqual(len(strict), 3)
 
+    def test_related_notes_never_cite_generated_output(self):
+        """A digest must not link itself, or a brief, as if it were a source.
+
+        The vault index covers the whole vault, generated files included, so the
+        lookup has to say what it is looking for.
+        """
+        index_db = self.vault / ".chubby" / "index.sqlite"
+        index_db.parent.mkdir(parents=True, exist_ok=True)
+        index_db.write_bytes(b"")
+        cluster = {
+            "title": "Some event",
+            "entries": [{"title": "Some event", "subscription_id": "feed-a"}],
+        }
+        with patch.object(subscription_digest.vault_index, "search", return_value=[]) as search:
+            subscription_digest.attach_vault_links([cluster], str(index_db))
+
+        excluded = search.call_args.kwargs["exclude_content_types"]
+        self.assertIn("subscription-digest", excluded)
+        self.assertIn("research_brief", excluded)
+
+    def test_related_notes_still_come_back_for_source_material(self):
+        index_db = self.vault / ".chubby" / "index.sqlite"
+        index_db.parent.mkdir(parents=True, exist_ok=True)
+        index_db.write_bytes(b"")
+        cluster = {
+            "title": "Some event",
+            "entries": [{"title": "Some event", "subscription_id": "feed-a"}],
+        }
+        rows = [{"title": "Source note", "path": "00_Inbox/source.md"}]
+        with patch.object(subscription_digest.vault_index, "search", return_value=rows):
+            subscription_digest.attach_vault_links([cluster], str(index_db))
+
+        self.assertEqual(cluster["vault_hits"][0]["path"], "00_Inbox/source.md")
+
     def test_heat_decays_with_report_age(self):
         """Heat is a recency-weighted distinct source count, not a raw tally."""
         now = subscription_store.parse_iso(self.now)

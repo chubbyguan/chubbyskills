@@ -228,6 +228,15 @@ def vault_query_candidates(title: str) -> list[str]:
     return candidates
 
 
+# The digest cites source material. Its own output, and the briefs built from
+# it, are views over that material — linking them back produces "related note:
+# last week's digest", which is noise rather than provenance. Both live in the
+# vault's generated-output directory and both carry a type marker, so the
+# exclusion is by type rather than by path: a vault may point `--output`
+# anywhere.
+GENERATED_CONTENT_TYPES = ("subscription-digest", "research_brief")
+
+
 def attach_vault_links(
     clusters: list[dict[str, Any]], index_db: str, *, limit: int = 3
 ) -> None:
@@ -237,7 +246,12 @@ def attach_vault_links(
         hits = []
         for query in vault_query_candidates(cluster["title"]):
             try:
-                rows = vault_index.search(db_path=index_db, query=query, limit=limit)
+                rows = vault_index.search(
+                    db_path=index_db,
+                    query=query,
+                    limit=limit,
+                    exclude_content_types=GENERATED_CONTENT_TYPES,
+                )
             except Exception:
                 rows = []
             if rows:
