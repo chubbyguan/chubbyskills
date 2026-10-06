@@ -6,6 +6,8 @@ entrypoint, config path and log directory taken from the running process.
 """
 
 import json
+import os
+import sys
 import tempfile
 import types
 import unittest
@@ -72,6 +74,7 @@ class UnitGenerationTest(unittest.TestCase):
             "config_path": Path("/repo/chubby.yaml"),
             "tick_log": Path("/repo/.chubby/tick-log.jsonl"),
             "python": "/usr/bin/python3",
+            "environment": {"PATH": "/venv/bin:/usr/bin", "YTDLP_REMOTE_COMPONENTS": "ejs:github"},
         }
 
     def test_launchd_plist_runs_the_command_directly(self):
@@ -83,6 +86,12 @@ class UnitGenerationTest(unittest.TestCase):
         # A shell wrapper is what broke under macOS TCC in an earlier iteration.
         self.assertNotIn("<string>/bin/bash</string>", plist)
 
+    def test_launchd_plist_carries_the_environment_the_tick_needs(self):
+        plist = subscription_schedule.build_launchd_plist(self.paths, interval_minutes=60)
+        self.assertIn("<key>EnvironmentVariables</key>", plist)
+        self.assertIn("<key>YTDLP_REMOTE_COMPONENTS</key><string>ejs:github</string>", plist)
+        self.assertIn("<key>PATH</key><string>/venv/bin:/usr/bin</string>", plist)
+
     def test_systemd_units_pair_service_and_timer(self):
         units = subscription_schedule.build_systemd_units(self.paths, interval_minutes=30)
         self.assertEqual(
@@ -91,8 +100,51 @@ class UnitGenerationTest(unittest.TestCase):
         service = units[subscription_schedule.SYSTEMD_SERVICE]
         timer = units[subscription_schedule.SYSTEMD_TIMER]
         self.assertIn("ExecStart=/usr/bin/python3 /repo/tools/chubby.py", service)
+        self.assertIn("Environment=YTDLP_REMOTE_COMPONENTS=ejs:github", service)
+        self.assertIn("Environment=PATH=/venv/bin:/usr/bin", service)
         self.assertIn("OnUnitActiveSec=30min", timer)
         self.assertIn("WantedBy=timers.target", timer)
+
+
+class ScheduledEnvironmentTest(unittest.TestCase):
+    """The timer must reproduce the environment that makes downloads work."""
+
+    def test_the_interpreter_bin_comes_first_on_path(self):
+        with patch.dict("os.environ", {"PATH": "/opt/homebrew/bin:/usr/bin"}, clear=False):
+            environment = subscription_schedule.scheduled_environment()
+        venv_bin = str(Path(sys.executable).resolve().parent)
+        self.assertEqual(environment["PATH"].split(os.pathsep)[0], venv_bin)
+        # A stale system yt-dlp earlier on PATH is what made YouTube fail with
+        # "The page needs to be reloaded".
+        self.assertLess(
+            environment["PATH"].index(venv_bin),
+            environment["PATH"].index("/opt/homebrew/bin"),
+        )
+
+    def test_documented_settings_are_carried_when_set(self):
+        with patch.dict(
+            "os.environ",
+            {"PATH": "/usr/bin", "YTDLP_REMOTE_COMPONENTS": "ejs:github", "YTDLP_COOKIES_FROM_BROWSER": "chrome"},
+            clear=False,
+        ):
+            environment = subscription_schedule.scheduled_environment()
+        self.assertEqual(environment["YTDLP_REMOTE_COMPONENTS"], "ejs:github")
+        self.assertEqual(environment["YTDLP_COOKIES_FROM_BROWSER"], "chrome")
+
+    def test_unset_settings_are_omitted_rather_than_baked_empty(self):
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            environment = subscription_schedule.scheduled_environment()
+        self.assertNotIn("YTDLP_REMOTE_COMPONENTS", environment)
+
+    def test_secrets_are_never_written_into_a_unit_file(self):
+        with patch.dict(
+            "os.environ",
+            {"PATH": "/usr/bin", "DEEPSEEK_API_KEY": "sk-secret", "GROQ_API_KEY": "gsk-secret"},
+            clear=True,
+        ):
+            environment = subscription_schedule.scheduled_environment()
+        self.assertNotIn("DEEPSEEK_API_KEY", environment)
+        self.assertNotIn("GROQ_API_KEY", environment)
 
 
 class InstallTest(unittest.TestCase):

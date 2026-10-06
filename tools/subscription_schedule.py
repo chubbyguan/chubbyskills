@@ -13,6 +13,7 @@ platform; only `install` / `uninstall` touch the system.
 from __future__ import annotations
 
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -65,12 +66,43 @@ def schedule_paths(args: Any, config: dict[str, Any]) -> dict[str, Any]:
         "tick_log": config_path.parent / ".chubby" / "tick-log.jsonl",
         "command": command,
         "python": command[0],
+        "environment": scheduled_environment(),
     }
+
+
+# Settings the tick needs that live in the environment rather than in the config.
+# Secrets are deliberately absent: a unit file is written to disk in plain text,
+# and a credential there would outlive the shell that exported it.
+SCHEDULED_ENVIRONMENT_KEYS = (
+    "YTDLP_COOKIES_FROM_BROWSER",
+    "YTDLP_REMOTE_COMPONENTS",
+)
+
+
+def scheduled_environment() -> dict[str, str]:
+    """Environment for the generated unit, taken from the current one.
+
+    The interpreter's own `bin` goes first on PATH: a system yt-dlp can be older
+    than the one in the venv, and an outdated yt-dlp fails against YouTube with
+    "The page needs to be reloaded" rather than with an error that names itself.
+    """
+    venv_bin = str(Path(sys.executable).resolve().parent)
+    parts = [venv_bin] + [p for p in os.environ.get("PATH", "").split(os.pathsep) if p and p != venv_bin]
+    environment = {"PATH": os.pathsep.join(parts)}
+    for key in SCHEDULED_ENVIRONMENT_KEYS:
+        value = os.environ.get(key, "").strip()
+        if value:
+            environment[key] = value
+    return environment
 
 
 def build_launchd_plist(paths: dict[str, Any], *, interval_minutes: int) -> str:
     label = LAUNCHD_LABEL
     arguments = "\n".join(f"    <string>{item}</string>" for item in paths["command"])
+    environment = "\n".join(
+        f"    <key>{key}</key><string>{value}</string>"
+        for key, value in sorted(paths["environment"].items())
+    )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -79,6 +111,9 @@ def build_launchd_plist(paths: dict[str, Any], *, interval_minutes: int) -> str:
 {arguments}
   </array>
   <key>StartInterval</key><integer>{interval_minutes * 60}</integer>
+  <key>EnvironmentVariables</key><dict>
+{environment}
+  </dict>
   <key>StandardOutPath</key><string>{paths['log_dir'] / 'subscribe.out.log'}</string>
   <key>StandardErrorPath</key><string>{paths['log_dir'] / 'subscribe.err.log'}</string>
 </dict></plist>
@@ -92,6 +127,7 @@ Description=chubbyskills subscription tick
 [Service]
 Type=oneshot
 ExecStart={' '.join(paths['command'])}
+{chr(10).join(f"Environment={key}={value}" for key, value in sorted(paths['environment'].items()))}
 StandardOutput=append:{paths['log_dir'] / 'subscribe.out.log'}
 StandardError=append:{paths['log_dir'] / 'subscribe.err.log'}
 """
@@ -126,6 +162,16 @@ def install(args: Any, config: dict[str, Any]) -> int:
     # The docs never mentioned this directory, which is one of the reasons a
     # hand-edited unit failed with no visible error.
     paths["log_dir"].mkdir(parents=True, exist_ok=True)
+
+    missing = [key for key in SCHEDULED_ENVIRONMENT_KEYS if key not in paths["environment"]]
+    if missing:
+        # The tick downloads as soon as a source is not discover_only, and
+        # YouTube refuses those downloads without the JS challenge component.
+        # Silence here would produce a timer that fails every hour.
+        print(f"⚠️  当前环境未设置：{', '.join(missing)}")
+        print("   定时 tick 一旦需要下载，YouTube 会直接拒绝；建议先 export 再安装，例如：")
+        print("   YTDLP_REMOTE_COMPONENTS=ejs:github YTDLP_COOKIES_FROM_BROWSER=chrome \\")
+        print("     python3 tools/chubby.py subscribe schedule install")
 
     system = platform.system()
     if system == "Darwin":
