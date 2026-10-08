@@ -1,6 +1,6 @@
 # Platform Status
 
-Generated at: `2026-10-05T10:20:45+08:00`
+Generated at: `2026-10-08T17:24:04+08:00`
 
 This page is generated from `platforms/*.yaml` and `templates/sites/*.yaml`.
 Default checks validate repository structure and template coverage. Run with `--local` to include local dependency readiness.

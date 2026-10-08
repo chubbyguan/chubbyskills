@@ -20,6 +20,25 @@
       "path": "examples/outputs/bilibili-sample.md"
     },
     {
+      "body_sha256": "9140ba8ddd1acc66dcd69ca8664315414b9033354cd79c9e8e223b21d1ec1ef5",
+      "fields": {
+        "assets": "[]",
+        "content_type": "video",
+        "created": "2026-06-30",
+        "platform": "tiktok",
+        "schema_version": "1",
+        "source": "https://www.tiktok.com/@example/video/1234567890",
+        "status": "success",
+        "title": "TikTok 视频样例",
+        "type": "note"
+      },
+      "headings": [
+        "TikTok 视频样例",
+        "原始转录"
+      ],
+      "path": "examples/outputs/tiktok-sample.md"
+    },
+    {
       "body_sha256": "2e8bf948b732bbbebce8f4ddac14985cce71bc71f7693504c52c8c14c58cc1d5",
       "fields": {
         "assets": "[]",
@@ -37,6 +56,25 @@
         "小标题"
       ],
       "path": "examples/outputs/wechat-sample.md"
+    },
+    {
+      "body_sha256": "2c5a61ec4938aff6152c2c135eaef6d513e3241b8c40f831421dedc95adda93d",
+      "fields": {
+        "assets": "[]",
+        "content_type": "video",
+        "created": "2026-06-30",
+        "platform": "weibo",
+        "schema_version": "1",
+        "source": "https://m.weibo.cn/status/example",
+        "status": "success",
+        "title": "微博视频样例",
+        "type": "note"
+      },
+      "headings": [
+        "微博视频样例",
+        "原始转录"
+      ],
+      "path": "examples/outputs/weibo-sample.md"
     },
     {
       "body_sha256": "9338b02e76350116018aeb9b420dbc4393adf857585eb23886044472edb4e868",
@@ -93,6 +131,25 @@
         "图片"
       ],
       "path": "examples/outputs/xiaohongshu-sample.md"
+    },
+    {
+      "body_sha256": "1a1c45a5ed978fb116b5f8f7bf05ae1e255a13d56b5cb9d46d861becd4763ff2",
+      "fields": {
+        "assets": "[]",
+        "content_type": "video",
+        "created": "2026-06-30",
+        "platform": "zhihu",
+        "schema_version": "1",
+        "source": "https://www.zhihu.com/video/1234567890",
+        "status": "success",
+        "title": "知乎视频样例",
+        "type": "note"
+      },
+      "headings": [
+        "知乎视频样例",
+        "原始转录"
+      ],
+      "path": "examples/outputs/zhihu-sample.md"
     }
   ],
   "schema": "chubbyskills.golden_outputs.v1"
