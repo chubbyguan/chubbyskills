@@ -13,7 +13,7 @@ Import documents, capture articles and transcripts, and search the original text
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skills)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
-[Quick start](#try-the-local-workflow) · [Agent installation](#install-skills-for-your-agent) · [Skills](#skills) · [Documentation](#documentation) · [Changelog](./CHANGELOG.md)
+[Quick start](#try-the-local-workflow) · [Agent installation](#install-skills-for-your-agent) · [Skills](#skills) · [Documentation](#documentation) · [Changelog](./CHANGELOG.md) · [💬 Discussions](https://github.com/chubbyguan/chubbyskills/discussions)
 
 </div>
 
@@ -359,6 +359,8 @@ The current implementation incorporates installation suggestions from [catwithtu
 
 Issues and contributions are welcome. See [CONTRIBUTING](./CONTRIBUTING.md) and the [platform adapter guide](./docs/contributor-platform-adapter.md). Include reproducible inputs or errors without credentials or private content.
 
+Not sure where to post? Usage questions, scenarios, and feature ideas belong in [Discussions](https://github.com/chubbyguan/chubbyskills/discussions); reproducible bugs go to [Issues](https://github.com/chubbyguan/chubbyskills/issues). Chinese readers can also reach out via the WeChat official account 「关关不过」.
+
 ## Documentation
 
 Most detailed guides are currently in Chinese.
@@ -376,6 +378,10 @@ Most detailed guides are currently in Chinese.
 | [Community triage](./docs/community-triage.md) | Contribution attribution and adoption decisions |
 | [Verification model (Chinese)](./docs/verification-model.md) | Claim-strength tiers, live-acceptance protocol, publish boundaries, third-party evidence |
 | [Changelog](./CHANGELOG.md) | Changes by version |
+
+## Related projects
+
+- [chubby-recruitment-ops](https://github.com/chubbyguan/chubby-recruitment-ops): recruitment operations plugin for Codex and Claude Code.
 
 ## Usage limits
 
