@@ -51,7 +51,11 @@ jobs:
           python tools/validate_outputs.py examples/outputs --schema-v1
           python tools/golden_outputs.py examples/outputs
           python tools/platform_health.py --check
-          python tools/platform_health.py --check-output
+          # --check-output normalizes the Generated-at timestamp and compares
+          # the committed docs/platform-status.md against a fresh generation,
+          # so a platforms/*.yaml change that forgets to refresh the page
+          # fails the build without being brittle to runner clock skew.
+          python tools/platform_health.py --repo-root . --output docs/platform-status.md --check-output
           python tools/platform_smoke.py --mode all --check
           tmp_adapter="$(mktemp -d)"
           python tools/platform_adapter.py new demo-news --name "Demo News" --sample-source "https://demo.example/news/1" --match demo.example --repo-root "$tmp_adapter"
