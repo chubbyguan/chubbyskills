@@ -13,7 +13,7 @@
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skill-目录)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
-[快速开始](#快速开始) · [安装到 Agent](#安装到-agent) · [Skill 目录](#skill-目录) · [文档](#文档入口) · [更新日志](./CHANGELOG.md)
+[快速开始](#快速开始) · [安装到 Agent](#安装到-agent) · [Skill 目录](#skill-目录) · [文档](#文档入口) · [更新日志](./CHANGELOG.md) · [💬 讨论区](https://github.com/chubbyguan/chubbyskills/discussions)
 
 </div>
 
@@ -357,6 +357,8 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 
 欢迎提交可复现的问题、修正 PR 或平台适配。贡献方式见 [CONTRIBUTING.md](./CONTRIBUTING.md) 和[平台适配指南](./docs/contributor-platform-adapter.md)。
 
+拿不准去哪说？使用问题、使用场景和功能想法请发到 [Discussions 讨论区](https://github.com/chubbyguan/chubbyskills/discussions)；可复现的 bug 走 [Issues](https://github.com/chubbyguan/chubbyskills/issues)；也可以在微信公众号「关关不过」后台留言。
+
 ## 文档入口
 
 | 文档 | 内容 |
@@ -373,6 +375,10 @@ python3 tools/chubby.py quickstart --ephemeral --no-state
 | [平台状态与替代方式](./docs/platform-fallbacks.md) | 依赖、常见失败与补救路径 |
 | [可选集成](./docs/integrations.md) | 外部解析工具的 Markdown 交接 |
 | [更新日志](./CHANGELOG.md) | 版本变化；当前版本为 **0.14.0** |
+
+## 相关项目
+
+- [chubby-recruitment-ops](https://github.com/chubbyguan/chubby-recruitment-ops)：Codex 与 Claude Code 的招聘运营插件——简历入库、评分与流程协同。
 
 ## 使用范围与许可
 
