@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """Chubby Skills 讨论区活跃度监控。
 
 用法:
@@ -70,7 +71,7 @@ def fetch_discussions(days: int) -> list[dict]:
     return filtered
 
 
-def latest_ts(disc: dict) -> datetime | None:
+def latest_ts(disc):
     raw = disc.get("updatedAt") or disc.get("createdAt")
     if not raw:
         return None
