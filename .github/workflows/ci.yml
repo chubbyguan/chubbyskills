@@ -104,6 +104,22 @@ jobs:
         run: |
           ruff check . --select E,F,W --ignore E402,E501
 
+      - name: README locale parity
+        run: |
+          set -euo pipefail
+          zh=README.md
+          en=README.en.md
+          missing=0
+          for pat in "相关项目" "使用范围与许可" "关于 Chubby"; do
+            if ! grep -qF "$pat" "$zh"; then echo "::warning::$zh missing $pat"; missing=$((missing+1)); fi
+          done
+          for pat in "Related projects" "Usage limits" "About Chubby"; do
+            if ! grep -qF "$pat" "$en"; then echo "::warning::$en missing $pat"; missing=$((missing+1)); fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::warning::README locale parity found $missing missing anchor(s)"
+          fi
+
   installed-cli:
     # A checkout and a `pip install .` share code but not layout: user state must
     # never land in site-packages, and the version must not silently become 0.0.0.
