@@ -147,6 +147,22 @@ RULES = (
     ("README.en.md", " · [Xiaohongshu](https://www.xiaohongshu.com/user/profile/57c061626a6a696f5a70f9a8)", ""),
     ("README.en.md", "Bilibili, YouTube, Douyin, TikTok, Weibo, Zhihu, WeChat, Xiaohongshu, X/Twitter, and podcasts",
      "Bilibili, YouTube, Douyin, TikTok, Weibo, Zhihu, WeChat, X/Twitter, and podcasts"),
+    # --- version badge and skill count -------------------------------------------------
+    # The badge is what a reader sees first, so it has to follow the trimmed set.
+    # The version badge itself needs no rule: it tracks VERSION, which the export
+    # carries unchanged. Only the count differs.
+    ("README.md", "badge/Skills-14-10B981", "badge/Skills-13-10B981"),
+    ("README.en.md", "badge/Skills-14-10B981", "badge/Skills-13-10B981"),
+    ("README.md", "**14 个 Agent Skills 与命令行工具**", "**13 个 Agent Skills 与命令行工具**"),
+    ("README.md", "14 个 skill 目录随包一起安装", "13 个 skill 目录随包一起安装"),
+    ("README.md", "已对齐当前 14 个 Skills 版本", "已对齐当前 13 个 Skills 版本"),
+    ("README.en.md", "**14 agent skills and a local command-line workflow**",
+     "**13 agent skills and a local command-line workflow**"),
+    ("README.en.md", "the 14 skill directories ship with the package",
+     "the 13 skill directories ship with the package"),
+    ("README.en.md", "install all 14, use the following commands",
+     "install all 13, use the following commands"),
+    ("docs/introduction.md", "14 个 Agent Skills 加一个", "13 个 Agent Skills 加一个"),
     # --- product documentation --------------------------------------------------------
     ("docs/installation.md",
      "9 个技能使用 `chubby_common`：6 个视频转录技能、`content-enrich`、`learning-notes-automation` 和小红书的爆款分析脚本。",
