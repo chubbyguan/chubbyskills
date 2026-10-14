@@ -99,7 +99,7 @@ def build_report(days: int, discussions: list[dict]) -> str:
         )
 
     lines = [
-        f"# Discussion Radar — {now.strftime('%Y-%m-%d %H:%M CST')}",
+        f"# Discussion Radar — {now.astimezone().strftime('%Y-%m-%d %H:%M %Z')}",
         "",
         f"窗口：最近 {days} 天 | 仓库：{REPO}",
         "",
@@ -127,7 +127,7 @@ def build_report(days: int, discussions: list[dict]) -> str:
             "",
         ]
 
-    lines += ["---", f"generated_at: {now.isoformat()}", ""]
+    lines += ["---", f"generated_at: {now.astimezone().replace(microsecond=0).isoformat()}", ""]
     return "\n".join(lines)
 
 
