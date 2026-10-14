@@ -9,7 +9,7 @@
 Import documents, capture articles and transcripts, and search the original text when you need it. Export a source-backed brief for your agent to work from.
 
 [![License](https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.14.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.14.0)
+[![Version](https://img.shields.io/badge/Version-0.15.0-10B981?style=for-the-badge)](https://github.com/chubbyguan/chubbyskills/releases/tag/v0.15.0)
 [![Skills](https://img.shields.io/badge/Skills-14-10B981?style=for-the-badge)](#skills)
 [![Stars](https://img.shields.io/github/stars/chubbyguan/chubbyskills?style=for-the-badge&color=F59E0B)](https://github.com/chubbyguan/chubbyskills/stargazers)
 
@@ -367,6 +367,7 @@ Most detailed guides are currently in Chinese.
 
 | Guide | Use it for |
 |---|---|
+| [Project introduction (Chinese)](./docs/introduction.md) | What it is, what it does, and the trade-offs behind it |
 | [Creator workflow](./docs/creator-workflow.md) | Capture → search → evidence brief → agent handoff |
 | [Document import](./docs/document-import.md) | File formats, attachments, provenance, and PDF limits |
 | [Installation](./docs/installation.md) | Runtime dependencies and portable skill installation |
